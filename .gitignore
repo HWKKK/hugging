@@ -1,0 +1,26 @@
+# Environment variables
+.env
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# Data directories (can be large)
+data/personas/*
+data/conversations/*
+!data/personas/.gitkeep
+!data/conversations/.gitkeep
+
+# OS specific
+.DS_Store 
