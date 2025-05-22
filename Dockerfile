@@ -8,11 +8,10 @@ RUN apt-get update && apt-get install -y \
     libgl1-mesa-glx \
     libglib2.0-0 \
     fonts-nanum \
+    fontconfig \
     && rm -rf /var/lib/apt/lists/*
 
-# 한글 폰트 설정
-RUN mkdir -p /usr/share/fonts/truetype/nanum
-COPY fonts/*.ttf /usr/share/fonts/truetype/nanum/ 2>/dev/null || :
+# 한글 폰트 설정 - 이미 fonts-nanum 패키지로 설치됨
 RUN fc-cache -f -v
 
 # 애플리케이션 파일 복사
