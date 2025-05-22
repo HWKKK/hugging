@@ -11,6 +11,7 @@ import base64
 import io
 import uuid
 from datetime import datetime
+import PIL.ImageDraw
 
 # Import modules
 from modules.persona_generator import PersonaGenerator
@@ -136,16 +137,13 @@ def create_backend_view_html(persona):
 def generate_personality_chart(persona):
     """Generate a radar chart for personality traits"""
     if not persona or "성격특성" not in persona:
-        # Return empty image
-        fig, ax = plt.subplots(figsize=(6, 6))
-        ax.text(0.5, 0.5, "데이터 없음", ha='center', va='center')
-        ax.axis('off')
-        
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png')
-        buf.seek(0)
-        plt.close(fig)
-        return buf
+        # Return empty image with default PIL
+        img = Image.new('RGB', (400, 400), color='white')
+        draw = PIL.ImageDraw.Draw(img)
+        draw.text((150, 180), "데이터 없음", fill='black')
+        img_path = os.path.join("data", "temp_chart.png")
+        img.save(img_path)
+        return img_path
     
     # Get traits
     traits = persona["성격특성"]
@@ -161,6 +159,9 @@ def generate_personality_chart(persona):
     # Convert to radians
     angles = np.linspace(0, 2*np.pi, len(categories), endpoint=True)
     
+    # Use a simple English font for labels
+    plt.rcParams['font.family'] = 'DejaVu Sans'
+    
     # Create plot
     fig, ax = plt.subplots(figsize=(6, 6), subplot_kw=dict(polar=True))
     
@@ -170,24 +171,42 @@ def generate_personality_chart(persona):
     # Draw lines
     ax.plot(angles, values, 'o-', linewidth=2, color='#6366f1')
     
+    # Translate Korean labels to English or use simplified labels
+    translated_labels = []
+    for label in categories[:-1]:
+        if label == "온기":
+            translated_labels.append("Warmth")
+        elif label == "능력":
+            translated_labels.append("Ability")
+        elif label == "신뢰성":
+            translated_labels.append("Trust")
+        elif label == "친화성":
+            translated_labels.append("Friendly")
+        elif label == "창의성":
+            translated_labels.append("Creative")
+        elif label == "유머감각":
+            translated_labels.append("Humor")
+        else:
+            translated_labels.append(label)
+    
     # Fill labels
-    ax.set_thetagrids(angles[:-1] * 180/np.pi, categories[:-1])
+    ax.set_thetagrids(angles[:-1] * 180/np.pi, translated_labels)
     ax.set_rlim(0, 100)
     
-    # Add titles
+    # Add titles (in English)
     name = persona.get("기본정보", {}).get("이름", "Unknown")
-    plt.title(f"{name}의 성격 특성", size=15, color='#333333', y=1.1)
+    plt.title(f"{name} Personality Traits", size=15, color='#333333', y=1.1)
     
     # Styling
     ax.grid(True, linestyle='--', alpha=0.7)
     
-    # Save to buffer
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png', bbox_inches='tight')
-    buf.seek(0)
+    # Save to file instead of buffer
+    img_path = os.path.join("data", f"chart_{int(time.time())}.png")
+    os.makedirs(os.path.dirname(img_path), exist_ok=True)
+    plt.savefig(img_path, format='png', bbox_inches='tight')
     plt.close(fig)
     
-    return buf
+    return img_path
 
 def soul_awakening(image, object_name=None):
     """Analyze image and awaken the soul of the object"""
@@ -222,15 +241,15 @@ def soul_awakening(image, object_name=None):
     frontend_html = create_frontend_view_html(frontend_persona)
     backend_html = create_backend_view_html(backend_persona)
     
-    # Generate personality chart
-    chart_image = generate_personality_chart(frontend_persona)
+    # Generate personality chart (now returns a file path)
+    chart_image_path = generate_personality_chart(frontend_persona)
     
     return (
         analysis_result,
         gr.update(visible=False, value=""),
         frontend_html,
         backend_html,
-        chart_image
+        chart_image_path
     )
 
 def start_chat(current_persona):
@@ -311,9 +330,9 @@ def load_selected_persona(selected_row, personas_list):
         backend_html = create_backend_view_html(backend_view)
         
         # Generate personality chart
-        chart_image = generate_personality_chart(frontend_view)
+        chart_image_path = generate_personality_chart(frontend_view)
         
-        return persona, f"{persona['기본정보']['이름']}을(를) 로드했습니다.", frontend_html, backend_html, chart_image
+        return persona, f"{persona['기본정보']['이름']}을(를) 로드했습니다.", frontend_html, backend_html, chart_image_path
     
     except Exception as e:
         return None, f"페르소나 로딩 중 오류 발생: {str(e)}", None, None, None
@@ -561,4 +580,4 @@ with gr.Blocks(title="놈팽쓰 테스트 앱", theme=theme, css=css) as app:
     )
 
 if __name__ == "__main__":
-    app.launch() 
+    app.launch(server_name="0.0.0.0", share=False) 

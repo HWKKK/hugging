@@ -1,0 +1,14 @@
+version: '3'
+
+services:
+  nompang-app:
+    build: .
+    container_name: nompang-test
+    ports:
+      - "7860:7860"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - GRADIO_SERVER_NAME=0.0.0.0
+      - GRADIO_SERVER_PORT=7860
+    restart: unless-stopped 
