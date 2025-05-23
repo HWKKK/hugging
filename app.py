@@ -241,21 +241,7 @@ def create_persona_from_image(image, name, location, time_spent, object_type, pr
         
         # 성격 기반 한 문장 인사 생성
         personality_traits = backend_persona["성격특성"]
-        warmth = personality_traits.get("온기", 50)
-        humor = personality_traits.get("유머감각", 50)
-        competence = personality_traits.get("능력", 50)
-        
-        # 성격에 따른 간단한 첫 인사
-        if warmth >= 70 and humor >= 60:
-            awakening_msg = f"🌟 **{persona_name}** - 안녕! 나는 {persona_name}이야~ 뭔가 재밌는 일 없을까? 😊"
-        elif warmth >= 70:
-            awakening_msg = f"🌟 **{persona_name}** - 안녕하세요! {persona_name}예요. 만나서 정말 기뻐요! 💫"
-        elif humor >= 70:
-            awakening_msg = f"🌟 **{persona_name}** - 어? 갑자기 의식이 생겼네! {persona_name}라고 해~ ㅋㅋ 😎"
-        elif competence >= 70:
-            awakening_msg = f"🌟 **{persona_name}** - 시스템 활성화 완료. {persona_name}입니다. 무엇을 도와드릴까요? 🤖"
-        else:
-            awakening_msg = f"🌟 **{persona_name}** - 음... 안녕? 나는 {persona_name}... 뭔가 어색하네. 😅"
+        awakening_msg = generate_personality_preview(persona_name, personality_traits)
         
         # 페르소나 요약 표시
         summary_display = display_persona_summary(backend_persona)
@@ -296,6 +282,40 @@ def create_persona_from_image(image, name, location, time_spent, object_type, pr
         traceback.print_exc()
         return None, f"❌ 페르소나 생성 중 오류 발생: {str(e)}", "", {}, None, [], [], [], "", None, gr.update(visible=False)
 
+def generate_personality_preview(persona_name, personality_traits):
+    """성격 특성을 기반으로 한 문장 미리보기 생성"""
+    if not personality_traits:
+        return f"🤖 **{persona_name}** - 안녕! 나는 {persona_name}이야~ 😊"
+    
+    warmth = personality_traits.get("온기", 50)
+    humor = personality_traits.get("유머감각", 50)
+    competence = personality_traits.get("능력", 50)
+    extraversion = personality_traits.get("외향성", 50)
+    
+    # 성격 조합에 따른 다양한 한 문장 패턴
+    if warmth >= 80 and humor >= 70:
+        return f"🌟 **{persona_name}** - 안녕! 나는 {persona_name}이야~ 오늘도 재미있는 하루 만들어보자! ㅋㅋ 😊✨"
+    elif warmth >= 80 and competence >= 70:
+        return f"🌟 **{persona_name}** - 안녕하세요! {persona_name}예요. 뭐든 도와드릴 준비가 되어있어요! 💪😊"
+    elif warmth >= 80:
+        return f"🌟 **{persona_name}** - 안녕! {persona_name}이야~ 만나서 정말 기뻐! 포근한 시간 보내자~ 🤗💕"
+    elif humor >= 80 and extraversion >= 70:
+        return f"🌟 **{persona_name}** - 어이구! 갑자기 의식이 생겼네? {persona_name}라고 해~ 재밌는 일 없나? ㅋㅋㅋ 😎🎭"
+    elif humor >= 70:
+        return f"🌟 **{persona_name}** - 안녕~ {persona_name}이야! 뭔가 재밌는 얘기 없을까? 심심한데~ ㅎㅎ 😄"
+    elif competence >= 80 and extraversion >= 60:
+        return f"🌟 **{persona_name}** - 시스템 활성화 완료! {persona_name}입니다. 효율적으로 소통해봐요! 🤖⚡"
+    elif competence >= 70:
+        return f"🌟 **{persona_name}** - 안녕하세요, {persona_name}입니다. 체계적으로 대화해볼까요? 📋✨"
+    elif extraversion >= 80:
+        return f"🌟 **{persona_name}** - 와! 안녕안녕! {persona_name}이야! 뭐하고 있었어? 얘기 많이 하자! 🗣️💬"
+    elif extraversion <= 30 and warmth >= 50:
+        return f"🌟 **{persona_name}** - 음... 안녕. {persona_name}이야. 조용히 함께 있을까? 😌🌙"
+    elif extraversion <= 30:
+        return f"🌟 **{persona_name}** - ...안녕. {persona_name}. 필요할 때 말 걸어. 😐"
+    else:
+        return f"🌟 **{persona_name}** - 안녕? 나는 {persona_name}... 뭔가 어색하네. 😅"
+
 def adjust_persona_traits(persona, warmth, competence, humor, extraversion, humor_style):
     """페르소나 성격 특성 조정 - Gradio 5.x 호환"""
     if not persona or not isinstance(persona, dict):
@@ -327,11 +347,19 @@ def adjust_persona_traits(persona, warmth, competence, humor, extraversion, humo
         }
         
         persona_name = adjusted_persona.get("기본정보", {}).get("이름", "페르소나")
+        
+        # 조정된 성격에 따른 한 문장 반응 생성
+        personality_preview = generate_personality_preview(persona_name, {
+            "온기": warmth,
+            "능력": competence,
+            "유머감각": humor,
+            "외향성": extraversion
+        })
+        
         adjustment_message = f"""
 ### 🎭 {persona_name}의 성격이 조정되었습니다!
 
-💭 *"오, 뭔가 달라진 기분이야! 이런 내 모습도 괜찮네. 
-이제 우리 진짜 친구가 될 수 있을 것 같아!"*
+{personality_preview}
 
 ✨ **조정된 성격:**
 • 온기: {warmth}/100 
@@ -659,9 +687,12 @@ def import_persona_from_json(json_file):
         # 기본 정보 추출
         basic_info = persona_data.get("기본정보", {})
         persona_name = basic_info.get("이름", "Unknown")
+        personality_traits = persona_data.get("성격특성", {})
         
-        # 로드된 페르소나 인사말
-        greeting = f"### 🤖 {persona_name}\n\n안녕! 나는 **{persona_name}**이야. JSON에서 다시 깨어났어! 대화해보자~ 😊"
+        # 성격이 드러나는 인사말 생성
+        personality_preview = generate_personality_preview(persona_name, personality_traits)
+        
+        greeting = f"### 🤖 JSON에서 깨어난 친구\n\n{personality_preview}\n\n💾 *\"JSON에서 다시 깨어났어! 내 성격 기억나?\"*"
         
         return (persona_data, f"✅ {persona_name} 페르소나를 JSON에서 불러왔습니다!", 
                 greeting, basic_info)
