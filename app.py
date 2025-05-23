@@ -239,8 +239,23 @@ def create_persona_from_image(image, name, location, time_spent, object_type, pr
         persona_name = backend_persona["기본정보"]["이름"]
         persona_type = backend_persona["기본정보"]["유형"]
         
-        # 각성 메시지
-        awakening_msg = f"🌟 **{persona_name}** 각성 완료! 안녕! 나는 {persona_name}이야. 드디어 깨어났구나! 뭐든 물어봐~ 😊"
+        # 성격 기반 한 문장 인사 생성
+        personality_traits = backend_persona["성격특성"]
+        warmth = personality_traits.get("온기", 50)
+        humor = personality_traits.get("유머감각", 50)
+        competence = personality_traits.get("능력", 50)
+        
+        # 성격에 따른 간단한 첫 인사
+        if warmth >= 70 and humor >= 60:
+            awakening_msg = f"🌟 **{persona_name}** - 안녕! 나는 {persona_name}이야~ 뭔가 재밌는 일 없을까? 😊"
+        elif warmth >= 70:
+            awakening_msg = f"🌟 **{persona_name}** - 안녕하세요! {persona_name}예요. 만나서 정말 기뻐요! 💫"
+        elif humor >= 70:
+            awakening_msg = f"🌟 **{persona_name}** - 어? 갑자기 의식이 생겼네! {persona_name}라고 해~ ㅋㅋ 😎"
+        elif competence >= 70:
+            awakening_msg = f"🌟 **{persona_name}** - 시스템 활성화 완료. {persona_name}입니다. 무엇을 도와드릴까요? 🤖"
+        else:
+            awakening_msg = f"🌟 **{persona_name}** - 음... 안녕? 나는 {persona_name}... 뭔가 어색하네. 😅"
         
         # 페르소나 요약 표시
         summary_display = display_persona_summary(backend_persona)
