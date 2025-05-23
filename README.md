@@ -4,7 +4,7 @@ emoji: 🎭
 colorFrom: indigo
 colorTo: blue
 sdk: gradio
-sdk_version: 4.19.2
+sdk_version: 5.31.0
 app_file: app.py
 pinned: false
 license: mit
@@ -92,4 +92,10 @@ python app.py
 
 ## 라이선스
 
-MIT License 
+MIT License
+
+## 업데이트 정보
+
+- Gradio SDK 버전을 5.31.0으로 업데이트했습니다.
+- 탭 선택 로직이 업데이트되었습니다.
+- ID 관련 오류를 수정했습니다. 

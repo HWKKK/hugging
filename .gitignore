@@ -17,8 +17,8 @@ env/
 ENV/
 
 # Data directories (can be large)
-data/personas/*
-data/conversations/*
+data/personas/*.json
+data/conversations/*.json
 !data/personas/.gitkeep
 !data/conversations/.gitkeep
 

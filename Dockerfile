@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     libglib2.0-0 \
     fonts-nanum \
     fontconfig \
+    libavif-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # 한글 폰트 설정 - 이미 fonts-nanum 패키지로 설치됨
@@ -18,7 +19,8 @@ RUN fc-cache -f -v
 COPY . /app/
 
 # Python 패키지 설치
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
 # 데이터 디렉토리 생성
 RUN mkdir -p /app/data/personas /app/data/conversations
