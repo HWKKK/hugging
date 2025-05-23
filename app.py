@@ -379,84 +379,13 @@ def export_persona_to_json(persona):
         print(f"JSON 내보내기 오류: {error_msg}")
         return None, f"❌ JSON 내보내기 중 오류 발생: {str(e)}"
 
-def get_saved_personas():
-    """저장된 페르소나 목록 가져오기"""
-    try:
-        personas = list_personas()
-        df_data = []
-        for i, persona in enumerate(personas):
-            df_data.append([
-                i,
-                persona["name"],
-                persona["type"],
-                persona["created_at"]
-            ])
-        return df_data, personas
-    except Exception as e:
-        print(f"페르소나 목록 로딩 오류: {str(e)}")
-        return [], []
+# def get_saved_personas():
+#     """저장된 페르소나 목록 가져오기 - 더 이상 사용하지 않음"""
+#     return [], []
 
-def load_persona_from_selection(selected_row, personas_list):
-    """선택된 페르소나 로드"""
-    if selected_row is None or len(selected_row) == 0:
-        return None, "선택된 페르소나가 없습니다.", {}, {}, None, [], [], [], ""
-    
-    try:
-        # DataFrame에서 선택된 행의 인덱스 추출
-        if hasattr(selected_row, 'index'):
-            selected_index = selected_row.index[0]
-        else:
-            selected_index = 0
-            
-        if selected_index >= len(personas_list):
-            return None, "잘못된 선택입니다.", {}, {}, None, [], [], [], ""
-            
-        filepath = personas_list[selected_index]["filepath"]
-        persona = load_persona(filepath)
-        
-        if not persona:
-            return None, "페르소나 로딩에 실패했습니다.", {}, {}, None, [], [], [], ""
-        
-        basic_info = {
-            "이름": persona.get("기본정보", {}).get("이름", "Unknown"),
-            "유형": persona.get("기본정보", {}).get("유형", "Unknown"),
-            "설명": persona.get("기본정보", {}).get("설명", "")
-        }
-        
-        personality_traits = persona.get("성격특성", {})
-        humor_chart = plot_humor_matrix(persona.get("유머매트릭스", {}))
-        
-        attractive_flaws_df = []
-        contradictions_df = []
-        personality_variables_df = []
-        
-        if "매력적결함" in persona:
-            flaws = persona["매력적결함"]
-            attractive_flaws_df = [[flaw, "매력 증가"] for flaw in flaws]
-            
-        if "모순적특성" in persona:
-            contradictions = persona["모순적특성"]
-            contradictions_df = [[contradiction, "복잡성 증가"] for contradiction in contradictions]
-            
-        if "성격변수127" in persona:
-            variables = persona["성격변수127"]
-            if isinstance(variables, dict):
-                personality_variables_df = [[var_name, score, VARIABLE_DESCRIPTIONS.get(var_name, "")] 
-                                          for var_name, score in variables.items()]
-        
-        # 로드된 페르소나 인사말
-        persona_name = basic_info.get("이름", "친구")
-        greeting = f"반가워! 나는 {persona_name}이야. 다시 만나서 기뻐! 😊"
-        
-        return (persona, f"✅ {persona['기본정보']['이름']}을(를) 로드했습니다.", 
-                basic_info, personality_traits, humor_chart, attractive_flaws_df, 
-                contradictions_df, personality_variables_df, greeting)
-    
-    except Exception as e:
-        import traceback
-        error_msg = traceback.format_exc()
-        print(f"로딩 오류: {error_msg}")
-        return None, f"❌ 로딩 중 오류 발생: {str(e)}", {}, {}, None, [], [], [], ""
+# def load_persona_from_selection(selected_row, personas_list):
+#     """선택된 페르소나 로드 - 더 이상 사용하지 않음"""
+#     return None, "이 기능은 더 이상 사용하지 않습니다. JSON 업로드를 사용하세요.", {}, {}, None, [], [], [], ""
 
 def chat_with_loaded_persona(persona, user_message, chat_history=None):
     """페르소나와 대화"""
@@ -477,6 +406,48 @@ def chat_with_loaded_persona(persona, user_message, chat_history=None):
     except Exception as e:
         chat_history.append([user_message, f"대화 중 오류가 발생했습니다: {str(e)}"])
         return chat_history, ""
+
+def import_persona_from_json(json_file):
+    """JSON 파일에서 페르소나 가져오기"""
+    if json_file is None:
+        return None, "JSON 파일을 업로드해주세요.", "", {}
+    
+    try:
+        # JSON 파일 읽기
+        if hasattr(json_file, 'name'):
+            # 파일 객체인 경우
+            with open(json_file.name, 'r', encoding='utf-8') as f:
+                persona_data = json.load(f)
+        else:
+            # 파일 경로인 경우
+            with open(json_file, 'r', encoding='utf-8') as f:
+                persona_data = json.load(f)
+        
+        # 페르소나 데이터 검증
+        if not isinstance(persona_data, dict) or "기본정보" not in persona_data:
+            return None, "❌ 올바른 페르소나 JSON 파일이 아닙니다.", "", {}
+        
+        # 기본 정보 추출
+        basic_info = {
+            "이름": persona_data.get("기본정보", {}).get("이름", "Unknown"),
+            "유형": persona_data.get("기본정보", {}).get("유형", "Unknown"),
+            "설명": persona_data.get("기본정보", {}).get("설명", "")
+        }
+        
+        # 로드된 페르소나 인사말
+        persona_name = basic_info.get("이름", "친구")
+        greeting = f"### 🤖 {persona_name}\n\n안녕! 나는 **{persona_name}**이야. JSON에서 다시 깨어났어! 대화해보자~ 😊"
+        
+        return (persona_data, f"✅ {persona_name} 페르소나를 JSON에서 불러왔습니다!", 
+                greeting, basic_info)
+    
+    except json.JSONDecodeError:
+        return None, "❌ JSON 파일 형식이 올바르지 않습니다.", "", {}
+    except Exception as e:
+        import traceback
+        error_msg = traceback.format_exc()
+        print(f"JSON 불러오기 오류: {error_msg}")
+        return None, f"❌ JSON 불러오기 중 오류 발생: {str(e)}", "", {}
 
 # 메인 인터페이스 생성
 def create_main_interface():
@@ -567,18 +538,25 @@ def create_main_interface():
             with gr.Tab("대화하기", id="chat"):
                 with gr.Row():
                     with gr.Column(scale=1):
-                        gr.Markdown("### 페르소나 불러오기")
-                        refresh_btn = gr.Button("목록 새로고침", variant="secondary")
-                        persona_table = gr.Dataframe(
-                            headers=["ID", "이름", "유형", "생성날짜"],
-                            label="저장된 페르소나",
-                            interactive=False
+                        gr.Markdown("### 📁 페르소나 불러오기")
+                        gr.Markdown("JSON 파일을 업로드하여 페르소나를 불러와 대화를 시작하세요.")
+                        
+                        json_upload = gr.File(
+                            label="페르소나 JSON 파일 업로드",
+                            file_types=[".json"],
+                            type="filepath"
                         )
-                        load_btn = gr.Button("선택한 페르소나 불러오기", variant="primary")
+                        import_btn = gr.Button("JSON에서 페르소나 불러오기", variant="primary", size="lg")
                         load_status = gr.Markdown("")
+                        
+                        # 현재 로드된 페르소나 정보 표시
+                        with gr.Group():
+                            gr.Markdown("### 🤖 현재 페르소나")
+                            chat_persona_greeting = gr.Markdown("", elem_classes=["persona-greeting"])
+                            current_persona_info = gr.JSON(label="현재 페르소나 정보", visible=False)
                     
                     with gr.Column(scale=1):
-                        gr.Markdown("### 대화")
+                        gr.Markdown("### 💬 대화")
                         # Gradio 4.x 호환을 위해 명시적으로 type 지정
                         chatbot = gr.Chatbot(height=400, label="대화", type="tuples")
                         with gr.Row():
@@ -588,6 +566,13 @@ def create_main_interface():
                                 lines=2
                             )
                             send_btn = gr.Button("전송", variant="primary")
+                        
+                        # 대화 관련 버튼들
+                        with gr.Row():
+                            clear_btn = gr.Button("대화 초기화", variant="secondary", size="sm")
+                            example_btn1 = gr.Button("\"안녕!\"", variant="outline", size="sm")
+                            example_btn2 = gr.Button("\"너는 누구야?\"", variant="outline", size="sm")
+                            example_btn3 = gr.Button("\"뭘 좋아해?\"", variant="outline", size="sm")
         
         # 이벤트 핸들러
         create_btn.click(
@@ -622,25 +607,15 @@ def create_main_interface():
             outputs=[download_file]
         )
         
-        refresh_btn.click(
-            fn=get_saved_personas,
-            outputs=[persona_table, personas_list]
-        )
-        
-        load_btn.click(
-            fn=load_persona_from_selection,
-            inputs=[persona_table, personas_list],
+        import_btn.click(
+            fn=import_persona_from_json,
+            inputs=[json_upload],
             outputs=[
-                current_persona, load_status, basic_info_output, personality_traits_output,
-                humor_chart_output, attractive_flaws_output, contradictions_output, 
-                personality_variables_output, persona_greeting
+                current_persona, load_status, chat_persona_greeting, current_persona_info
             ]
-        ).then(
-            fn=generate_personality_chart,
-            inputs=[current_persona],
-            outputs=[personality_chart_output]
         )
         
+        # 대화 관련 이벤트 핸들러
         send_btn.click(
             fn=chat_with_loaded_persona,
             inputs=[current_persona, message_input, chatbot],
@@ -653,10 +628,32 @@ def create_main_interface():
             outputs=[chatbot, message_input]
         )
         
-        # 앱 로드 시 페르소나 목록 로드
+        # 대화 초기화
+        clear_btn.click(
+            fn=lambda: [],
+            outputs=[chatbot]
+        )
+        
+        # 예시 메시지 버튼들
+        example_btn1.click(
+            fn=lambda: "안녕!",
+            outputs=[message_input]
+        )
+        
+        example_btn2.click(
+            fn=lambda: "너는 누구야?",
+            outputs=[message_input]
+        )
+        
+        example_btn3.click(
+            fn=lambda: "뭘 좋아해?",
+            outputs=[message_input]
+        )
+        
+        # 앱 로드 시 페르소나 목록 로드 (백엔드에서 사용)
         app.load(
-            fn=get_saved_personas,
-            outputs=[persona_table, personas_list]
+            fn=lambda: [],
+            outputs=[personas_list]
         )
     
     return app
