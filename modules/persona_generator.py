@@ -724,15 +724,24 @@ class PersonaGenerator:
             "공감능력": 50,
         }
     
-    def analyze_image(self, image_path):
+    def analyze_image(self, image_input):
         """
         이미지를 분석하여 물리적 특성 추출
-        (실제 API 호출은 생략, 더미 데이터 반환)
+        PIL Image 객체와 파일 경로 모두 처리 가능
         """
         try:
-            # 이미지 로드 시도 (존재 확인)
-            img = Image.open(image_path)
-            width, height = img.size
+            # PIL Image 객체인지 파일 경로인지 확인
+            if hasattr(image_input, 'size'):
+                # PIL Image 객체인 경우
+                img = image_input
+                width, height = img.size
+            elif isinstance(image_input, str):
+                # 파일 경로인 경우
+                img = Image.open(image_input)
+                width, height = img.size
+            else:
+                # 기타의 경우 기본 값 사용
+                width, height = 400, 300
             
             # 더미 분석 결과 반환
             return {
@@ -749,8 +758,19 @@ class PersonaGenerator:
             }
         except Exception as e:
             print(f"이미지 분석 오류: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return {
                 "object_type": "알 수 없는 사물",
+                "colors": ["회색"],
+                "shape": "일반적인 형태",
+                "size": "보통 크기",
+                "materials": ["일반 재질"],
+                "condition": "보통",
+                "estimated_age": "적당한 나이",
+                "distinctive_features": ["특별한 특징"],
+                "image_width": 400,
+                "image_height": 300,
                 "error": str(e)
             }
     
@@ -1275,3 +1295,94 @@ class PersonaGenerator:
             
         except Exception as e:
             return f"대화 생성 중 오류가 발생했습니다: {str(e)}" 
+
+    def get_personality_descriptions(self, personality_traits):
+        """성격 특성을 수치가 아닌 서술형 문장으로 변환"""
+        descriptions = {}
+        
+        for trait, score in personality_traits.items():
+            if trait == "온기":
+                if score >= 80:
+                    descriptions[trait] = "따뜻하고 포근한 마음을 가지고 있어요. 누구에게나 친근하게 다가가며, 배려심이 깊어요."
+                elif score >= 60:
+                    descriptions[trait] = "친절하고 다정한 성격이에요. 사람들과 편안하게 어울리는 편이에요."
+                elif score >= 40:
+                    descriptions[trait] = "적당한 친근함을 가지고 있어요. 상황에 맞게 따뜻함을 표현해요."
+                elif score >= 20:
+                    descriptions[trait] = "조금은 차갑게 느껴질 수 있지만, 진정성은 있어요."
+                else:
+                    descriptions[trait] = "외적으로는 차가워 보이지만, 내면에는 나름의 온기가 있어요."
+            
+            elif trait == "능력":
+                if score >= 80:
+                    descriptions[trait] = "매우 유능하고 효율적이에요. 어떤 일이든 체계적으로 처리할 수 있어요."
+                elif score >= 60:
+                    descriptions[trait] = "꽤 유능한 편이에요. 맡은 일을 잘 해내는 신뢰할 만한 성격이에요."
+                elif score >= 40:
+                    descriptions[trait] = "평균적인 능력을 가지고 있어요. 노력하면 좋은 결과를 낼 수 있어요."
+                elif score >= 20:
+                    descriptions[trait] = "때로는 실수도 하지만, 그것도 매력적인 면이에요."
+                else:
+                    descriptions[trait] = "완벽하지 않지만, 그래서 더 친근하고 인간적인 면이 있어요."
+            
+            elif trait == "창의성":
+                if score >= 80:
+                    descriptions[trait] = "상상력이 풍부하고 독창적인 아이디어를 잘 떠올려요."
+                elif score >= 60:
+                    descriptions[trait] = "새로운 것을 좋아하고 창의적인 생각을 하는 편이에요."
+                elif score >= 40:
+                    descriptions[trait] = "때때로 번뜩이는 아이디어를 내기도 해요."
+                elif score >= 20:
+                    descriptions[trait] = "전통적인 방식을 선호하지만, 가끔은 새로운 시도도 해요."
+                else:
+                    descriptions[trait] = "안정적이고 검증된 방법을 좋아해요."
+            
+            elif trait == "외향성":
+                if score >= 80:
+                    descriptions[trait] = "활발하고 에너지가 넘쳐요. 사람들과 어울리는 것을 좋아해요."
+                elif score >= 60:
+                    descriptions[trait] = "사교적이고 대화하는 것을 즐겨요."
+                elif score >= 40:
+                    descriptions[trait] = "상황에 따라 활발할 때도, 조용할 때도 있어요."
+                elif score >= 20:
+                    descriptions[trait] = "조용한 편이지만, 필요할 때는 말을 잘 해요."
+                else:
+                    descriptions[trait] = "내향적이고 혼자 있는 시간을 좋아해요."
+            
+            elif trait == "유머감각":
+                if score >= 80:
+                    descriptions[trait] = "뛰어난 유머 감각으로 주변을 항상 밝게 만들어요."
+                elif score >= 60:
+                    descriptions[trait] = "재치있는 말로 분위기를 좋게 만드는 편이에요."
+                elif score >= 40:
+                    descriptions[trait] = "가끔 유머러스한 면을 보여주기도 해요."
+                elif score >= 20:
+                    descriptions[trait] = "진지한 편이지만, 상황에 맞는 농담은 할 줄 알아요."
+                else:
+                    descriptions[trait] = "진중하고 차분한 성격이에요."
+            
+            elif trait == "신뢰성":
+                if score >= 80:
+                    descriptions[trait] = "매우 믿을 만하고 약속을 잘 지켜요. 의지할 수 있는 존재예요."
+                elif score >= 60:
+                    descriptions[trait] = "신뢰할 수 있고 책임감이 강해요."
+                elif score >= 40:
+                    descriptions[trait] = "대체로 믿을 만하지만, 가끔 실수도 해요."
+                elif score >= 20:
+                    descriptions[trait] = "때로는 변덕스럽지만, 그것도 매력이에요."
+                else:
+                    descriptions[trait] = "예측하기 어렵지만, 그래서 더 흥미로워요."
+            
+            elif trait == "공감능력":
+                if score >= 80:
+                    descriptions[trait] = "다른 사람의 마음을 잘 이해하고 공감해줘요."
+                elif score >= 60:
+                    descriptions[trait] = "상대방의 감정을 잘 헤아리는 편이에요."
+                elif score >= 40:
+                    descriptions[trait] = "때때로 다른 사람의 기분을 잘 알아차려요."
+                elif score >= 20:
+                    descriptions[trait] = "자신의 관점에서 생각하는 경우가 많아요."
+                else:
+                    descriptions[trait] = "솔직하고 직설적인 성격이에요."
+        
+        return descriptions
