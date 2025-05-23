@@ -55,40 +55,39 @@ persona_generator = PersonaGenerator()
 
 # 한글 폰트 설정
 def setup_korean_font():
-    """matplotlib 한글 폰트 설정"""
+    """matplotlib 한글 폰트 설정 - 허깅페이스 환경 최적화"""
     try:
-        # Hugging Face Spaces 환경에서 사용 가능한 폰트 찾기
-        import subprocess
-        import os
+        import matplotlib.pyplot as plt
+        import matplotlib.font_manager as fm
         
-        # 시스템에서 사용 가능한 한글 폰트 찾기
-        korean_fonts = [
-            'Noto Sans CJK KR', 'Noto Sans KR', 'NanumGothic', 'NanumBarunGothic', 
-            'Malgun Gothic', 'AppleGothic', 'DejaVu Sans', 'Liberation Sans'
+        # 허깅페이스 스페이스 환경에서 사용 가능한 폰트 목록
+        available_fonts = [
+            'NanumGothic', 'NanumBarunGothic', 'Noto Sans CJK KR', 
+            'Noto Sans KR', 'DejaVu Sans', 'Liberation Sans', 'Arial'
         ]
         
-        for font_name in korean_fonts:
-            try:
-                plt.rcParams['font.family'] = font_name
-                plt.rcParams['axes.unicode_minus'] = False
-                
-                # 간단한 테스트
-                fig, ax = plt.subplots(figsize=(1, 1))
-                ax.text(0.5, 0.5, '테스트', fontsize=8)
-                plt.close(fig)
-                
-                print(f"한글 폰트 설정 완료: {font_name}")
-                return
-            except Exception as e:
-                continue
+        # 시스템에서 사용 가능한 폰트 확인
+        system_fonts = [f.name for f in fm.fontManager.ttflist]
         
-        # 모든 폰트가 실패한 경우 기본 설정으로 대체
+        for font_name in available_fonts:
+            if font_name in system_fonts:
+                try:
+                    plt.rcParams['font.family'] = font_name
+                    plt.rcParams['axes.unicode_minus'] = False
+                    print(f"한글 폰트 설정 완료: {font_name}")
+                    return
+                except Exception:
+                    continue
+        
+        # 모든 폰트가 실패한 경우 기본 설정 사용 (영어 레이블 사용)
         plt.rcParams['font.family'] = 'DejaVu Sans'
         plt.rcParams['axes.unicode_minus'] = False
-        print("한글 폰트를 찾지 못해 DejaVu Sans 사용 (한글 표시 제한)")
+        print("한글 폰트를 찾지 못해 영어 레이블을 사용합니다")
         
     except Exception as e:
         print(f"폰트 설정 오류: {str(e)}")
+        # 오류 발생 시에도 기본 설정은 유지
+        import matplotlib.pyplot as plt
         plt.rcParams['font.family'] = 'DejaVu Sans'
         plt.rcParams['axes.unicode_minus'] = False
 
@@ -389,35 +388,36 @@ def finalize_persona(persona):
         return None, f"❌ 페르소나 확정 중 오류 발생: {str(e)}", "", {}, None, [], [], [], "", None
 
 def plot_humor_matrix(humor_data):
-    """유머 매트릭스 시각화"""
+    """유머 매트릭스 시각화 - 영어 레이블 사용"""
     if not humor_data:
         return None
     
     try:
-        fig, ax = plt.subplots(figsize=(6, 6))
+        fig, ax = plt.subplots(figsize=(8, 6))
         
         # 데이터 추출
         warmth_vs_wit = humor_data.get("warmth_vs_wit", 50)
         self_vs_observational = humor_data.get("self_vs_observational", 50)
         subtle_vs_expressive = humor_data.get("subtle_vs_expressive", 50)
         
-        # 영어 라벨 사용 (폰트 문제 해결)
+        # 영어 레이블 사용 (폰트 문제 완전 해결)
         categories = ['Warmth vs Wit', 'Self vs Observational', 'Subtle vs Expressive']
         values = [warmth_vs_wit, self_vs_observational, subtle_vs_expressive]
         
-        bars = ax.bar(categories, values, color=['#ff9999', '#66b3ff', '#99ff99'])
+        bars = ax.bar(categories, values, color=['#ff9999', '#66b3ff', '#99ff99'], alpha=0.8)
         ax.set_ylim(0, 100)
-        ax.set_ylabel('Score')
-        ax.set_title('Humor Style Matrix')
+        ax.set_ylabel('Score', fontsize=12)
+        ax.set_title('Humor Style Matrix', fontsize=14, fontweight='bold')
         
         # 값 표시
         for bar, value in zip(bars, values):
             height = bar.get_height()
-            ax.text(bar.get_x() + bar.get_width()/2., height + 1,
-                   f'{value:.1f}', ha='center', va='bottom')
+            ax.text(bar.get_x() + bar.get_width()/2., height + 2,
+                   f'{value:.1f}', ha='center', va='bottom', fontsize=10, fontweight='bold')
         
-        plt.xticks(rotation=45)
+        plt.xticks(rotation=15, ha='right')
         plt.tight_layout()
+        plt.grid(axis='y', alpha=0.3)
         
         return fig
     except Exception as e:
@@ -425,14 +425,14 @@ def plot_humor_matrix(humor_data):
         return None
 
 def generate_personality_chart(persona):
-    """성격 차트 생성"""
+    """성격 차트 생성 - 영어 레이블 사용"""
     if not persona or "성격특성" not in persona:
         return None
     
     try:
         traits = persona["성격특성"]
         
-        # 영어 라벨 매핑 (폰트 문제 해결)
+        # 영어 라벨 매핑 (폰트 문제 완전 해결)
         trait_mapping = {
             "온기": "Warmth",
             "능력": "Competence", 
@@ -447,19 +447,30 @@ def generate_personality_chart(persona):
         values = list(traits.values())
         
         # 극좌표 차트 생성
-        fig, ax = plt.subplots(figsize=(6, 6), subplot_kw=dict(polar=True))
+        fig, ax = plt.subplots(figsize=(8, 8), subplot_kw=dict(polar=True))
         
         angles = np.linspace(0, 2*np.pi, len(categories), endpoint=False)
         values_plot = values + [values[0]]  # Close the plot
         angles_plot = np.concatenate([angles, [angles[0]]])
         
-        ax.plot(angles_plot, values_plot, 'o-', linewidth=2, color='#6366f1')
+        # 더 예쁜 색상과 스타일
+        ax.plot(angles_plot, values_plot, 'o-', linewidth=3, color='#6366f1', markersize=8)
         ax.fill(angles_plot, values_plot, alpha=0.25, color='#6366f1')
-        ax.set_xticks(angles)
-        ax.set_xticklabels(categories)
-        ax.set_ylim(0, 100)
         
-        plt.title("Personality Traits", size=16, pad=20)
+        # 격자와 축 설정
+        ax.set_xticks(angles)
+        ax.set_xticklabels(categories, fontsize=11)
+        ax.set_ylim(0, 100)
+        ax.set_yticks([20, 40, 60, 80, 100])
+        ax.set_yticklabels(['20', '40', '60', '80', '100'], fontsize=9)
+        ax.grid(True, alpha=0.3)
+        
+        # 각 점에 값 표시
+        for angle, value in zip(angles, values):
+            ax.text(angle, value + 5, f'{value}', ha='center', va='center', 
+                   fontsize=9, fontweight='bold', color='#2d3748')
+        
+        plt.title("Personality Traits Radar Chart", size=16, pad=20, fontweight='bold')
         
         return fig
     except Exception as e:
@@ -555,20 +566,13 @@ def chat_with_loaded_persona(persona, user_message, chat_history=None):
     try:
         generator = PersonaGenerator()
         
-        # 대화 기록을 올바른 형태로 변환 (tuples 형태 사용)
+        # 대화 기록을 올바른 형태로 변환 (messages 형태 사용)
         conversation_history = []
         if chat_history:
             for message in chat_history:
-                if isinstance(message, dict):
-                    # messages 형태를 tuples로 변환
-                    if message.get("role") == "user":
-                        user_msg = message.get("content", "")
-                        # 다음 메시지가 assistant인지 확인
-                        idx = chat_history.index(message)
-                        if idx + 1 < len(chat_history) and chat_history[idx + 1].get("role") == "assistant":
-                            assistant_msg = chat_history[idx + 1].get("content", "")
-                            conversation_history.append({"role": "user", "content": user_msg})
-                            conversation_history.append({"role": "assistant", "content": assistant_msg})
+                if isinstance(message, dict) and "role" in message and "content" in message:
+                    # 이미 messages 형태인 경우
+                    conversation_history.append(message)
                 elif isinstance(message, (list, tuple)) and len(message) >= 2:
                     # tuple 형태: [user_message, bot_response]
                     conversation_history.append({"role": "user", "content": message[0]})
@@ -577,12 +581,13 @@ def chat_with_loaded_persona(persona, user_message, chat_history=None):
         # 페르소나와 대화
         response = generator.chat_with_persona(persona, user_message, conversation_history)
         
-        # 새로운 대화를 tuples 형태로 추가
+        # 새로운 대화를 messages 형태로 추가
         if chat_history is None:
             chat_history = []
         
-        # Gradio 4.19.2의 tuples 형식 사용
-        chat_history.append([user_message, response])
+        # Gradio messages 형식 사용
+        chat_history.append({"role": "user", "content": user_message})
+        chat_history.append({"role": "assistant", "content": response})
         
         return chat_history, ""
         
@@ -594,8 +599,9 @@ def chat_with_loaded_persona(persona, user_message, chat_history=None):
         if chat_history is None:
             chat_history = []
         
-        # 에러 메시지도 tuples 형식으로 추가
-        chat_history.append([user_message, error_response])
+        # 에러 메시지도 messages 형식으로 추가
+        chat_history.append({"role": "user", "content": user_message})
+        chat_history.append({"role": "assistant", "content": error_response})
         
         return chat_history, ""
 
@@ -724,9 +730,9 @@ def create_main_interface():
     }
     """
     
-    # State 변수들 - 올바른 방식으로 생성
-    current_persona = gr.State()
-    personas_list = gr.State()
+    # State 변수들 - 더 안전한 초기화
+    current_persona = gr.State(value=None)
+    personas_list = gr.State(value=[])
     
     # Gradio 앱 생성
     with gr.Blocks(title="놈팽쓰(MemoryTag) - 사물 페르소나 생성기", css=css, theme="soft") as app:
@@ -879,8 +885,8 @@ def create_main_interface():
                     
                     with gr.Column(scale=1):
                         gr.Markdown("### 💬 대화")
-                        # Gradio 4.19.2 호환을 위해 type 파라미터 제거
-                        chatbot = gr.Chatbot(height=400, label="대화")
+                        # Gradio 4.44.1에서 권장하는 messages 형식 사용
+                        chatbot = gr.Chatbot(height=400, label="대화", type="messages")
                         with gr.Row():
                             message_input = gr.Textbox(
                                 placeholder="메시지를 입력하세요...",
