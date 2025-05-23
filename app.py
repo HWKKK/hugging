@@ -16,6 +16,13 @@ import PIL.ImageDraw
 import random
 import copy
 
+# AVIF 지원을 위한 플러그인 활성화
+try:
+    from pillow_avif import AvifImagePlugin
+    print("AVIF plugin loaded successfully")
+except ImportError:
+    print("AVIF plugin not available")
+
 # Import modules
 from modules.persona_generator import PersonaGenerator
 from modules.data_manager import save_persona, load_persona, list_personas, toggle_frontend_backend_view
@@ -202,6 +209,20 @@ def create_persona_from_image(image, name, location, time_spent, object_type, pr
     }
     
     try:
+        # 이미지 유효성 검사 및 처리
+        if isinstance(image, str):
+            # 파일 경로인 경우
+            try:
+                image = Image.open(image)
+            except Exception as img_error:
+                return None, f"❌ 이미지 파일을 읽을 수 없습니다: {str(img_error)}", "", {}, None, [], [], [], "", None, gr.update(visible=False)
+        elif not isinstance(image, Image.Image):
+            return None, "❌ 올바른 이미지 형식이 아닙니다.", "", {}, None, [], [], [], "", None, gr.update(visible=False)
+        
+        # 이미지 형식 변환 (AVIF 등 특수 형식 처리)
+        if image.format in ['AVIF', 'WEBP'] or image.mode not in ['RGB', 'RGBA']:
+            image = image.convert('RGB')
+        
         generator = PersonaGenerator()
         
         progress(0.3, desc="이미지 분석 중...")
@@ -538,7 +559,17 @@ def chat_with_loaded_persona(persona, user_message, chat_history=None):
         conversation_history = []
         if chat_history:
             for message in chat_history:
-                if isinstance(message, (list, tuple)) and len(message) >= 2:
+                if isinstance(message, dict):
+                    # messages 형태를 tuples로 변환
+                    if message.get("role") == "user":
+                        user_msg = message.get("content", "")
+                        # 다음 메시지가 assistant인지 확인
+                        idx = chat_history.index(message)
+                        if idx + 1 < len(chat_history) and chat_history[idx + 1].get("role") == "assistant":
+                            assistant_msg = chat_history[idx + 1].get("content", "")
+                            conversation_history.append({"role": "user", "content": user_msg})
+                            conversation_history.append({"role": "assistant", "content": assistant_msg})
+                elif isinstance(message, (list, tuple)) and len(message) >= 2:
                     # tuple 형태: [user_message, bot_response]
                     conversation_history.append({"role": "user", "content": message[0]})
                     conversation_history.append({"role": "assistant", "content": message[1]})
@@ -550,6 +581,7 @@ def chat_with_loaded_persona(persona, user_message, chat_history=None):
         if chat_history is None:
             chat_history = []
         
+        # Gradio 4.19.2의 tuples 형식 사용
         chat_history.append([user_message, response])
         
         return chat_history, ""
@@ -562,6 +594,7 @@ def chat_with_loaded_persona(persona, user_message, chat_history=None):
         if chat_history is None:
             chat_history = []
         
+        # 에러 메시지도 tuples 형식으로 추가
         chat_history.append([user_message, error_response])
         
         return chat_history, ""
@@ -691,9 +724,9 @@ def create_main_interface():
     }
     """
     
-    # State 변수들 - 올바른 방식으로 생성 (기본값 없이)
-    current_persona = gr.State(value=None)
-    personas_list = gr.State(value=[])
+    # State 변수들 - 올바른 방식으로 생성
+    current_persona = gr.State()
+    personas_list = gr.State()
     
     # Gradio 앱 생성
     with gr.Blocks(title="놈팽쓰(MemoryTag) - 사물 페르소나 생성기", css=css, theme="soft") as app:
