@@ -1,6 +1,7 @@
 import os
 import json
-import datetime
+import time
+from datetime import datetime
 import uuid
 
 # Define data directories
@@ -12,94 +13,92 @@ CONVERSATIONS_DIR = os.path.join(DATA_DIR, "conversations")
 for directory in [DATA_DIR, PERSONAS_DIR, CONVERSATIONS_DIR]:
     os.makedirs(directory, exist_ok=True)
 
-def save_persona(persona_data):
-    """
-    Save persona data to a JSON file
+def save_persona(persona):
+    """페르소나 객체를 JSON 파일로 저장"""
+    if not persona or "기본정보" not in persona:
+        return None
     
-    Args:
-        persona_data: Dictionary containing persona information
+    # 저장 디렉토리 확인
+    os.makedirs(PERSONAS_DIR, exist_ok=True)
     
-    Returns:
-        File path where the persona was saved
-    """
-    # Generate filename
-    name = persona_data.get("기본정보", {}).get("이름", "unnamed")
-    sanitized_name = "".join(c if c.isalnum() or c in ["-", "_"] else "_" for c in name)
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    unique_id = str(uuid.uuid4())[:8]
-    filename = f"{sanitized_name}_{timestamp}_{unique_id}.json"
+    # 파일명 생성 (이름_타입_타임스탬프.json)
+    name = persona.get("기본정보", {}).get("이름", "unknown")
+    object_type = persona.get("기본정보", {}).get("유형", "unknown")
+    timestamp = int(time.time())
     
-    # Full file path
+    # 공백이나 특수문자 처리
+    name = name.replace(" ", "_").replace("/", "_").replace("\\", "_")
+    object_type = object_type.replace(" ", "_").replace("/", "_").replace("\\", "_")
+    
+    filename = f"{name}_{object_type}_{timestamp}.json"
     filepath = os.path.join(PERSONAS_DIR, filename)
     
-    # Save to file
     try:
         with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(persona_data, f, ensure_ascii=False, indent=2)
-        
+            json.dump(persona, f, ensure_ascii=False, indent=2)
         return filepath
     except Exception as e:
-        print(f"Error saving persona: {str(e)}")
+        print(f"페르소나 저장 오류: {str(e)}")
         return None
 
 def load_persona(filepath):
-    """
-    Load persona data from a JSON file
-    
-    Args:
-        filepath: Path to the persona JSON file
-    
-    Returns:
-        Dictionary containing persona information
-    """
+    """JSON 파일에서 페르소나 객체 로드"""
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
-            persona_data = json.load(f)
-        
-        return persona_data
+            persona = json.load(f)
+        return persona
     except Exception as e:
-        print(f"Error loading persona: {str(e)}")
+        print(f"페르소나 로드 오류: {str(e)}")
         return None
 
 def list_personas():
-    """
-    List all available personas
-    
-    Returns:
-        List of dictionaries with persona information
-    """
-    personas = []
-    
+    """저장된 모든 페르소나 목록 반환"""
     try:
-        for filename in os.listdir(PERSONAS_DIR):
+        personas = []
+        personas_dir = PERSONAS_DIR
+        
+        if not os.path.exists(personas_dir):
+            os.makedirs(personas_dir, exist_ok=True)
+            return personas
+        
+        for filename in os.listdir(personas_dir):
             if filename.endswith(".json"):
-                filepath = os.path.join(PERSONAS_DIR, filename)
-                
+                filepath = os.path.join(personas_dir, filename)
                 try:
                     with open(filepath, 'r', encoding='utf-8') as f:
-                        persona_data = json.load(f)
+                        persona = json.load(f)
                     
-                    # Extract basic information
-                    name = persona_data.get("기본정보", {}).get("이름", "Unknown")
-                    object_type = persona_data.get("기본정보", {}).get("유형", "Unknown")
-                    created_at = persona_data.get("기본정보", {}).get("생성일시", "Unknown")
+                    # 기본 정보 추출
+                    name = persona.get("기본정보", {}).get("이름", "Unknown")
+                    persona_type = persona.get("기본정보", {}).get("유형", "Unknown")
+                    
+                    # 생성 시간 (파일명에서 추출 또는 메타데이터에서)
+                    created_at = persona.get("기본정보", {}).get("생성일시", "")
+                    if not created_at:
+                        # 파일명에서 타임스탬프 추출 시도
+                        try:
+                            timestamp = int(filename.split("_")[-1].split(".")[0])
+                            created_at = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M")
+                        except:
+                            created_at = "알 수 없음"
                     
                     personas.append({
                         "name": name,
-                        "type": object_type,
+                        "type": persona_type,
                         "created_at": created_at,
                         "filename": filename,
                         "filepath": filepath
                     })
                 except Exception as e:
-                    print(f"Error reading persona file {filename}: {str(e)}")
+                    print(f"파일 {filename} 로드 오류: {str(e)}")
+                    continue
         
-        # Sort by creation date (newest first)
-        personas.sort(key=lambda x: x["created_at"] if x["created_at"] != "Unknown" else "", reverse=True)
-        
+        # 최신순 정렬
+        personas.sort(key=lambda p: p["filepath"], reverse=True)
         return personas
+    
     except Exception as e:
-        print(f"Error listing personas: {str(e)}")
+        print(f"페르소나 목록 조회 오류: {str(e)}")
         return []
 
 def save_conversation(conversation_data):
@@ -133,43 +132,13 @@ def save_conversation(conversation_data):
         return None
 
 def toggle_frontend_backend_view(persona):
-    """
-    Toggle between frontend and backend view of persona data
+    """페르소나 객체의 프론트엔드/백엔드 뷰 전환"""
+    if not persona:
+        return None, None
     
-    Args:
-        persona: Full persona data
+    # 원본 데이터 복사
+    import copy
+    frontend_persona = copy.deepcopy(persona)
+    backend_persona = copy.deepcopy(persona)
     
-    Returns:
-        Tuple containing (frontend_view, backend_view)
-    """
-    # Create frontend view (simplified)
-    frontend_view = {}
-    
-    # Basic information
-    if "기본정보" in persona:
-        frontend_view["기본정보"] = persona["기본정보"]
-    
-    # Personality traits
-    if "성격특성" in persona:
-        frontend_view["성격특성"] = persona["성격특성"]
-    
-    # Communication style
-    if "소통방식" in persona:
-        frontend_view["소통방식"] = persona["소통방식"]
-    
-    # Flaws
-    if "매력적결함" in persona:
-        frontend_view["매력적결함"] = persona["매력적결함"]
-    
-    # Interests
-    if "관심사" in persona:
-        frontend_view["관심사"] = persona["관심사"]
-    
-    # Experiences
-    if "경험" in persona:
-        frontend_view["경험"] = persona["경험"]
-    
-    # Backend view includes everything
-    backend_view = persona
-    
-    return frontend_view, backend_view 
+    return frontend_persona, backend_persona 
