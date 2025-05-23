@@ -354,8 +354,8 @@ def init_persona_preview_chat(persona):
     name = persona.get("기본정보", {}).get("이름", "Friend")
     greeting = f"안녕! 나는 {name}이야. 드디어 깨어났구나! 뭐든 물어봐~ 😊"
     
-    # Gradio 5.x 메시지 형식
-    return [{"role": "assistant", "content": greeting}]
+    # Gradio 4.x 호환 메시지 형식
+    return [[None, greeting]]
 
 def update_humor_recommendation(extraversion, emotion_expression, energy, thinking_style):
     """슬라이더 값이 변경될 때 실시간으로 유머 스타일 추천"""
@@ -684,7 +684,7 @@ with gr.Blocks(title="놈팽쓰 테스트 앱", theme=theme, css=css) as app:
                     
                     # 대화 미리보기
                     with gr.Accordion("💬 대화 미리보기", open=False):
-                        preview_chatbot = gr.Chatbot(label="대화 미리보기", height=200, type="messages")
+                        preview_chatbot = gr.Chatbot(label="대화 미리보기", height=200)
                         preview_input = gr.Textbox(placeholder="미리보기 대화...", show_label=False)
                         preview_send_btn = gr.Button("전송", size="sm")
             
@@ -696,7 +696,7 @@ with gr.Blocks(title="놈팽쓰 테스트 앱", theme=theme, css=css) as app:
             with gr.Row():
                 with gr.Column(scale=2):
                     # 대화 인터페이스
-                    chatbot = gr.Chatbot(label="대화", height=600, type="messages")
+                    chatbot = gr.Chatbot(label="대화", height=600)
                     with gr.Row():
                         chat_input = gr.Textbox(placeholder="사물과 대화해보세요...", show_label=False)
                         chat_button = gr.Button("전송", variant="primary")
@@ -2026,41 +2026,34 @@ def chat_with_persona(persona, user_message, chat_history=None):
         return chat_history, ""
         
     if not persona:
-        # Gradio 5.x에서는 메시지 형식이 변경됨
-        chat_history.append({"role": "user", "content": user_message})
-        chat_history.append({"role": "assistant", "content": "페르소나가 로드되지 않았습니다. 먼저 페르소나를 생성하거나 불러오세요."})
+        # Gradio 4.x 호환 메시지 형식 (튜플)
+        chat_history.append([user_message, "페르소나가 로드되지 않았습니다. 먼저 페르소나를 생성하거나 불러오세요."])
         return chat_history, ""
     
     try:
         # 페르소나 생성기에서 대화 기능 호출
-        # 이전 대화 기록 변환 필요 - 튜플에서 딕셔너리 형식으로
+        # 이전 대화 기록 변환 필요 - 리스트에서 튜플 형식으로
         converted_history = []
         for msg in chat_history:
-            if isinstance(msg, dict):
-                # 이미 메시지 형식이면 그대로 사용
-                if "role" in msg and "content" in msg:
-                    converted_history.append((
-                        msg["content"] if msg["role"] == "user" else "",
-                        msg["content"] if msg["role"] == "assistant" else ""
-                    ))
+            if isinstance(msg, list) and len(msg) == 2:
+                # 리스트 형식이면 튜플로 변환
+                converted_history.append((msg[0] if msg[0] else "", msg[1] if msg[1] else ""))
             elif isinstance(msg, tuple) and len(msg) == 2:
-                # 튜플 형식이면 변환
+                # 이미 튜플 형식이면 그대로 사용
                 converted_history.append(msg)
         
         # 페르소나 생성기에서 대화 함수 호출
         response = persona_generator.chat_with_persona(persona, user_message, converted_history)
         
-        # Gradio 5.x 메시지 형식으로 추가
-        chat_history.append({"role": "user", "content": user_message})
-        chat_history.append({"role": "assistant", "content": response})
+        # Gradio 4.x 메시지 형식으로 추가 (리스트)
+        chat_history.append([user_message, response])
         
         return chat_history, ""
     except Exception as e:
         import traceback
         error_details = traceback.format_exc()
         print(f"대화 오류: {error_details}")
-        chat_history.append({"role": "user", "content": user_message})
-        chat_history.append({"role": "assistant", "content": f"대화 중 오류가 발생했습니다: {str(e)}"})
+        chat_history.append([user_message, f"대화 중 오류가 발생했습니다: {str(e)}"])
         return chat_history, ""
 
 # 메인 Gradio 인터페이스 구성 함수
@@ -2219,7 +2212,7 @@ def create_interface():
                         chat_persona_info = gr.Markdown("### 페르소나를 불러와 대화를 시작하세요")
                         
                         # 대화 인터페이스
-                        chatbot = gr.Chatbot(height=400, label="대화", type="messages")
+                        chatbot = gr.Chatbot(height=400, label="대화")
                         with gr.Row():
                             message_input = gr.Textbox(
                                 placeholder="메시지를 입력하세요...",
