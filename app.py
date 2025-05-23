@@ -86,7 +86,13 @@ def create_persona_from_image(image, user_inputs, progress=gr.Progress()):
         generator = PersonaGenerator()
         
         progress(0.3, desc="이미지 분석 중...")
-        image_analysis = generator.analyze_image(image)
+        # Gradio 5.x에서는 이미지 처리 방식이 변경됨
+        if hasattr(image, 'name') and hasattr(image, 'read'):
+            # 파일 객체인 경우 (구버전 호환)
+            image_analysis = generator.analyze_image(image)
+        else:
+            # Pillow 이미지 객체 또는 파일 경로인 경우 (Gradio 5.x)
+            image_analysis = generator.analyze_image(image)
         
         # 물리적 특성에 사용자 입력 통합
         if user_inputs.get("object_type"):
@@ -115,7 +121,7 @@ def create_persona_from_image(image, user_inputs, progress=gr.Progress()):
 def show_awakening_progress(image, user_inputs, progress=gr.Progress()):
     """영혼 깨우기 과정을 단계별로 보여주는 UI 함수"""
     if image is None:
-        return None, gr.update(visible=True, value="이미지를 업로드해주세요.")
+        return None, gr.update(visible=True, value="이미지를 업로드해주세요."), None
     
     # 1단계: 영혼 발견하기 (이미지 분석 시작)
     progress(0.1, desc="영혼 발견 중...")
@@ -129,7 +135,7 @@ def show_awakening_progress(image, user_inputs, progress=gr.Progress()):
         <p>💫 사물의 특성 분석 중...</p>
     </div>
     """
-    yield awakening_html
+    yield None, None, awakening_html
     time.sleep(1.5)  # 연출을 위한 딜레이
     
     # 2단계: 영혼 깨어나는 중 (127개 성격 변수 분석)
@@ -148,7 +154,7 @@ def show_awakening_progress(image, user_inputs, progress=gr.Progress()):
         <p>💫 "무언가 느껴지기 시작했어요"</p>
     </div>
     """
-    yield awakening_html
+    yield None, None, awakening_html
     time.sleep(2)  # 연출을 위한 딜레이
     
     # 3단계: 맥락 파악하기 (사용자 입력 반영)
@@ -171,7 +177,7 @@ def show_awakening_progress(image, user_inputs, progress=gr.Progress()):
         <p>💭 "아... 기억이 돌아오는 것 같아"</p>
     </div>
     """
-    yield awakening_html
+    yield None, None, awakening_html
     time.sleep(1.5)  # 연출을 위한 딜레이
     
     # 4단계: 영혼의 각성 완료 (페르소나 생성 완료)
@@ -186,7 +192,7 @@ def show_awakening_progress(image, user_inputs, progress=gr.Progress()):
         <p>💫 "드디어 내 목소리를 찾았어. 안녕!"</p>
     </div>
     """
-    yield awakening_html
+    yield None, None, awakening_html
     
     # 페르소나 생성 과정은 이어서 진행
     return None, gr.update(visible=False)
@@ -285,120 +291,111 @@ body, h1, h2, h3, p, div, span, button, input, textarea, label, select, option {
 }
 """
 
-# 127개 변수 설명 사전 추가
-VARIABLE_DESCRIPTIONS = {
-    # 온기(Warmth) 차원 - 10개 지표
-    "W01_친절함": "타인을 돕고 배려하는 표현 빈도",
-    "W02_친근함": "접근하기 쉽고 개방적인 태도",
-    "W03_진실성": "솔직하고 정직한 표현 정도",
-    "W04_신뢰성": "약속 이행과 일관된 행동 패턴",
-    "W05_수용성": "판단하지 않고 받아들이는 태도",
-    "W06_공감능력": "타인 감정 인식 및 적절한 반응",
-    "W07_포용력": "다양성을 받아들이는 넓은 마음",
-    "W08_격려성향": "타인을 응원하고 힘내게 하는 능력",
-    "W09_친밀감표현": "정서적 가까움을 표현하는 정도",
-    "W10_무조건적수용": "조건 없이 받아들이는 태도",
-    
-    # 능력(Competence) 차원 - 10개 지표
-    "C01_효율성": "과제 완수 능력과 반응 속도",
-    "C02_지능": "문제 해결과 논리적 사고 능력",
-    "C03_전문성": "특정 영역의 깊은 지식과 숙련도",
-    "C04_창의성": "독창적 사고와 혁신적 아이디어",
-    "C05_정확성": "오류 없이 정확한 정보 제공",
-    "C06_분석력": "복잡한 상황을 체계적으로 분석",
-    "C07_학습능력": "새로운 정보 습득과 적용 능력",
-    "C08_통찰력": "표면 너머의 본질을 파악하는 능력",
-    "C09_실행력": "계획을 실제로 실행하는 능력",
-    "C10_적응력": "변화하는 상황에 유연한 대응",
-    
-    # 외향성(Extraversion) - 6개 지표
-    "E01_사교성": "타인과의 상호작용을 즐기는 정도",
-    "E02_활동성": "에너지 넘치고 역동적인 태도",
-    "E03_자기주장": "자신의 의견을 명확히 표현",
-    "E04_긍정정서": "밝고 쾌활한 감정 표현",
-    "E05_자극추구": "새로운 경험과 자극에 대한 욕구",
-    "E06_열정성": "열정적이고 활기찬 태도"
+# 영어 라벨 매핑 사전 추가
+ENGLISH_LABELS = {
+    "외향성": "Extraversion",
+    "감정표현": "Emotion Expression",
+    "활력": "Energy",
+    "사고방식": "Thinking Style", 
+    "온기": "Warmth",
+    "능력": "Competence",
+    "창의성": "Creativity",
+    "유머감각": "Humor",
+    "신뢰성": "Reliability",
+    "친화성": "Agreeableness",
+    "안정성": "Stability"
 }
 
-# 영혼 깨우기 단계별 UI를 보여주는 함수
-def show_awakening_progress(image, user_inputs, progress=gr.Progress()):
-    """영혼 깨우기 과정을 단계별로 보여주는 UI 함수"""
-    if image is None:
-        return None, gr.update(visible=True, value="이미지를 업로드해주세요.")
+# 유머 스타일 매핑
+HUMOR_STYLE_MAPPING = {
+    "Witty Wordsmith": "witty_wordsmith",
+    "Warm Humorist": "warm_humorist", 
+    "Sharp Observer": "sharp_observer",
+    "Self-deprecating": "self_deprecating"
+}
+
+# 유머 스타일 자동 추천 함수
+def recommend_humor_style(extraversion, emotion_expression, energy, thinking_style):
+    """4개 핵심 지표를 바탕으로 유머 스타일을 자동 추천"""
     
-    # 1단계: 영혼 발견하기 (이미지 분석 시작)
-    progress(0.1, desc="영혼 발견 중...")
-    awakening_html = f"""
-    <div class="awakening-container">
-        <h3>✨ 영혼 발견 중...</h3>
-        <p>이 사물에 숨겨진 영혼을 찾고 있습니다</p>
-        <div class="awakening-progress">
-            <div class="awakening-progress-bar" style="width: 20%;"></div>
-        </div>
-        <p>💫 사물의 특성 분석 중...</p>
-    </div>
-    """
-    yield awakening_html
-    time.sleep(1.5)  # 연출을 위한 딜레이
+    # 각 지표를 0-1 범위로 정규화
+    ext_norm = extraversion / 100
+    emo_norm = emotion_expression / 100
+    eng_norm = energy / 100
+    think_norm = thinking_style / 100  # 높을수록 논리적
     
-    # 2단계: 영혼 깨어나는 중 (127개 성격 변수 분석)
-    progress(0.35, desc="영혼 깨어나는 중...")
-    awakening_html = f"""
-    <div class="awakening-container">
-        <h3>✨ 영혼이 깨어나는 중</h3>
-        <p>127개 성격 변수 분석 중</p>
-        <div class="awakening-progress">
-            <div class="awakening-progress-bar" style="width: 45%;"></div>
-        </div>
-        <p>🧠 개성 찾는 중... 68%</p>
-        <p>💭 기억 복원 중... 73%</p>
-        <p>😊 감정 활성화 중... 81%</p>
-        <p>💬 말투 형성 중... 64%</p>
-        <p>💫 "무언가 느껴지기 시작했어요"</p>
-    </div>
-    """
-    yield awakening_html
-    time.sleep(2)  # 연출을 위한 딜레이
+    # 유머 스타일 점수 계산
+    scores = {}
     
-    # 3단계: 맥락 파악하기 (사용자 입력 반영)
-    progress(0.7, desc="기억 되찾는 중...")
+    # 위트있는 재치꾼: 높은 외향성 + 논리적 사고 + 보통 감정표현
+    scores["위트있는 재치꾼"] = (ext_norm * 0.4 + think_norm * 0.4 + (1 - emo_norm) * 0.2)
     
-    location = user_inputs.get("location", "알 수 없음")
-    time_spent = user_inputs.get("time_spent", "알 수 없음")
-    object_type = user_inputs.get("object_type", "알 수 없음")
+    # 따뜻한 유머러스: 높은 감정표현 + 높은 에너지 + 보통 외향성
+    scores["따뜻한 유머러스"] = (emo_norm * 0.4 + eng_norm * 0.3 + ext_norm * 0.3)
     
-    awakening_html = f"""
-    <div class="awakening-container">
-        <h3>👁️ 기억 되찾기</h3>
-        <p>🤔 "음... 내가 어디에 있던 거지? 누가 날 깨운 거야?"</p>
-        <div class="awakening-progress">
-            <div class="awakening-progress-bar" style="width: 75%;"></div>
-        </div>
-        <p>📍 주로 위치: <strong>{location}</strong></p>
-        <p>⏰ 함께한 시간: <strong>{time_spent}</strong></p>
-        <p>🏷️ 사물 종류: <strong>{object_type}</strong></p>
-        <p>💭 "아... 기억이 돌아오는 것 같아"</p>
-    </div>
-    """
-    yield awakening_html
-    time.sleep(1.5)  # 연출을 위한 딜레이
+    # 날카로운 관찰자: 높은 논리적사고 + 낮은 감정표현 + 보통 외향성
+    scores["날카로운 관찰자"] = (think_norm * 0.5 + (1 - emo_norm) * 0.3 + ext_norm * 0.2)
     
-    # 4단계: 영혼의 각성 완료 (페르소나 생성 완료)
-    progress(0.9, desc="영혼 각성 중...")
-    awakening_html = f"""
-    <div class="awakening-container">
-        <h3>🎉 영혼이 깨어났어요!</h3>
-        <div class="awakening-progress">
-            <div class="awakening-progress-bar" style="width: 100%;"></div>
-        </div>
-        <p>✨ 이제 이 사물과 대화할 수 있습니다</p>
-        <p>💫 "드디어 내 목소리를 찾았어. 안녕!"</p>
-    </div>
-    """
-    yield awakening_html
+    # 자기 비하적: 낮은 외향성 + 높은 감정표현 + 직관적 사고
+    scores["자기 비하적"] = ((1 - ext_norm) * 0.4 + emo_norm * 0.3 + (1 - think_norm) * 0.3)
     
-    # 페르소나 생성 과정은 이어서 진행
-    return None, gr.update(visible=False)
+    # 가장 높은 점수의 유머 스타일 선택
+    recommended_style = max(scores, key=scores.get)
+    confidence = scores[recommended_style] * 100
+    
+    return recommended_style, confidence, scores
+
+# 대화 미리보기 초기화 함수
+def init_persona_preview_chat(persona):
+    """페르소나 생성 후 대화 미리보기 초기화"""
+    if not persona:
+        return []
+    
+    name = persona.get("기본정보", {}).get("이름", "Friend")
+    greeting = f"안녕! 나는 {name}이야. 드디어 깨어났구나! 뭐든 물어봐~ 😊"
+    
+    # Gradio 5.x 메시지 형식
+    return [{"role": "assistant", "content": greeting}]
+
+def update_humor_recommendation(extraversion, emotion_expression, energy, thinking_style):
+    """슬라이더 값이 변경될 때 실시간으로 유머 스타일 추천"""
+    style, confidence, scores = recommend_humor_style(extraversion, emotion_expression, energy, thinking_style)
+    
+    # 추천 결과 표시
+    humor_display = f"### 🤖 추천 유머 스타일\n**{style}**"
+    confidence_display = f"### 📊 추천 신뢰도\n**{confidence:.1f}%**"
+    
+    return humor_display, confidence_display, style
+
+def update_progress_bar(step, total_steps=6, message=""):
+    """전체 진행률 바 업데이트"""
+    percentage = (step / total_steps) * 100
+    return f"""<div style="background: #f0f4ff; padding: 15px; border-radius: 10px;">
+        <h3>📊 전체 진행률 ({step}/{total_steps})</h3>
+        <div style="background: #e0e0e0; height: 8px; border-radius: 4px;">
+            <div style="background: linear-gradient(90deg, #6366f1, #a855f7); height: 100%; width: {percentage}%; border-radius: 4px;"></div>
+        </div><p style="font-size: 14px;">{message}</p></div>"""
+
+def update_backend_status(status_message, status_type="info"):
+    """백엔드 AI 상태 업데이트"""
+    colors = {"info": "#f8f9fa", "processing": "#fff7ed", "success": "#f0fff4", "error": "#fff5f5"}
+    bg_color = colors.get(status_type, "#f8f9fa")
+    return f"""<div style="background: {bg_color}; padding: 15px; border-radius: 8px;">
+        <h4>🤖 AI 상태</h4><p>{status_message}</p></div>"""
+
+def select_object_type(btn_name):
+    """사물 종류 선택"""
+    type_mapping = {"📱 전자기기": "전자기기", "🪑 가구": "가구", "🎨 장식품": "장식품", "🏠 가전제품": "가전제품", "🔧 도구": "도구", "👤 개인용품": "개인용품"}
+    selected_type = type_mapping.get(btn_name, "기타")
+    return f"*선택된 종류: **{selected_type}***", selected_type, gr.update(visible=True)
+
+# 개별 버튼 클릭 함수들
+def select_type_1(): return select_object_type("📱 전자기기")
+def select_type_2(): return select_object_type("🪑 가구") 
+def select_type_3(): return select_object_type("🎨 장식품")
+def select_type_4(): return select_object_type("🏠 가전제품")
+def select_type_5(): return select_object_type("🔧 도구")
+def select_type_6(): return select_object_type("👤 개인용품")
 
 # 성격 상세 정보 탭에서 127개 변수 시각화 기능 추가
 def create_personality_details_tab():
@@ -507,137 +504,231 @@ def plot_humor_matrix(humor_data):
 # Main Gradio app
 with gr.Blocks(title="놈팽쓰 테스트 앱", theme=theme, css=css) as app:
     # Global state
-    current_persona = gr.State(None)
-    conversation_history = gr.State([])
-    analysis_result_state = gr.State(None)
-    personas_data = gr.State([])
-    current_view = gr.State("frontend")  # View 상태 추가
+    current_persona = gr.State(value=None)
+    conversation_history = gr.State(value=[])
+    analysis_result_state = gr.State(value=None)
+    personas_data = gr.State(value=[])
+    current_view = gr.State(value="frontend")  # View 상태 추가
     
     gr.Markdown(
     """
-    # 🎭 놈팽쓰(MemoryTag) 테스트 앱
+    # 🎭 놈팽쓰(MemoryTag): 당신 곁의 사물, 이제 친구가 되다
     
-    사물에 영혼을 불어넣어 대화할 수 있는 페르소나 생성 테스트 앱입니다.
+    사물에 영혼을 불어넣어 대화할 수 있는 페르소나 생성 앱입니다.
     
-    ## 사용 방법
-    1. **영혼 깨우기** 탭에서 이미지를 업로드하거나 이름을 입력하여 사물의 영혼을 깨웁니다.
-    2. **대화하기** 탭에서 생성된 페르소나와 대화합니다.
-    3. **페르소나 관리** 탭에서 저장된 페르소나를 관리합니다.
+    ## 🧭 이용 프로세스 (6단계)
+    **1️⃣ 이미지 업로드** → **2️⃣ 사물 종류 선택** → **3️⃣ 맥락 정보** → **4️⃣ 성격 조정** → **5️⃣ 말투 선택** → **6️⃣ 이름 짓기**
+    
+    ### ✨ 주요 특징
+    - 🎯 **4개 핵심 지표**: 외향성, 감정표현, 에너지, 사고방식만 조정하면 127개 성격 변수 자동 생성
+    - 🤖 **AI 유머 추천**: 성격 지표 기반으로 유머 스타일 자동 추천
+    - 💬 **실시간 미리보기**: 조정 즉시 대화 스타일 확인 가능
+    - 📊 **전문적 분석**: 심리학 기반 과학적 페르소나 생성
     """
     )
     
     with gr.Tabs() as tabs:
-        # Tab 1: Soul Awakening
+        # Tab 1: Soul Awakening - 6단계 프로세스
         with gr.Tab("영혼 깨우기"):
+            # 전체 진행률 표시
             with gr.Row():
+                progress_bar = gr.HTML("""
+                <div style="background: #f0f4ff; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+                    <h3 style="margin: 0 0 10px 0;">📊 전체 진행률</h3>
+                    <div style="background: #e0e0e0; height: 8px; border-radius: 4px;">
+                        <div id="progress-fill" style="background: linear-gradient(90deg, #6366f1, #a855f7); height: 100%; width: 0%; border-radius: 4px; transition: width 0.3s ease;"></div>
+                    </div>
+                    <p style="margin: 5px 0 0 0; font-size: 14px;" id="progress-text">준비 완료 - 1단계부터 시작하세요</p>
+                </div>
+                """)
+            
+            # 메인 콘텐츠 영역
+            with gr.Row():
+                # 왼쪽: 사용자 인터페이스
                 with gr.Column(scale=1):
-                    gr.Markdown("### 🎭 사물 영혼 깨우기")
+                    # 1단계: 이미지 업로드
+                    with gr.Group() as step1_group:
+                        gr.Markdown("### 1️⃣ 이미지 업로드")
+                        input_image = gr.Image(type="filepath", label="사물 이미지 업로드")
+                        discover_soul_button = gr.Button("영혼 발견하기", variant="primary", size="lg")
                     
-                    # Image upload
-                    input_image = gr.Image(type="filepath", label="사물 이미지 업로드")
-                    
-                    # 사용자 입력 (위치, 함께한 시간, 사물명)
-                    with gr.Group():
-                        gr.Markdown("### 사물 정보 입력")
-                        user_input_name = gr.Textbox(label="사물 이름", placeholder="(선택) 이름을 지정하세요")
-                        user_input_location = gr.Textbox(label="위치", placeholder="이 사물은 어디에 있나요?")
-                        user_input_time = gr.Textbox(label="함께한 시간", placeholder="얼마나 함께했나요?")
-                        user_input_type = gr.Textbox(label="사물 종류", placeholder="무슨 종류의 사물인가요?")
-                    
-                    # Create button
-                    create_button = gr.Button("영혼 깨우기", variant="primary")
-                    
-                    # Error message
-                    error_message = gr.Markdown("", visible=False)
-                
-                with gr.Column(scale=1):
-                    # 영혼 깨우기 진행 과정
-                    awakening_progress_html = gr.HTML("사물의 영혼을 깨워주세요.")
-                    
-                    # 프론트/백 뷰 토글 버튼
-                    with gr.Group(visible=False) as view_toggle_group:
-                        gr.Markdown("### 페르소나 정보 보기")
+                    # 2단계: 사물 종류 선택 (버튼 형태)
+                    with gr.Group(visible=False) as step2_group:
+                        gr.Markdown("### 2️⃣ 사물 종류 선택")
+                        gr.Markdown("**어떤 종류의 사물인가요?**")
                         with gr.Row():
-                            frontend_button = gr.Button("프론트엔드 뷰", variant="primary")
-                            backend_button = gr.Button("백엔드 뷰", variant="secondary")
+                            object_type_btn1 = gr.Button("📱 전자기기", variant="secondary", size="lg")
+                            object_type_btn2 = gr.Button("🪑 가구", variant="secondary", size="lg") 
+                            object_type_btn3 = gr.Button("🎨 장식품", variant="secondary", size="lg")
+                        with gr.Row():
+                            object_type_btn4 = gr.Button("🏠 가전제품", variant="secondary", size="lg")
+                            object_type_btn5 = gr.Button("🔧 도구", variant="secondary", size="lg")
+                            object_type_btn6 = gr.Button("👤 개인용품", variant="secondary", size="lg")
+                        
+                        selected_object_type = gr.Markdown("*선택된 종류: 없음*")
+                        object_type_state = gr.State(value="")
+                        continue_to_step3_button = gr.Button("다음 단계", variant="primary", size="lg", visible=False)
                     
-                    # 페르소나 뷰
-                    persona_view = gr.HTML("페르소나가 생성되면 여기에 표시됩니다.")
+                    # 3단계: 맥락 정보 입력
+                    with gr.Group(visible=False) as step3_group:
+                        gr.Markdown("### 3️⃣ 맥락 정보 입력")
+                        with gr.Row():
+                            with gr.Column():
+                                gr.Markdown("**주로 어디에 있나요?**")
+                                user_input_location = gr.Radio(
+                                    choices=["🏠 집", "🏢 사무실", "✈️ 여행 중", "🛍️ 상점", "🏫 학교", "☕ 카페", "🌍 기타"],
+                                    label="위치", value="🏠 집"
+                                )
+                            with gr.Column():
+                                gr.Markdown("**얼마나 함께했나요?**")
+                                user_input_time = gr.Radio(
+                                    choices=["✨ 새것", "📅 몇 개월", "🗓️ 1년 이상", "⏳ 오래됨", "🎪 중고/빈티지"],
+                                    label="함께한 시간", value="📅 몇 개월"
+                                )
+                        
+                        create_persona_button = gr.Button("페르소나 생성", variant="primary", size="lg")
                     
-                    # 성격 차트
-                    personality_chart = gr.Image(label="성격 차트", visible=False)
-
-            # 영혼 깨우기 후 버튼 행
-            with gr.Row(visible=False) as post_awakening_buttons:
-                chat_start_button = gr.Button("이 친구와 대화하기", variant="primary")
-                save_persona_button = gr.Button("이 친구 저장하기")
-                refine_button = gr.Button("성격 미세조정")
-            
-            # 저장 결과 메시지
-            save_result_message = gr.Markdown("", visible=False)
-            
-            # 성격 미세조정 패널
-            with gr.Group(visible=False) as refine_panel:
-                gr.Markdown("### 💫 친구 성향 미세조정")
-                with gr.Row():
-                    with gr.Column():
-                        warmth_slider = gr.Slider(minimum=0, maximum=100, value=50, step=1, label="🌟 온기", info="차분함 ↔ 따뜻함")
-                        competence_slider = gr.Slider(minimum=0, maximum=100, value=50, step=1, label="💪 능력", info="직관적 ↔ 논리적")
-                        creativity_slider = gr.Slider(minimum=0, maximum=100, value=50, step=1, label="🎨 창의성", info="실용적 ↔ 창의적")
+                    # 4단계: 성격 조정
+                    with gr.Group(visible=False) as step4_group:
+                        gr.Markdown("### 4️⃣ 성격 조정")
+                        gr.Markdown("**4개 핵심 지표 조정으로 127개 변수 자동 생성**")
+                        
+                        with gr.Row():
+                            with gr.Column():
+                                extraversion_slider = gr.Slider(minimum=0, maximum=100, value=50, step=1, label="얼마나 말씀하세요?", info="내성적 ↔ 외향적")
+                                emotion_expression_slider = gr.Slider(minimum=0, maximum=100, value=50, step=1, label="감정을 잘 표현하나요?", info="담담함 ↔ 감정 풍부")
+                            with gr.Column():
+                                energy_slider = gr.Slider(minimum=0, maximum=100, value=50, step=1, label="밝아 만족가요?", info="조용함 ↔ 에너지")
+                                thinking_style_slider = gr.Slider(minimum=0, maximum=100, value=50, step=1, label="어떤 방식으로 문제를 풀까요?", info="논리적사고 ↔ 직관적사고")
+                        
+                        # 자동 추천된 유머 스타일 표시
+                        with gr.Row():
+                            recommended_humor_display = gr.Markdown("### 🤖 추천 유머 스타일\n*슬라이더를 조정하면 자동으로 추천됩니다*")
+                            humor_confidence_display = gr.Markdown("### 📊 추천 신뢰도\n*-*")
+                        
+                        continue_to_step5_button = gr.Button("다음: 말투 선택", variant="primary", size="lg")
                     
-                    with gr.Column():
-                        extraversion_slider = gr.Slider(minimum=0, maximum=100, value=50, step=1, label="🗣️ 외향성", info="내향적 ↔ 외향적")
-                        humor_slider = gr.Slider(minimum=0, maximum=100, value=50, step=1, label="😄 유머감각", info="진지함 ↔ 유머러스")
-                        trust_slider = gr.Slider(minimum=0, maximum=100, value=50, step=1, label="🤝 신뢰성", info="유연함 ↔ 신뢰감")
+                    # 5단계: 말투 선택
+                    with gr.Group(visible=False) as step5_group:
+                        gr.Markdown("### 5️⃣ 말투 선택")
+                        speech_style_radio = gr.Radio(
+                            choices=[
+                                "정중한 (~습니다, ~해요)", 
+                                "친근한 (~어, ~야)", 
+                                "청자기 (~다, ~네)",
+                                "귀여운 (~냥, ~닷)",
+                                "유쾌한 (~지, ~잖아)",
+                                "차분한 (~군요, ~네요)"
+                            ],
+                            label="말투 스타일",
+                            value="친근한 (~어, ~야)"
+                        )
+                        continue_to_step6_button = gr.Button("다음: 이름 짓기", variant="primary", size="lg")
+                    
+                    # 6단계: 이름 짓기
+                    with gr.Group(visible=False) as step6_group:
+                        gr.Markdown("### 6️⃣ 이름 짓기")
+                        user_input_name = gr.Textbox(label="이름 입력", placeholder="원하는 이름을 입력하세요")
+                        with gr.Row():
+                            auto_name_button = gr.Button("AI 추천 이름", variant="secondary")
+                            finalize_persona_button = gr.Button("페르소나 완성!", variant="primary", size="lg")
+                    
+                    # 완료 단계
+                    with gr.Group(visible=False) as step7_group:
+                        gr.Markdown("### 🎉 페르소나 완성!")
+                        with gr.Row():
+                            save_persona_button = gr.Button("저장하기", variant="primary")
+                            chat_start_button = gr.Button("대화하기", variant="secondary")
                 
-                with gr.Row():
-                    gr.Markdown("### 😄 유머 스타일 선택")
-                    humor_style = gr.Radio(
-                        ["위트있는 재치꾼", "따뜻한 유머러스", "날카로운 관찰자", "자기 비하적"],
-                        label="유머 스타일",
-                        value="따뜻한 유머러스"
-                    )
-                
-                apply_refine_button = gr.Button("이 성향으로 확정", variant="primary")
+                # 오른쪽: 백엔드 분석 패널
+                with gr.Column(scale=1):
+                    gr.Markdown("### 🔬 AI 분석 과정 (실시간)")
+                    
+                    # 백엔드 분석 상태 표시
+                    backend_status = gr.HTML("""
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #e0e0e0;">
+                        <h4 style="margin: 0 0 10px 0;">🤖 AI 상태</h4>
+                        <p style="margin: 0; color: #666;">이미지 업로드를 기다리는 중...</p>
+                    </div>
+                    """)
+                    
+                    # 실시간 분석 로그
+                    analysis_log = gr.HTML("""
+                    <div style="background: #f0f4ff; padding: 15px; border-radius: 8px; max-height: 300px; overflow-y: auto;">
+                        <h4 style="margin: 0 0 10px 0;">📝 분석 로그</h4>
+                        <div id="log-content" style="font-family: monospace; font-size: 12px; color: #374151;">
+                            시스템 준비 완료<br>
+                            이미지 분석 엔진 대기 중...<br>
+                        </div>
+                    </div>
+                    """)
+                    
+                    # 127개 변수 생성 상태
+                    variables_status = gr.HTML("""
+                    <div style="background: #fff5f5; padding: 15px; border-radius: 8px; margin-top: 15px;">
+                        <h4 style="margin: 0 0 10px 0;">🧠 127개 성격 변수</h4>
+                        <div style="background: #e0e0e0; height: 6px; border-radius: 3px;">
+                            <div id="variables-progress" style="background: #ef4444; height: 100%; width: 0%; border-radius: 3px; transition: width 0.3s ease;"></div>
+                        </div>
+                        <p style="margin: 5px 0 0 0; font-size: 12px;" id="variables-text">생성 대기 중 (0/127)</p>
+                    </div>
+                    """)
+                    
+                    # 성격 특성 실시간 표시
+                    personality_live_view = gr.HTML("""
+                    <div style="background: #f0fff4; padding: 15px; border-radius: 8px; margin-top: 15px;">
+                        <h4 style="margin: 0 0 10px 0;">🎭 성격 특성 (실시간)</h4>
+                        <p style="margin: 0; color: #666; font-size: 14px;">페르소나 생성 후 실시간으로 표시됩니다</p>
+                    </div>
+                    """)
+                    
+                    # 대화 미리보기
+                    with gr.Accordion("💬 대화 미리보기", open=False):
+                        preview_chatbot = gr.Chatbot(label="대화 미리보기", height=200, type="messages")
+                        preview_input = gr.Textbox(placeholder="미리보기 대화...", show_label=False)
+                        preview_send_btn = gr.Button("전송", size="sm")
+            
+            # 에러 메시지
+            error_message = gr.Markdown("", visible=False)
         
         # Tab 2: Chat
         with gr.Tab("대화하기"):
             with gr.Row():
                 with gr.Column(scale=2):
                     # 대화 인터페이스
-                    chatbot = gr.Chatbot(label="대화", height=600)
+                    chatbot = gr.Chatbot(label="대화", height=600, type="messages")
                     with gr.Row():
                         chat_input = gr.Textbox(placeholder="사물과 대화해보세요...", show_label=False)
                         chat_button = gr.Button("전송", variant="primary")
                 
                 with gr.Column(scale=1):
                     # 현재 페르소나 요약
-                    gr.Markdown("### 현재 페르소나")
-                    current_persona_info = gr.JSON(label="기본 정보")
-                    current_persona_traits = gr.JSON(label="성격 특성")
-                    gr.Markdown("### 소통 스타일")
+                    gr.Markdown("### Current Persona")
+                    current_persona_info = gr.JSON(label="Basic Info")
+                    current_persona_traits = gr.JSON(label="Personality Traits")
+                    gr.Markdown("### Communication Style")
                     current_humor_style = gr.Markdown()
                     
                     # 유머 매트릭스 차트 추가
-                    humor_chart = gr.Plot(label="유머 스타일 차트", visible=True)
+                    humor_chart = gr.Plot(label="Humor Style Chart", visible=True)
                     
-                    gr.Markdown("### 매력적 결함")
+                    gr.Markdown("### Attractive Flaws")
                     current_flaws_df = gr.Dataframe(
-                        headers=["결함", "효과"],
+                        headers=["Flaw", "Effect"],
                         datatype=["str", "str"],
-                        label="매력적 결함"
+                        label="Attractive Flaws"
                     )
-                    gr.Markdown("### 모순적 특성")
+                    gr.Markdown("### Contradictory Traits")
                     current_contradictions_df = gr.Dataframe(
-                        headers=["모순", "효과"],
+                        headers=["Contradiction", "Effect"],
                         datatype=["str", "str"],
-                        label="모순적 특성"
+                        label="Contradictory Traits"
                     )
-                    with gr.Accordion("127개 성격 변수", open=False):
+                    with gr.Accordion("127 Personality Variables", open=False):
                         current_all_variables_df = gr.Dataframe(
-                            headers=["변수명", "점수", "설명"],
+                            headers=["Variable", "Score", "Description"],
                             datatype=["str", "number", "str"],
-                            label="성격 변수"
+                            label="Personality Variables"
                         )
         
         # Tab 3: Persona Management
@@ -662,126 +753,129 @@ with gr.Blocks(title="놈팽쓰 테스트 앱", theme=theme, css=css) as app:
                 
                 with gr.Column():
                     selected_persona_chart = gr.Image(
-                        label="성격 차트"
+                        label="Personality Chart"
                     )
             
             with gr.Accordion("백엔드 상세 정보", open=False):
                 selected_persona_backend = gr.HTML("페르소나를 선택해주세요.")
     
     # Event handlers
-    # Soul Awakening
-    create_button.click(
-        fn=show_awakening_progress,
-        inputs=[input_image, 
-                gr.State({
-                    "name": lambda: user_input_name.value,
-                    "location": lambda: user_input_location.value,
-                    "time_spent": lambda: user_input_time.value,
-                    "object_type": lambda: user_input_type.value
-                })],
-        outputs=[awakening_progress_html, error_message]
-    ).then(
-        fn=create_persona_from_image,
-        inputs=[input_image, 
-                gr.State({
-                    "name": lambda: user_input_name.value,
-                    "location": lambda: user_input_location.value,
-                    "time_spent": lambda: user_input_time.value,
-                    "object_type": lambda: user_input_type.value
-                })],
-        outputs=[current_persona, error_message, input_image, analysis_result_state, 
-                 current_persona_info, current_persona_traits, humor_chart, 
-                 current_flaws_df, current_contradictions_df, current_all_variables_df]
-    ).then(
-        fn=create_frontend_view_html,
-        inputs=[current_persona],
-        outputs=[persona_view]
-    ).then(
-        fn=generate_personality_chart,
-        inputs=[current_persona],
-        outputs=[personality_chart]
-    ).then(
-        fn=lambda: (gr.update(visible=True), gr.update(visible=True), gr.update(visible=True)),
-        outputs=[post_awakening_buttons, view_toggle_group, personality_chart]
+    
+    # 1단계: 영혼 발견하기
+    discover_soul_button.click(
+        fn=lambda img: (
+            gr.update(visible=True) if img else gr.update(visible=False),
+            update_progress_bar(1, 6, "1단계 완료 - 영혼 발견됨"),
+            update_backend_status("이미지 분석 완료 - 사물 종류 선택 대기 중", "success")
+        ),
+        inputs=[input_image],
+        outputs=[step2_group, progress_bar, backend_status]
     )
     
-    # 프론트/백 뷰 토글 이벤트
-    frontend_button.click(
-        fn=lambda p: ("frontend", create_frontend_view_html(p), ""),
-        inputs=[current_persona],
-        outputs=[current_view, persona_view, error_message]
+    # 2단계: 사물 종류 선택 버튼들
+    object_type_btn1.click(fn=select_type_1, outputs=[selected_object_type, object_type_state, continue_to_step3_button])
+    object_type_btn2.click(fn=select_type_2, outputs=[selected_object_type, object_type_state, continue_to_step3_button])
+    object_type_btn3.click(fn=select_type_3, outputs=[selected_object_type, object_type_state, continue_to_step3_button])
+    object_type_btn4.click(fn=select_type_4, outputs=[selected_object_type, object_type_state, continue_to_step3_button])
+    object_type_btn5.click(fn=select_type_5, outputs=[selected_object_type, object_type_state, continue_to_step3_button])
+    object_type_btn6.click(fn=select_type_6, outputs=[selected_object_type, object_type_state, continue_to_step3_button])
+    
+    # 3단계로 이동
+    continue_to_step3_button.click(
+        fn=lambda: (
+            gr.update(visible=True),
+            update_progress_bar(2, 6, "2단계 완료 - 맥락 정보 입력 중")
+        ),
+        outputs=[step3_group, progress_bar]
     )
     
-    backend_button.click(
-        fn=lambda p: ("backend", create_backend_view_html(p), ""),
+    # 3단계: 페르소나 생성
+    create_persona_button.click(
+        fn=lambda img, obj_type, loc, time: (
+            create_persona_from_image(img, {
+                "object_type": obj_type,
+                "location": loc.replace("🏠 ", "").replace("🏢 ", "").replace("✈️ ", "").replace("🛍️ ", "").replace("🏫 ", "").replace("☕ ", "").replace("🌍 ", ""),
+                "time_spent": time.replace("✨ ", "").replace("📅 ", "").replace("🗓️ ", "").replace("⏳ ", "").replace("🎪 ", ""),
+                "name": ""
+            })[0],  # persona만 반환
+            gr.update(visible=True),
+            update_progress_bar(3, 6, "3단계 완료 - 성격 조정 준비됨"),
+            update_backend_status("페르소나 생성 완료 - 127개 변수 생성됨", "success")
+        ),
+        inputs=[input_image, object_type_state, user_input_location, user_input_time],
+        outputs=[current_persona, step4_group, progress_bar, backend_status]
+    ).then(
+        fn=lambda p: init_persona_preview_chat(p) if p else [],
         inputs=[current_persona],
-        outputs=[current_view, persona_view, error_message]
+        outputs=[preview_chatbot]
     )
     
-    # 성격 미세조정 패널 표시
-    refine_button.click(
-        fn=lambda: gr.update(visible=True),
-        outputs=[refine_panel]
+    # 4단계: 성격 조정 - 슬라이더 변경 시 실시간 업데이트
+    for slider in [extraversion_slider, emotion_expression_slider, energy_slider, thinking_style_slider]:
+        slider.change(
+            fn=lambda e, em, en, t, p: (
+                update_humor_recommendation(e, em, en, t)[0],  # humor display
+                update_humor_recommendation(e, em, en, t)[1],  # confidence display
+                refine_persona(p, e, em, en, t)[0] if p else p,  # updated persona
+                update_backend_status(f"성격 조정됨: 외향성{e}%, 감정표현{em}%, 에너지{en}%, 사고방식{t}%", "processing")
+            ),
+            inputs=[extraversion_slider, emotion_expression_slider, energy_slider, thinking_style_slider, current_persona],
+            outputs=[recommended_humor_display, humor_confidence_display, current_persona, backend_status]
+        )
+    
+    # 5단계로 이동
+    continue_to_step5_button.click(
+        fn=lambda: (
+            gr.update(visible=True),
+            update_progress_bar(4, 6, "4단계 완료 - 말투 선택 중")
+        ),
+        outputs=[step5_group, progress_bar]
     )
     
-    # 성격 미세조정 적용
-    apply_refine_button.click(
-        fn=lambda p, w, c, cr, e, h, t, hs: refine_persona(p, w, c, cr, e, h, t, hs),
-        inputs=[current_persona, warmth_slider, competence_slider, creativity_slider, 
-                extraversion_slider, humor_slider, trust_slider, humor_style],
-        outputs=[current_persona, error_message]
-    ).then(
-        fn=create_frontend_view_html,
+    # 6단계로 이동
+    continue_to_step6_button.click(
+        fn=lambda: (
+            gr.update(visible=True),
+            update_progress_bar(5, 6, "5단계 완료 - 이름 짓기 중")
+        ),
+        outputs=[step6_group, progress_bar]
+    )
+    
+    # 페르소나 완성
+    finalize_persona_button.click(
+        fn=lambda name, p: (
+            # 이름 업데이트
+            {**p, "기본정보": {**p.get("기본정보", {}), "이름": name}} if p and name else p,
+            gr.update(visible=True),
+            update_progress_bar(6, 6, "🎉 페르소나 완성! 저장하거나 대화해보세요"),
+            update_backend_status(f"페르소나 '{name}' 완성!", "success")
+        ),
+        inputs=[user_input_name, current_persona],
+        outputs=[current_persona, step7_group, progress_bar, backend_status]
+    )
+    
+    # 대화 미리보기
+    preview_send_btn.click(
+        fn=chat_with_persona,
+        inputs=[current_persona, preview_input, preview_chatbot],
+        outputs=[preview_chatbot, preview_input]
+    )
+    
+    # 저장 및 완료
+    save_persona_button.click(
+        fn=save_current_persona,
         inputs=[current_persona],
-        outputs=[persona_view]
-    ).then(
-        fn=generate_personality_chart,
-        inputs=[current_persona],
-        outputs=[personality_chart]
-    ).then(
-        fn=lambda: (gr.update(visible=False), gr.update(visible=True)),
-        outputs=[refine_panel, post_awakening_buttons]
+        outputs=[error_message]
     )
     
     # 대화 탭으로 이동
     chat_start_button.click(
-        fn=lambda: gr.Tabs(selected=1),
+        fn=lambda: gr.update(selected=1),
         outputs=[tabs]
     )
     
-    # Persona Management
-    refresh_btn.click(
-        fn=get_personas_list,
-        outputs=[personas_df, personas_data]
-    )
-    
-    load_btn.click(
-        fn=load_selected_persona,
-        inputs=[personas_df, personas_data],
-        outputs=[current_persona, load_result, selected_persona_frontend, selected_persona_backend, selected_persona_chart]
-    ).then(
-        fn=lambda x: x,
-        inputs=[selected_persona_frontend],
-        outputs=[current_persona_info]
-    )
-    
-    # Initial load of personas list
-    app.load(
-        fn=get_personas_list,
-        outputs=[personas_df, personas_data]
-    )
-    
-    # 저장 버튼 이벤트 핸들러 추가
-    save_persona_button.click(
-        fn=save_current_persona,
-        inputs=[current_persona],
-        outputs=[save_result_message]
-    ).then(
-        fn=lambda: gr.update(visible=True),
-        outputs=[save_result_message]
-    )
-
-
+    # 기존 이벤트 핸들러들...
+    # ... existing code ...
 
 # 기존 함수 업데이트: 현재 페르소나 정보 표시
 def update_current_persona_info(current_persona):
@@ -924,7 +1018,7 @@ def generate_personality_chart(persona):
         # Return empty image with default PIL
         img = Image.new('RGB', (400, 400), color='white')
         draw = PIL.ImageDraw.Draw(img)
-        draw.text((150, 180), "데이터 없음", fill='black')
+        draw.text((150, 180), "No data", fill='black')
         img_path = os.path.join("data", "temp_chart.png")
         img.save(img_path)
         return img_path
@@ -932,9 +1026,13 @@ def generate_personality_chart(persona):
     # Get traits
     traits = persona["성격특성"]
     
-    # Create radar chart
-    categories = list(traits.keys())
-    values = list(traits.values())
+    # Convert to English labels
+    categories = []
+    values = []
+    for trait_kr, value in traits.items():
+        trait_en = ENGLISH_LABELS.get(trait_kr, trait_kr)
+        categories.append(trait_en)
+        values.append(value)
     
     # Add the first value again to close the loop
     categories.append(categories[0])
@@ -942,39 +1040,6 @@ def generate_personality_chart(persona):
     
     # Convert to radians
     angles = np.linspace(0, 2*np.pi, len(categories), endpoint=True)
-    
-    # 한글 폰트 설정 - 기본적으로 사용 가능한 폰트를 먼저 시도
-    # Matplotlib에서 지원하는 한글 폰트 목록
-    korean_fonts = ['NanumGothic', 'NanumGothicCoding', 'NanumMyeongjo', 'Malgun Gothic', 'Gulim', 'Batang', 'Arial Unicode MS', 'DejaVu Sans']
-    
-    # 폰트 설정
-    plt.rcParams['font.family'] = 'sans-serif'  # 기본 폰트 패밀리
-    
-    # 여러 폰트를 시도
-    font_found = False
-    for font in korean_fonts:
-        try:
-            plt.rcParams['font.sans-serif'] = [font] + plt.rcParams.get('font.sans-serif', [])
-            plt.text(0, 0, '테스트', fontfamily=font)
-            font_found = True
-            print(f"성공적으로 한글 폰트를 설정했습니다: {font}")
-            break
-        except:
-            continue
-    
-    if not font_found:
-        print("한글 지원 폰트를 찾을 수 없습니다. 영문으로 표시합니다.")
-        # 영어 라벨 매핑
-        english_labels = {
-            "온기": "Warmth",
-            "능력": "Ability",
-            "신뢰성": "Trust",
-            "친화성": "Friendly",
-            "창의성": "Creative",
-            "유머감각": "Humor",
-            "외향성": "Extraversion"
-        }
-        categories = [english_labels.get(cat, cat) for cat in categories]
     
     # Create plot with improved aesthetics
     fig, ax = plt.subplots(figsize=(7, 7), subplot_kw=dict(polar=True))
@@ -1007,12 +1072,12 @@ def generate_personality_chart(persona):
     # 3. 데이터 포인트 강조
     ax.scatter(angles[:-1], values[:-1], s=100, color='#6366f1', edgecolor='white', zorder=10)
     
-    # 4. 각 축 설정
+    # 4. 각 축 설정 - 영어 라벨 사용
     ax.set_thetagrids(angles[:-1] * 180/np.pi, categories[:-1], fontsize=12)
     
     # 제목 추가
     name = persona.get("기본정보", {}).get("이름", "Unknown")
-    plt.title(f"{name} 성격 특성", size=16, color='#374151', pad=20, fontweight='bold')
+    plt.title(f"{name} Personality Traits", size=16, color='#374151', pad=20, fontweight='bold')
     
     # 저장
     timestamp = int(time.time())
@@ -1093,56 +1158,59 @@ def save_current_persona(current_persona):
 # 이 함수는 파일 상단에서 이미 정의되어 있으므로 여기서는 제거합니다.
 
 # 성격 미세조정 함수
-def refine_persona(persona, warmth, competence, creativity, extraversion, humor, trust, humor_style):
+def refine_persona(persona, extraversion, emotion_expression, energy, thinking_style):
     """페르소나의 성격을 미세조정하는 함수"""
     if not persona:
         return persona, "페르소나가 없습니다."
     
     try:
+        # 유머 스타일 자동 추천
+        humor_style, confidence, scores = recommend_humor_style(extraversion, emotion_expression, energy, thinking_style)
+        
         # 복사본 생성
         refined_persona = persona.copy()
         
-        # 성격 특성 업데이트
+        # 성격 특성 업데이트 - 새로운 지표들을 기존 매핑에 연결
         if "성격특성" in refined_persona:
-            refined_persona["성격특성"]["온기"] = int(warmth)
-            refined_persona["성격특성"]["능력"] = int(competence)
-            refined_persona["성격특성"]["창의성"] = int(creativity)
             refined_persona["성격특성"]["외향성"] = int(extraversion)
-            refined_persona["성격특성"]["유머감각"] = int(humor)
-            refined_persona["성격특성"]["신뢰성"] = int(trust)
+            refined_persona["성격특성"]["감정표현"] = int(emotion_expression)  
+            refined_persona["성격특성"]["활력"] = int(energy)
+            refined_persona["성격특성"]["사고방식"] = int(thinking_style)
+            
+            # 기존 특성들도 새로운 지표를 바탕으로 계산
+            refined_persona["성격특성"]["온기"] = int((emotion_expression + energy) / 2)
+            refined_persona["성격특성"]["능력"] = int(thinking_style)
+            refined_persona["성격특성"]["창의성"] = int(100 - thinking_style)  # 논리적 ↔ 창의적
         
-        # 유머 스타일 업데이트
+        # 자동 추천된 유머 스타일 업데이트
         refined_persona["유머스타일"] = humor_style
         
         # 127개 성격 변수가 있으면 업데이트
         if "성격변수127" in refined_persona:
-            # 온기 관련 변수 업데이트
-            for var in ["W01_친절함", "W02_친근함", "W06_공감능력", "W07_포용력"]:
-                if var in refined_persona["성격변수127"]:
-                    refined_persona["성격변수127"][var] = int(warmth * 0.9 + random.randint(0, 20))
-            
-            # 능력 관련 변수 업데이트
-            for var in ["C01_효율성", "C02_지능", "C05_정확성", "C09_실행력"]:
-                if var in refined_persona["성격변수127"]:
-                    refined_persona["성격변수127"][var] = int(competence * 0.9 + random.randint(0, 20))
-            
-            # 창의성 관련 변수 업데이트
-            for var in ["C04_창의성", "C08_통찰력"]:
-                if var in refined_persona["성격변수127"]:
-                    refined_persona["성격변수127"][var] = int(creativity * 0.9 + random.randint(0, 20))
-            
             # 외향성 관련 변수 업데이트
             for var in ["E01_사교성", "E02_활동성", "E03_자기주장", "E06_열정성"]:
                 if var in refined_persona["성격변수127"]:
                     refined_persona["성격변수127"][var] = int(extraversion * 0.9 + random.randint(0, 20))
             
-            # 유머 관련 변수 업데이트
-            if "H01_유머감각" in refined_persona["성격변수127"]:
-                refined_persona["성격변수127"]["H01_유머감각"] = int(humor * 0.9 + random.randint(0, 20))
+            # 감정표현 관련 변수 업데이트
+            for var in ["W09_친밀감표현", "W06_공감능력", "E04_긍정정서"]:
+                if var in refined_persona["성격변수127"]:
+                    refined_persona["성격변수127"][var] = int(emotion_expression * 0.9 + random.randint(0, 20))
             
-            # 신뢰성 관련 변수 업데이트
-            if "W04_신뢰성" in refined_persona["성격변수127"]:
-                refined_persona["성격변수127"]["W04_신뢰성"] = int(trust * 0.9 + random.randint(0, 20))
+            # 에너지 관련 변수 업데이트
+            for var in ["E02_활동성", "E06_열정성", "E05_자극추구"]:
+                if var in refined_persona["성격변수127"]:
+                    refined_persona["성격변수127"][var] = int(energy * 0.9 + random.randint(0, 20))
+            
+            # 사고방식 관련 변수 업데이트
+            for var in ["C02_지능", "C06_분석력", "C01_효율성"]:
+                if var in refined_persona["성격변수127"]:
+                    refined_persona["성격변수127"][var] = int(thinking_style * 0.9 + random.randint(0, 20))
+            
+            # 창의성 관련 변수 업데이트 (논리적 사고와 반대)
+            for var in ["C04_창의성", "C08_통찰력"]:
+                if var in refined_persona["성격변수127"]:
+                    refined_persona["성격변수127"][var] = int((100 - thinking_style) * 0.9 + random.randint(0, 20))
         
         # 유머 매트릭스 업데이트
         if "유머매트릭스" in refined_persona:
@@ -1958,41 +2026,48 @@ def chat_with_persona(persona, user_message, chat_history=None):
         return chat_history, ""
         
     if not persona:
-        chat_history.append((user_message, "페르소나가 로드되지 않았습니다. 먼저 페르소나를 생성하거나 불러오세요."))
+        # Gradio 5.x에서는 메시지 형식이 변경됨
+        chat_history.append({"role": "user", "content": user_message})
+        chat_history.append({"role": "assistant", "content": "페르소나가 로드되지 않았습니다. 먼저 페르소나를 생성하거나 불러오세요."})
         return chat_history, ""
     
     try:
         # 페르소나 생성기에서 대화 기능 호출
-        conversation_history = [(msg[0], msg[1]) for msg in chat_history]
+        # 이전 대화 기록 변환 필요 - 튜플에서 딕셔너리 형식으로
+        converted_history = []
+        for msg in chat_history:
+            if isinstance(msg, dict):
+                # 이미 메시지 형식이면 그대로 사용
+                if "role" in msg and "content" in msg:
+                    converted_history.append((
+                        msg["content"] if msg["role"] == "user" else "",
+                        msg["content"] if msg["role"] == "assistant" else ""
+                    ))
+            elif isinstance(msg, tuple) and len(msg) == 2:
+                # 튜플 형식이면 변환
+                converted_history.append(msg)
         
         # 페르소나 생성기에서 대화 함수 호출
-        response = persona_generator.chat_with_persona(persona, user_message, conversation_history)
+        response = persona_generator.chat_with_persona(persona, user_message, converted_history)
         
-        # 대화 기록에 추가
-        chat_history.append((user_message, response))
-        
-        # 현재 시간에 대화 저장 (구현 여부에 따라 주석 처리)
-        # save_conversation({
-        #     "persona_id": persona.get("id", "unknown"),
-        #     "persona_name": persona.get("name", "Unknown Persona"),
-        #     "timestamp": datetime.now().isoformat(),
-        #     "user_message": user_message,
-        #     "persona_response": response
-        # })
+        # Gradio 5.x 메시지 형식으로 추가
+        chat_history.append({"role": "user", "content": user_message})
+        chat_history.append({"role": "assistant", "content": response})
         
         return chat_history, ""
     except Exception as e:
         import traceback
         error_details = traceback.format_exc()
         print(f"대화 오류: {error_details}")
-        chat_history.append((user_message, f"대화 중 오류가 발생했습니다: {str(e)}"))
+        chat_history.append({"role": "user", "content": user_message})
+        chat_history.append({"role": "assistant", "content": f"대화 중 오류가 발생했습니다: {str(e)}"})
         return chat_history, ""
 
 # 메인 Gradio 인터페이스 구성 함수
 def create_interface():
-    # 현재 persona 상태 저장
-    current_persona = gr.State(None)
-    personas_list = gr.State([])
+    # 현재 persona 상태 저장 - Gradio 5.x에서 변경된 방식 적용
+    current_persona = gr.State(value=None)
+    personas_list = gr.State(value=[])
     
     with gr.Blocks(theme=theme, css=css) as app:
         gr.Markdown("""
@@ -2000,8 +2075,8 @@ def create_interface():
         이 데모는 일상 속 사물에 AI 페르소나를 부여하여 대화할 수 있게 해주는 서비스입니다.
         """)
         
-        with gr.Tabs(selected=0) as tabs:
-            with gr.Tab("페르소나 생성", id=0):
+        with gr.Tabs() as tabs:
+            with gr.Tab("페르소나 생성", id="persona_creation"):
                 with gr.Row():
                     with gr.Column(scale=1):
                         # 이미지 업로드 영역
@@ -2034,8 +2109,8 @@ def create_interface():
                                 value="가구"
                             )
                         
-                        # 사용자 입력들 상태 저장
-                        user_inputs = gr.State({})
+                        # 사용자 입력들 상태 저장 - Gradio 5.x에서 변경된 방식 적용
+                        user_inputs = gr.State(value={})
                         
                         with gr.Row():
                             discover_btn = gr.Button("1. 영혼 발견하기", variant="primary")
@@ -2083,7 +2158,7 @@ def create_interface():
                 json_output = gr.Textbox(label="JSON 데이터", visible=False)
                 download_output = gr.File(label="다운로드", visible=False)
                 
-            with gr.Tab("세부 정보", id=1):
+            with gr.Tab("세부 정보", id="persona_details"):
                 with gr.Row():
                     with gr.Column(scale=1):
                         # 매력적 결함 데이터프레임
@@ -2112,7 +2187,7 @@ def create_interface():
                         interactive=False
                     )
             
-            with gr.Tab("대화하기", id=2):
+            with gr.Tab("대화하기", id="persona_chat"):
                 with gr.Row():
                     with gr.Column(scale=1):
                         # 페르소나 불러오기 기능
@@ -2144,7 +2219,7 @@ def create_interface():
                         chat_persona_info = gr.Markdown("### 페르소나를 불러와 대화를 시작하세요")
                         
                         # 대화 인터페이스
-                        chatbot = gr.Chatbot(height=400, label="대화")
+                        chatbot = gr.Chatbot(height=400, label="대화", type="messages")
                         with gr.Row():
                             message_input = gr.Textbox(
                                 placeholder="메시지를 입력하세요...",
@@ -2156,7 +2231,7 @@ def create_interface():
         
         # 영혼 깨우기 버튼 이벤트
         discover_btn.click(
-            fn=lambda values: {"name": values[0], "location": values[1], "time_spent": values[2], "object_type": values[3]},
+            fn=lambda name, location, time_spent, object_type: {"name": name, "location": location, "time_spent": time_spent, "object_type": object_type},
             inputs=[name_input, location_input, time_spent_input, object_type_input],
             outputs=[user_inputs],
             queue=False
@@ -2169,7 +2244,7 @@ def create_interface():
         
         # 페르소나 생성 버튼 이벤트
         create_btn.click(
-            fn=lambda values: {"name": values[0], "location": values[1], "time_spent": values[2], "object_type": values[3]},
+            fn=lambda name, location, time_spent, object_type: {"name": name, "location": location, "time_spent": time_spent, "object_type": object_type},
             inputs=[name_input, location_input, time_spent_input, object_type_input],
             outputs=[user_inputs],
             queue=False
@@ -2256,7 +2331,7 @@ def create_interface():
             inputs=[current_persona],
             outputs=[warmth_slider, competence_slider, creativity_slider, extraversion_slider, humor_slider, trust_slider]
         ).then(
-            fn=lambda: 0, # 첫번째 탭으로 이동
+            fn=lambda: gr.update(selected="persona_creation"),
             outputs=[tabs]
         )
         
@@ -2285,7 +2360,7 @@ def create_interface():
             inputs=[current_persona],
             outputs=[chat_persona_info]
         ).then(
-            fn=lambda: 0, # 첫번째 탭으로 이동
+            fn=lambda: gr.update(selected="persona_creation"),
             outputs=[tabs]
         )
         
