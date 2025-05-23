@@ -1,4 +1,4 @@
-gradio==4.44.1
+gradio==5.31.0
 google-generativeai==0.3.2
 Pillow==10.3.0
 pillow-avif-plugin==1.4.3

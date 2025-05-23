@@ -282,21 +282,28 @@ def create_persona_from_image(image, name, location, time_spent, object_type, pr
         return None, f"❌ 페르소나 생성 중 오류 발생: {str(e)}", "", {}, None, [], [], [], "", None, gr.update(visible=False)
 
 def adjust_persona_traits(persona, warmth, competence, humor, extraversion, humor_style):
-    """페르소나 성격 특성 조정"""
-    if not persona:
-        return persona, "조정할 페르소나가 없습니다.", {}
+    """페르소나 성격 특성 조정 - Gradio 5.x 호환"""
+    if not persona or not isinstance(persona, dict):
+        return None, "조정할 페르소나가 없습니다.", {}
     
     try:
+        # 깊은 복사로 원본 보호
+        import copy
+        adjusted_persona = copy.deepcopy(persona)
+        
         # 성격 특성 업데이트
-        persona["성격특성"]["온기"] = warmth
-        persona["성격특성"]["능력"] = competence  
-        persona["성격특성"]["유머감각"] = humor
-        persona["성격특성"]["외향성"] = extraversion
-        persona["유머스타일"] = humor_style
+        if "성격특성" not in adjusted_persona:
+            adjusted_persona["성격특성"] = {}
+            
+        adjusted_persona["성격특성"]["온기"] = warmth
+        adjusted_persona["성격특성"]["능력"] = competence  
+        adjusted_persona["성격특성"]["유머감각"] = humor
+        adjusted_persona["성격특성"]["외향성"] = extraversion
+        adjusted_persona["유머스타일"] = humor_style
         
         # 조정된 정보 표시
         adjusted_info = {
-            "이름": persona["기본정보"]["이름"],
+            "이름": adjusted_persona.get("기본정보", {}).get("이름", "Unknown"),
             "온기": warmth,
             "능력": competence,
             "유머감각": humor, 
@@ -304,7 +311,7 @@ def adjust_persona_traits(persona, warmth, competence, humor, extraversion, humo
             "유머스타일": humor_style
         }
         
-        persona_name = persona["기본정보"]["이름"]
+        persona_name = adjusted_persona.get("기본정보", {}).get("이름", "페르소나")
         adjustment_message = f"""
 ### 🎭 {persona_name}의 성격이 조정되었습니다!
 
@@ -319,9 +326,11 @@ def adjust_persona_traits(persona, warmth, competence, humor, extraversion, humo
 • 유머스타일: {humor_style}
         """
         
-        return persona, adjustment_message, adjusted_info
+        return adjusted_persona, adjustment_message, adjusted_info
         
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return persona, f"조정 중 오류 발생: {str(e)}", {}
 
 def finalize_persona(persona):
@@ -556,7 +565,7 @@ def export_persona_to_json(persona):
 #     return None, "이 기능은 더 이상 사용하지 않습니다. JSON 업로드를 사용하세요.", {}, {}, None, [], [], [], ""
 
 def chat_with_loaded_persona(persona, user_message, chat_history=None):
-    """현재 로드된 페르소나와 대화"""
+    """현재 로드된 페르소나와 대화 - Gradio 5.31.0 호환"""
     if not persona:
         return chat_history or [], ""
     
@@ -566,15 +575,15 @@ def chat_with_loaded_persona(persona, user_message, chat_history=None):
     try:
         generator = PersonaGenerator()
         
-        # 대화 기록을 올바른 형태로 변환 (messages 형태 사용)
+        # 대화 기록을 올바른 형태로 변환 (Gradio 5.x messages 형태)
         conversation_history = []
         if chat_history:
             for message in chat_history:
                 if isinstance(message, dict) and "role" in message and "content" in message:
-                    # 이미 messages 형태인 경우
+                    # 이미 올바른 messages 형태
                     conversation_history.append(message)
                 elif isinstance(message, (list, tuple)) and len(message) >= 2:
-                    # tuple 형태: [user_message, bot_response]
+                    # 이전 버전의 tuple 형태 처리
                     conversation_history.append({"role": "user", "content": message[0]})
                     conversation_history.append({"role": "assistant", "content": message[1]})
         
@@ -585,11 +594,12 @@ def chat_with_loaded_persona(persona, user_message, chat_history=None):
         if chat_history is None:
             chat_history = []
         
-        # Gradio messages 형식 사용
-        chat_history.append({"role": "user", "content": user_message})
-        chat_history.append({"role": "assistant", "content": response})
+        # Gradio 5.31.0 messages 형식: 각 메시지는 별도로 추가
+        new_history = chat_history.copy()
+        new_history.append({"role": "user", "content": user_message})
+        new_history.append({"role": "assistant", "content": response})
         
-        return chat_history, ""
+        return new_history, ""
         
     except Exception as e:
         import traceback
@@ -599,11 +609,12 @@ def chat_with_loaded_persona(persona, user_message, chat_history=None):
         if chat_history is None:
             chat_history = []
         
-        # 에러 메시지도 messages 형식으로 추가
-        chat_history.append({"role": "user", "content": user_message})
-        chat_history.append({"role": "assistant", "content": error_response})
+        # 에러 메시지도 올바른 형식으로 추가
+        new_history = chat_history.copy()
+        new_history.append({"role": "user", "content": user_message})
+        new_history.append({"role": "assistant", "content": error_response})
         
-        return chat_history, ""
+        return new_history, ""
 
 def import_persona_from_json(json_file):
     """JSON 파일에서 페르소나 가져오기"""
@@ -730,12 +741,12 @@ def create_main_interface():
     }
     """
     
-    # State 변수들 - 더 안전한 초기화
-    current_persona = gr.State(value=None)
-    personas_list = gr.State(value=[])
-    
     # Gradio 앱 생성
     with gr.Blocks(title="놈팽쓰(MemoryTag) - 사물 페르소나 생성기", css=css, theme="soft") as app:
+        # State 변수들 - Gradio 5.31.0에서는 반드시 Blocks 내부에서 정의
+        current_persona = gr.State(value=None)
+        personas_list = gr.State(value=[])
+        
         gr.Markdown("""
         # 놈팽쓰(MemoryTag): 당신 곁의 사물, 이제 친구가 되다
         일상 속 사물에 AI 페르소나를 부여하여 대화할 수 있게 해주는 서비스입니다.
