@@ -161,9 +161,9 @@ HUMOR_STYLE_MAPPING = {
 }
 
 def create_persona_from_image(image, name, location, time_spent, object_type, progress=gr.Progress()):
-    """페르소나 생성 함수"""
+    """페르소나 생성 함수 - 초기 생성만"""
     if image is None:
-        return None, "이미지를 업로드해주세요.", {}, {}, None, [], [], [], "", None
+        return None, "이미지를 업로드해주세요.", {}, {}, None, [], [], [], "", None, gr.update(visible=False)
     
     progress(0.1, desc="이미지 분석 중...")
     
@@ -189,13 +189,101 @@ def create_persona_from_image(image, name, location, time_spent, object_type, pr
         if object_type:
             image_analysis["object_type"] = object_type
         
-        progress(0.6, desc="페르소나 생성 중...")
+        progress(0.6, desc="페르소나 각성 중...")
         frontend_persona = generator.create_frontend_persona(image_analysis, user_context)
         
-        progress(0.8, desc="상세 페르소나 생성 중...")
-        backend_persona = generator.create_backend_persona(frontend_persona, image_analysis)
-        
         progress(1.0, desc="완료!")
+        
+        # 기본 정보 추출
+        basic_info = {
+            "이름": frontend_persona.get("기본정보", {}).get("이름", "Unknown"),
+            "유형": frontend_persona.get("기본정보", {}).get("유형", "Unknown"),
+            "설명": frontend_persona.get("기본정보", {}).get("설명", "")
+        }
+        
+        personality_traits = frontend_persona.get("성격특성", {})
+        
+        # 페르소나 인사말 생성
+        persona_name = basic_info.get("이름", "친구")
+        awakening_greeting = f"""
+### 🌟 영혼이 깨어났어요!
+
+**{persona_name}**이 당신을 기다리고 있습니다.
+
+💭 *"음... 여기가 어디지? 누가 날 깨운 거야? 아, 당신이구나! 
+안녕, 난 {persona_name}이야. 드디어 목소리를 찾았네."*
+
+✨ **현재 성격 특성:**
+• 온기: {personality_traits.get('온기', 50)}/100
+• 능력: {personality_traits.get('능력', 50)}/100  
+• 유머감각: {personality_traits.get('유머감각', 50)}/100
+• 외향성: {personality_traits.get('외향성', 50)}/100
+
+🎭 이 친구의 성격을 조정해서 완벽한 친구로 만들어보세요!
+        """
+        
+        return (frontend_persona, "1단계 완료! 이제 성격을 조정해보세요.", basic_info, personality_traits, 
+                None, [], [], [], awakening_greeting, None, gr.update(visible=True))
+        
+    except Exception as e:
+        import traceback
+        error_msg = traceback.format_exc()
+        print(f"페르소나 생성 오류: {error_msg}")
+        return (None, f"오류 발생: {str(e)}", {}, {}, None, [], [], [], "", None, gr.update(visible=False))
+
+def adjust_persona_traits(persona, warmth, competence, humor, extraversion, humor_style):
+    """페르소나 성격 특성 조정"""
+    if not persona:
+        return persona, "조정할 페르소나가 없습니다.", {}
+    
+    try:
+        # 성격 특성 업데이트
+        persona["성격특성"]["온기"] = warmth
+        persona["성격특성"]["능력"] = competence  
+        persona["성격특성"]["유머감각"] = humor
+        persona["성격특성"]["외향성"] = extraversion
+        persona["유머스타일"] = humor_style
+        
+        # 조정된 정보 표시
+        adjusted_info = {
+            "이름": persona["기본정보"]["이름"],
+            "온기": warmth,
+            "능력": competence,
+            "유머감각": humor, 
+            "외향성": extraversion,
+            "유머스타일": humor_style
+        }
+        
+        persona_name = persona["기본정보"]["이름"]
+        adjustment_message = f"""
+### 🎭 {persona_name}의 성격이 조정되었습니다!
+
+💭 *"오, 뭔가 달라진 기분이야! 이런 내 모습도 괜찮네. 
+이제 우리 진짜 친구가 될 수 있을 것 같아!"*
+
+✨ **조정된 성격:**
+• 온기: {warmth}/100 
+• 능력: {competence}/100
+• 유머감각: {humor}/100  
+• 외향성: {extraversion}/100
+• 유머스타일: {humor_style}
+        """
+        
+        return persona, adjustment_message, adjusted_info
+        
+    except Exception as e:
+        return persona, f"조정 중 오류 발생: {str(e)}", {}
+
+def finalize_persona(persona):
+    """페르소나 최종 확정 및 백엔드 생성"""
+    if not persona:
+        return None, "확정할 페르소나가 없습니다.", {}, {}, None, [], [], [], "", None
+    
+    try:
+        generator = PersonaGenerator()
+        
+        # 백엔드 페르소나 생성 (구조화 프롬프트 포함)
+        backend_persona = generator.create_backend_persona(persona, {})
         
         # 기본 정보 추출
         basic_info = {
@@ -231,17 +319,24 @@ def create_persona_from_image(image, name, location, time_spent, object_type, pr
         
         # 페르소나 인사말 생성
         persona_name = basic_info.get("이름", "친구")
-        greeting = f"안녕! 나는 {persona_name}이야. 드디어 깨어났구나! 뭐든 물어봐~ 😊"
+        final_greeting = f"""
+### 🎉 {persona_name} 친구 확정!
+
+💭 *"와! 드디어 완전한 내가 됐어! 이제 우리 진짜 친구야. 
+언제든 대화하고 싶을 때 부르면 돼. 기대돼!"*
+
+✨ **최종 페르소나 완성!**
+        """
         
-        return (backend_persona, "페르소나 생성 완료!", basic_info, personality_traits, 
+        return (backend_persona, "🎉 페르소나 확정 완료!", basic_info, personality_traits, 
                 humor_chart, attractive_flaws_df, contradictions_df, personality_variables_df, 
-                greeting, None)
+                final_greeting, None)
         
     except Exception as e:
         import traceback
         error_msg = traceback.format_exc()
-        print(f"페르소나 생성 오류: {error_msg}")
-        return (None, f"오류 발생: {str(e)}", {}, {}, None, [], [], [], "", None)
+        print(f"페르소나 확정 오류: {error_msg}")
+        return (None, f"확정 중 오류 발생: {str(e)}", {}, {}, None, [], [], [], "", None)
 
 def plot_humor_matrix(humor_data):
     """유머 매트릭스 시각화"""
@@ -466,6 +561,7 @@ def create_main_interface():
             with gr.Tab("페르소나 생성", id="creation"):
                 with gr.Row():
                     with gr.Column(scale=1):
+                        gr.Markdown("### 🌟 1단계: 영혼 발견하기")
                         image_input = gr.Image(type="pil", label="사물 이미지 업로드")
                         
                         with gr.Group():
@@ -487,30 +583,80 @@ def create_main_interface():
                                 value="가구"
                             )
                         
-                        create_btn = gr.Button("페르소나 생성", variant="primary", size="lg")
+                        create_btn = gr.Button("🌟 영혼 깨우기", variant="primary", size="lg")
                         status_output = gr.Markdown("")
                     
                     with gr.Column(scale=1):
-                        # 페르소나 인사말 표시
-                        persona_greeting = gr.Markdown("", elem_classes=["persona-greeting"])
+                        # 페르소나 각성 결과
+                        persona_awakening = gr.Markdown("", elem_classes=["persona-greeting"])
+                        basic_info_output = gr.JSON(label="기본 정보", visible=False)
                         
-                        basic_info_output = gr.JSON(label="기본 정보")
-                        personality_traits_output = gr.JSON(label="성격 특성")
+                        # 성격 조정 섹션 (처음에는 숨김)
+                        with gr.Group(visible=False) as adjustment_section:
+                            gr.Markdown("### 🎭 2단계: 친구 성격 미세조정")
+                            
+                            with gr.Row():
+                                with gr.Column():
+                                    gr.Markdown("**🌟 사교성은 어느 정도?**")
+                                    extraversion_slider = gr.Slider(
+                                        minimum=0, maximum=100, value=50, step=5,
+                                        label="조용함 ←→ 활발함"
+                                    )
+                                    
+                                    gr.Markdown("**💝 감정 표현은 어떻게?**")
+                                    warmth_slider = gr.Slider(
+                                        minimum=0, maximum=100, value=50, step=5,
+                                        label="절제적 ←→ 표현적"
+                                    )
+                                
+                                with gr.Column():
+                                    gr.Markdown("**🧠 사고 방식은?**")
+                                    competence_slider = gr.Slider(
+                                        minimum=0, maximum=100, value=50, step=5,
+                                        label="실용적 ←→ 창의적"
+                                    )
+                                    
+                                    gr.Markdown("**😄 유머 감각은?**")
+                                    humor_slider = gr.Slider(
+                                        minimum=0, maximum=100, value=50, step=5,
+                                        label="진지함 ←→ 유머러스"
+                                    )
+                            
+                            gr.Markdown("**😄 유머 스타일은?**")
+                            humor_style_radio = gr.Radio(
+                                choices=["위트있는 재치꾼", "따뜻한 유머러스", "날카로운 관찰자", "자기 비하적"],
+                                value="따뜻한 유머러스",
+                                label="유머 스타일 선택"
+                            )
+                            
+                            with gr.Row():
+                                adjust_btn = gr.Button("🎭 성격 조정 적용", variant="secondary")
+                                finalize_btn = gr.Button("✨ 이 친구로 확정!", variant="primary")
                         
-                        with gr.Row():
-                            save_btn = gr.Button("페르소나 저장", variant="secondary")
-                            chart_btn = gr.Button("성격 차트 생성", variant="secondary")
+                        # 조정 결과 표시
+                        adjustment_result = gr.Markdown("")
+                        adjusted_info_output = gr.JSON(label="조정된 성격", visible=False)
+                        
+                        # 최종 완성 섹션
+                        personality_traits_output = gr.JSON(label="성격 특성", visible=False)
                         
                         # 다운로드 섹션
                         with gr.Group():
                             gr.Markdown("### 📁 페르소나 내보내기")
-                            export_btn = gr.Button("JSON 파일로 내보내기", variant="outline")
+                            with gr.Row():
+                                save_btn = gr.Button("💾 페르소나 저장", variant="secondary")
+                                export_btn = gr.Button("📥 JSON 파일로 내보내기", variant="outline")
                             download_file = gr.File(label="다운로드", visible=False)
                             export_status = gr.Markdown("")
             
             # 상세 정보 탭
             with gr.Tab("상세 정보", id="details"):
                 with gr.Row():
+                    with gr.Column():
+                        chart_btn = gr.Button("📊 성격 차트 생성", variant="secondary")
+                        personality_chart_output = gr.Plot(label="성격 차트")
+                        humor_chart_output = gr.Plot(label="유머 매트릭스")
+                    
                     with gr.Column():
                         attractive_flaws_output = gr.Dataframe(
                             headers=["매력적 결함", "효과"],
@@ -522,10 +668,6 @@ def create_main_interface():
                             label="모순적 특성",
                             interactive=False
                         )
-                    
-                    with gr.Column():
-                        personality_chart_output = gr.Plot(label="성격 차트")
-                        humor_chart_output = gr.Plot(label="유머 매트릭스")
                 
                 with gr.Accordion("127개 성격 변수", open=False):
                     personality_variables_output = gr.Dataframe(
@@ -581,7 +723,36 @@ def create_main_interface():
             outputs=[
                 current_persona, status_output, basic_info_output, personality_traits_output,
                 humor_chart_output, attractive_flaws_output, contradictions_output, 
-                personality_variables_output, persona_greeting, download_file
+                personality_variables_output, persona_awakening, download_file, adjustment_section
+            ]
+        ).then(
+            # 슬라이더 값을 현재 페르소나 값으로 업데이트
+            fn=lambda persona: (
+                persona["성격특성"]["온기"] if persona else 50,
+                persona["성격특성"]["능력"] if persona else 50,
+                persona["성격특성"]["유머감각"] if persona else 50,
+                persona["성격특성"]["외향성"] if persona else 50,
+                persona["유머스타일"] if persona else "따뜻한 유머러스"
+            ),
+            inputs=[current_persona],
+            outputs=[warmth_slider, competence_slider, humor_slider, extraversion_slider, humor_style_radio]
+        )
+        
+        # 성격 조정 적용
+        adjust_btn.click(
+            fn=adjust_persona_traits,
+            inputs=[current_persona, warmth_slider, competence_slider, humor_slider, extraversion_slider, humor_style_radio],
+            outputs=[current_persona, adjustment_result, adjusted_info_output]
+        )
+        
+        # 페르소나 최종 확정
+        finalize_btn.click(
+            fn=finalize_persona,
+            inputs=[current_persona],
+            outputs=[
+                current_persona, status_output, basic_info_output, personality_traits_output,
+                humor_chart_output, attractive_flaws_output, contradictions_output, 
+                personality_variables_output, persona_awakening, download_file
             ]
         )
         
@@ -591,6 +762,7 @@ def create_main_interface():
             outputs=[status_output]
         )
         
+        # 성격 차트 생성
         chart_btn.click(
             fn=generate_personality_chart,
             inputs=[current_persona],

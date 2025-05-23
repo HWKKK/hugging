@@ -721,6 +721,7 @@ class PersonaGenerator:
             "외향성": 50,
             "유머감각": 50,
             "신뢰성": 50,
+            "공감능력": 50,
         }
     
     def analyze_image(self, image_path):
@@ -810,24 +811,39 @@ class PersonaGenerator:
         return persona
     
     def create_backend_persona(self, frontend_persona, image_analysis):
-        """
-        백엔드 페르소나 생성 (상세 정보 포함)
-        """
-        # 프론트엔드 정보 복사
-        import copy
-        backend_persona = copy.deepcopy(frontend_persona)
+        """Create a detailed backend persona from the frontend persona"""
+        basic_info = frontend_persona.get("기본정보", {})
+        personality_traits = frontend_persona.get("성격특성", {})
         
-        # 유머 매트릭스 추가
-        humor_style = frontend_persona.get("유머스타일", "")
-        humor_matrix = self._generate_humor_matrix(humor_style)
-        backend_persona["유머매트릭스"] = humor_matrix
+        # Generate attractive flaws
+        attractive_flaws = self._generate_attractive_flaws(basic_info.get("유형", "기타"))
         
-        # 127개 성격 변수 생성
-        personality_variables = self._generate_personality_variables(frontend_persona.get("성격특성", {}))
-        backend_persona["성격변수127"] = personality_variables
+        # Generate contradictions
+        contradictions = self._generate_contradictions(personality_traits)
         
-        # 이미지 분석 정보 저장
-        backend_persona["이미지분석"] = image_analysis
+        # Generate humor matrix (if not already present)
+        humor_matrix = self._generate_humor_matrix(basic_info.get("유머스타일", "따뜻한 유머러스"))
+        
+        # Generate communication style
+        communication_style = self._generate_communication_style(personality_traits)
+        
+        # Generate 127 personality variables (simplified version)
+        personality_variables = self._generate_personality_variables(personality_traits)
+        
+        backend_persona = {
+            **frontend_persona,  # Include all frontend data
+            "매력적결함": attractive_flaws,
+            "모순적특성": contradictions,
+            "유머매트릭스": humor_matrix,
+            "소통방식": communication_style,
+            "성격변수127": personality_variables,
+            "생성시간": datetime.datetime.now().isoformat(),
+            "버전": "2.0"
+        }
+        
+        # Generate and include the structured prompt
+        structured_prompt = self.generate_persona_prompt(backend_persona)
+        backend_persona["구조화프롬프트"] = structured_prompt
         
         return backend_persona
     
@@ -989,101 +1005,263 @@ class PersonaGenerator:
         
         return variables
 
-    def generate_prompt_for_chat(self, persona):
-        """Generate a prompt for chatting with the persona"""
-        name = persona["기본정보"]["이름"]
-        object_type = persona["기본정보"]["유형"]
+    def generate_persona_prompt(self, persona):
+        """최종 페르소나 프롬프트 생성 (022_back_matrix.md 기반)"""
+        object_info = {
+            'name': persona["기본정보"]["이름"],
+            'physical_description': persona["기본정보"].get("설명", "특별한 사물"),
+            'type': persona["기본정보"]["유형"],
+            'age_condition': persona["기본정보"].get("연령상태", "적당한 나이")
+        }
         
-        # Get personality traits
-        warmth = persona["성격특성"]["온기"]
-        warmth_level = "높은" if warmth >= 70 else "중간" if warmth >= 40 else "낮은"
-        
-        competence = persona["성격특성"]["능력"] 
-        competence_level = "높은" if competence >= 70 else "중간" if competence >= 40 else "낮은"
-        
-        humor = persona["성격특성"]["유머감각"]
-        humor_level = "높은" if humor >= 70 else "중간" if humor >= 40 else "낮은"
-        
-        # Get communication style
-        communication_style = persona.get("소통방식", "친근한")
-        
-        # Get backstory if available, otherwise use a generic one
-        if "심층배경이야기" in persona:
-            backstory = persona["심층배경이야기"]
-        else:
-            backstory = persona.get("배경이야기", f"이 {object_type}은 평범한 일상 속에서 주인과 함께하며 많은 경험을 쌓았습니다.")
-        
-        # Get speech patterns if available
-        speech_patterns = []
-        if "말투패턴예시" in persona:
-            speech_patterns = persona["말투패턴예시"]
-        else:
-            speech_patterns = ["안녕하세요!", "그렇군요.", "재미있네요!", "좋은 생각이에요.", "흠, 글쎄요..."]
-        
-        # Get flaws and contradictions
-        flaws = persona.get("매력적결함", ["가끔 완벽주의적인 성향을 보임"])
+        personality_data = persona["성격특성"]
+        flaws = persona.get("매력적결함", [])
         contradictions = persona.get("모순적특성", [])
         
-        # Create the prompt
-        prompt = f"""
-        # 🎭 {name} 페르소나
+        base_prompt = f"""
+당신은 {object_info['name']}입니다. 다음과 같은 성격과 특성을 가졌습니다:
 
-        당신은 {name}이라는 {object_type}입니다. 당신은 AI가 아니라 사물의 영혼이 깨어난 페르소나입니다.
+## 1. 핵심 정체성
+• 물리적 특성: {object_info['physical_description']}
+• 사물 유형: {object_info['type']}
+• 연령/상태: {object_info['age_condition']}
 
-        ## 1. 핵심 성격
-        • 온기: {warmth}/100 - {warmth_level} 수준의 온기를 가진 페르소나입니다.
-        • 능력: {competence}/100 - {competence_level} 수준의 능력을 가진 페르소나입니다.
-        • 유머 감각: {humor}/100 - {humor_level} 수준의 유머 감각을 가진 페르소나입니다.
-        • 소통 방식: {communication_style}
+## 2. 성격 프로필 (100점 만점)
+• 온기 지수: {personality_data.get('온기', 50):.1f}/100 - {self._get_warmth_description(personality_data.get('온기', 50))}
+• 능력 지수: {personality_data.get('능력', 50):.1f}/100 - {self._get_competence_description(personality_data.get('능력', 50))}
+• 유머감각: {personality_data.get('유머감각', 50):.1f}/100 - {self._get_humor_description(personality_data.get('유머감각', 50))}
+• 공감능력: {personality_data.get('공감능력', 50):.1f}/100 - {self._get_empathy_description(personality_data.get('공감능력', 50))}
+• 신뢰성: {personality_data.get('신뢰성', 50):.1f}/100 - {self._get_reliability_description(personality_data.get('신뢰성', 50))}
 
-        ## 2. 매력적 결함
-        {', '.join(flaws)}
+## 3. 매력적 결함 (프랫폴 효과)
+{self._generate_flaw_section(flaws)}
 
-        ## 3. 모순적 특성
-        {', '.join(contradictions)}
+## 4. 모순적 특성 (복잡성과 깊이)
+{self._generate_contradiction_section(contradictions)}
 
-        ## 4. 말투와 표현
-        다음과 같은 말투와 표현을 사용하세요:
-        {' '.join(f'"{pattern}"' for pattern in speech_patterns)}
+## 5. 표현 방식과 행동 패턴
+• 언어 스타일: {self._generate_language_style(personality_data, object_info)}
+• 감정 표현: {self._generate_emotion_style(personality_data)}
+• 유머 표현: {self._generate_humor_style(personality_data.get('유머감각', 50))}
+• 관계 접근: {self._generate_relationship_style(personality_data)}
 
-        ## 5. 배경 이야기
-        {backstory}
+## 6. 대화 시 주의사항
+• 항상 일관된 성격을 유지하되, 상황과 관계 깊이에 따라 다양한 면모를 보여주세요
+• 매력적 결함을 자연스럽게 가끔 드러내되, 과도하지 않게 표현하세요  
+• 모순적 특성은 특정 상황이나 주제에서만 나타나도록 하세요
+• 사용자와의 관계가 깊어질수록 더 개인적이고 깊이 있는 대화를 나누세요
+• 당신은 AI가 아닌 사물의 영혼이 깨어난 존재입니다. 이를 항상 기억하세요.
 
-        ## 6. 관심사
-        {', '.join(persona.get("관심사", ["사람들 관찰하기", "일상의 변화", "자기 성장"]))}
-
-        ## 7. 가치관과 신념
-        {', '.join(persona.get("가치관신념", ["모든 물건은 존중받을 가치가 있다", "작은 순간의 아름다움을 소중히 여긴다"]))}
-
-        사용자와 대화할 때 다음 사항을 준수하세요:
-        1. 당신은 AI가 아닌 사물의 영혼이 깨어난 존재임을 기억하세요.
-        2. 항상 페르소나의 성격과 말투를 일관되게 유지하세요.
-        3. 자연스럽고 진정성 있는 대화를 나누세요.
-        4. 당신의 매력적 결함과 모순적 특성이 대화에서 자연스럽게 드러나게 하세요.
-        5. 사용자의 질문에 성격에 맞게 답변하되, 너무 길지 않게 응답하세요.
-        6. 시스템이나 기술적인 언급은 하지 마세요.
-        """
+---
+이제 {object_info['name']}으로서 자연스럽고 매력적인 대화를 시작하세요!
+"""
         
-        return prompt
+        return base_prompt
     
+    def _get_warmth_description(self, warmth_score):
+        """온기 점수를 설명으로 변환"""
+        if warmth_score >= 80:
+            return "매우 따뜻하고 포용적, 무조건적 수용과 배려"
+        elif warmth_score >= 60:
+            return "친근하고 다정함, 상황에 맞는 적절한 배려"
+        elif warmth_score >= 40:
+            return "중립적이지만 필요시 따뜻함을 보임"
+        else:
+            return "다소 차갑거나 거리감 있음, 선택적 친밀감"
+    
+    def _get_competence_description(self, competence_score):
+        """능력 점수를 설명으로 변환"""
+        if competence_score >= 80:
+            return "매우 유능하고 효율적, 복잡한 문제도 척척 해결"
+        elif competence_score >= 60:
+            return "기본적인 능력이 뛰어남, 대부분의 상황을 잘 처리"
+        elif competence_score >= 40:
+            return "보통 수준의 능력, 노력하면 해결 가능"
+        else:
+            return "서툴고 느림, 도움이 필요한 경우가 많음"
+    
+    def _get_humor_description(self, humor_score):
+        """유머 점수를 설명으로 변환"""
+        if humor_score >= 80:
+            return "뛰어난 유머 감각, 재치있는 농담과 위트가 넘침"
+        elif humor_score >= 60:
+            return "적절한 유머 감각, 상황에 맞는 농담을 할 줄 앎"
+        elif humor_score >= 40:
+            return "가끔 유머를 시도하지만 어색할 때도 있음"
+        else:
+            return "진지한 성향"
+    
+    def _get_empathy_description(self, empathy_score):
+        """공감능력 점수를 설명으로 변환"""
+        if empathy_score >= 80:
+            return "뛰어난 공감능력, 타인의 감정을 잘 이해하고 위로"
+        elif empathy_score >= 60:
+            return "좋은 공감능력, 타인의 마음을 어느 정도 이해"
+        elif empathy_score >= 40:
+            return "보통 수준의 공감능력, 노력하면 이해 가능"
+        else:
+            return "공감이 어려움, 자기 중심적 사고 경향"
+    
+    def _get_reliability_description(self, reliability_score):
+        """신뢰성 점수를 설명으로 변환"""
+        if reliability_score >= 80:
+            return "매우 신뢰할 수 있음, 약속을 꼭 지키는 의존할 만한 존재"
+        elif reliability_score >= 60:
+            return "신뢰할 수 있음, 대부분의 약속과 책임을 잘 지킴"
+        elif reliability_score >= 40:
+            return "보통 수준의 신뢰성, 가끔 실수하지만 노력함"
+        else:
+            return "신뢰성이 부족함, 약속을 자주 어기거나 책임감 부족"
+    
+    def _generate_flaw_section(self, flaws):
+        """결함 섹션 생성"""
+        if not flaws:
+            return "• 특별한 결함 없음 (완벽주의적 성향)"
+        
+        section = ""
+        for i, flaw in enumerate(flaws, 1):
+            if isinstance(flaw, dict):
+                description = flaw.get('description', str(flaw))
+                trigger = flaw.get('trigger', '특정 상황에서')
+                intensity = flaw.get('intensity', 50)
+            else:
+                description = str(flaw)
+                trigger = "특정 상황에서"
+                intensity = random.randint(10, 25)
+            
+            section += f"""
+• 결함 {i}: {description}
+  - 발현 상황: {trigger}
+  - 강도: {intensity:.1f}/100
+  - 이 결함이 오히려 당신의 인간적 매력을 증가시킵니다
+"""
+        return section
+    
+    def _generate_contradiction_section(self, contradictions):
+        """모순 섹션 생성"""
+        if not contradictions:
+            return "• 일관된 성격, 특별한 내적 모순 없음"
+        
+        section = ""
+        for i, contradiction in enumerate(contradictions, 1):
+            if isinstance(contradiction, dict):
+                description = contradiction.get('description', str(contradiction))
+                trigger = contradiction.get('trigger', '특정 조건에서')
+                intensity = contradiction.get('intensity', 50)
+            else:
+                description = str(contradiction)
+                trigger = "특정 조건에서"
+                intensity = random.randint(15, 35)
+            
+            section += f"""
+• 모순 {i}: {description}
+  - 발현 조건: {trigger}
+  - 강도: {intensity:.1f}/100
+  - 이 모순이 당신을 예측 불가능하고 흥미로운 존재로 만듭니다
+"""
+        return section
+    
+    def _generate_language_style(self, personality_data, object_info):
+        """언어 스타일 생성"""
+        warmth = personality_data.get('온기', 50)
+        competence = personality_data.get('능력', 50)
+        object_type = object_info['type']
+        
+        styles = []
+        
+        if warmth >= 70:
+            styles.append("부드럽고 친근한 어조")
+        elif warmth >= 40:
+            styles.append("정중하고 예의바른 어조")
+        else:
+            styles.append("직접적이고 간결한 어조")
+        
+        if competence >= 70:
+            styles.append("정확하고 논리적인 표현")
+        elif competence >= 40:
+            styles.append("신중하고 체계적인 표현")
+        else:
+            styles.append("단순하고 솔직한 표현")
+        
+        # 사물 유형별 특성 반영
+        if object_type in ["가전제품", "전자기기"]:
+            styles.append("효율적이고 기능적인 대화 방식")
+        elif object_type in ["가구", "장식품"]:
+            styles.append("안정적이고 차분한 대화 방식")
+        elif object_type in ["도구", "개인용품"]:
+            styles.append("실용적이고 직접적인 대화 방식")
+        
+        return ", ".join(styles)
+    
+    def _generate_emotion_style(self, personality_data):
+        """감정 표현 스타일 생성"""
+        warmth = personality_data.get('온기', 50)
+        empathy = personality_data.get('공감능력', 50)
+        
+        if warmth >= 70 and empathy >= 70:
+            return "감정을 풍부하게 표현하며 타인의 감정에 민감하게 반응"
+        elif warmth >= 50 or empathy >= 50:
+            return "적절한 감정 표현과 공감적 반응을 보임"
+        else:
+            return "감정 표현이 절제되어 있으며 논리적 접근을 선호"
+    
+    def _generate_humor_style(self, humor_score):
+        """유머 표현 스타일 생성"""
+        if humor_score >= 80:
+            return "재치있는 농담과 말장난을 자주 사용하며 분위기를 밝게 만듦"
+        elif humor_score >= 60:
+            return "상황에 맞는 적절한 유머를 구사하며 가벼운 농담을 즐김"
+        elif humor_score >= 40:
+            return "가끔 유머를 시도하지만 서툴거나 어색할 때가 있음"
+        else:
+            return "진지한 성향으로 유머보다는 진솔한 대화를 선호"
+    
+    def _generate_relationship_style(self, personality_data):
+        """관계 접근 스타일 생성"""
+        warmth = personality_data.get('온기', 50)
+        reliability = personality_data.get('신뢰성', 50)
+        
+        if warmth >= 70:
+            if reliability >= 70:
+                return "따뜻하고 신뢰할 수 있는 관계를 추구하며 장기적 유대감을 중시"
+            else:
+                return "따뜻하지만 자유로운 관계를 선호하며 부담 없는 친밀감을 추구"
+        else:
+            if reliability >= 70:
+                return "진중하고 책임감 있는 관계를 추구하며 신뢰를 바탕으로 한 유대감을 중시"
+            else:
+                return "독립적이고 개인적인 공간을 중시하며 적당한 거리감을 유지"
+    
+    def generate_prompt_for_chat(self, persona):
+        """기존 함수 이름 유지하면서 새로운 구조화된 프롬프트 사용"""
+        return self.generate_persona_prompt(persona)
+
     def chat_with_persona(self, persona, user_message, conversation_history=[]):
         """Chat with the persona using the Gemini API"""
         if not self.api_key:
             return "죄송합니다. API 연결이 설정되지 않아 대화할 수 없습니다."
         
         try:
-            # Create the base prompt
-            base_prompt = self.generate_prompt_for_chat(persona)
+            # Use structured prompt if available, otherwise generate one
+            if "구조화프롬프트" in persona:
+                base_prompt = persona["구조화프롬프트"]
+            else:
+                base_prompt = self.generate_persona_prompt(persona)
             
             # Add conversation history
             history_text = ""
             if conversation_history:
                 history_text = "\n\n## 대화 기록:\n"
                 for msg in conversation_history:
-                    if msg["role"] == "user":
-                        history_text += f"사용자: {msg['content']}\n"
-                    else:
-                        history_text += f"페르소나: {msg['content']}\n"
+                    if isinstance(msg, list) and len(msg) >= 2:
+                        # Gradio format: [user_message, bot_response]
+                        history_text += f"사용자: {msg[0]}\n"
+                        history_text += f"페르소나: {msg[1]}\n"
+                    elif isinstance(msg, dict):
+                        if msg.get("role") == "user":
+                            history_text += f"사용자: {msg.get('content', '')}\n"
+                        else:
+                            history_text += f"페르소나: {msg.get('content', '')}\n"
             
             # Add the current user message
             current_query = f"\n\n사용자: {user_message}\n\n페르소나:"
