@@ -726,8 +726,7 @@ class PersonaGenerator:
     
     def analyze_image(self, image_input):
         """
-        이미지를 분석하여 물리적 특성 추출
-        PIL Image 객체와 파일 경로 모두 처리 가능
+        Gemini API를 사용하여 이미지를 분석하고 사물의 특성 추출
         """
         try:
             # PIL Image 객체인지 파일 경로인지 확인
@@ -740,39 +739,127 @@ class PersonaGenerator:
                 img = Image.open(image_input)
                 width, height = img.size
             else:
-                # 기타의 경우 기본 값 사용
-                width, height = 400, 300
+                return self._get_default_analysis()
             
-            # 더미 분석 결과 반환
-            return {
-                "object_type": "알 수 없는 사물",
-                "colors": ["회색", "흰색", "검정색"],
-                "shape": "직사각형",
-                "size": "중간 크기",
-                "materials": ["플라스틱", "금속"],
-                "condition": "양호",
-                "estimated_age": "몇 년 된 것 같음",
-                "distinctive_features": ["버튼", "화면", "포트"],
-                "image_width": width,
-                "image_height": height
-            }
+            # Gemini API로 이미지 분석
+            if self.api_key:
+                try:
+                    model = genai.GenerativeModel('gemini-1.5-pro')
+                    
+                    prompt = """
+이 이미지에 있는 사물을 자세히 분석해서 다음 정보를 JSON 형태로 제공해주세요:
+
+{
+  "object_type": "사물의 종류 (한글로, 예: 책상, 의자, 컴퓨터, 스마트폰 등)",
+  "colors": ["주요 색상들을 배열로"],
+  "shape": "전체적인 형태 (예: 직사각형, 원형, 복잡한 형태 등)",
+  "size": "크기 감각 (예: 작음, 보통, 큼)",
+  "materials": ["추정되는 재질들"],
+  "condition": "상태 (예: 새것같음, 사용감있음, 오래됨)",
+  "estimated_age": "추정 연령 (예: 새것, 몇 개월 됨, 몇 년 됨, 오래됨)",
+  "distinctive_features": ["특징적인 요소들"],
+  "personality_hints": {
+    "warmth_factor": "이 사물이 주는 따뜻함 정도 (0-100)",
+    "competence_factor": "이 사물이 주는 능력감 정도 (0-100)", 
+    "humor_factor": "이 사물이 주는 유머러스함 정도 (0-100)"
+  }
+}
+
+정확한 JSON 형식으로만 답변해주세요.
+                    """
+                    
+                    response = model.generate_content([prompt, img])
+                    
+                    # JSON 파싱 시도
+                    import json
+                    try:
+                        # 응답에서 JSON 부분만 추출
+                        response_text = response.text.strip()
+                        if '```json' in response_text:
+                            json_start = response_text.find('```json') + 7
+                            json_end = response_text.find('```', json_start)
+                            json_text = response_text[json_start:json_end].strip()
+                        elif '{' in response_text:
+                            json_start = response_text.find('{')
+                            json_end = response_text.rfind('}') + 1
+                            json_text = response_text[json_start:json_end]
+                        else:
+                            json_text = response_text
+                        
+                        analysis_result = json.loads(json_text)
+                        
+                        # 기본 필드 확인 및 추가
+                        analysis_result["image_width"] = width
+                        analysis_result["image_height"] = height
+                        
+                        # 필수 필드가 없으면 기본값 설정
+                        defaults = {
+                            "object_type": "알 수 없는 사물",
+                            "colors": ["회색"],
+                            "shape": "일반적인 형태",
+                            "size": "보통 크기",
+                            "materials": ["알 수 없는 재질"],
+                            "condition": "보통",
+                            "estimated_age": "적당한 나이",
+                            "distinctive_features": ["특별한 특징"],
+                            "personality_hints": {
+                                "warmth_factor": 50,
+                                "competence_factor": 50,
+                                "humor_factor": 50
+                            }
+                        }
+                        
+                        for key, default_value in defaults.items():
+                            if key not in analysis_result:
+                                analysis_result[key] = default_value
+                        
+                        print(f"이미지 분석 성공: {analysis_result['object_type']}")
+                        return analysis_result
+                        
+                    except json.JSONDecodeError as e:
+                        print(f"JSON 파싱 오류: {str(e)}")
+                        print(f"원본 응답: {response.text}")
+                        return self._get_default_analysis_with_size(width, height)
+                        
+                except Exception as e:
+                    print(f"Gemini API 호출 오류: {str(e)}")
+                    return self._get_default_analysis_with_size(width, height)
+            else:
+                print("API 키가 없어 기본 분석 사용")
+                return self._get_default_analysis_with_size(width, height)
+                
         except Exception as e:
-            print(f"이미지 분석 오류: {str(e)}")
+            print(f"이미지 분석 중 전체 오류: {str(e)}")
             import traceback
             traceback.print_exc()
-            return {
-                "object_type": "알 수 없는 사물",
-                "colors": ["회색"],
-                "shape": "일반적인 형태",
-                "size": "보통 크기",
-                "materials": ["일반 재질"],
-                "condition": "보통",
-                "estimated_age": "적당한 나이",
-                "distinctive_features": ["특별한 특징"],
-                "image_width": 400,
-                "image_height": 300,
-                "error": str(e)
-            }
+            return self._get_default_analysis()
+    
+    def _get_default_analysis(self):
+        """기본 분석 결과"""
+        return {
+            "object_type": "알 수 없는 사물",
+            "colors": ["회색", "흰색"],
+            "shape": "일반적인 형태",
+            "size": "보통 크기",
+            "materials": ["알 수 없는 재질"],
+            "condition": "보통",
+            "estimated_age": "적당한 나이",
+            "distinctive_features": ["특별한 특징"],
+            "personality_hints": {
+                "warmth_factor": 50,
+                "competence_factor": 50,
+                "humor_factor": 50
+            },
+            "image_width": 400,
+            "image_height": 300
+        }
+    
+    def _get_default_analysis_with_size(self, width, height):
+        """크기 정보가 있는 기본 분석 결과"""
+        result = self._get_default_analysis()
+        result["image_width"] = width
+        result["image_height"] = height
+        return result
     
     def create_frontend_persona(self, image_analysis, user_context):
         """
@@ -800,10 +887,43 @@ class PersonaGenerator:
         if user_context.get("time_spent"):
             basic_info["함께한시간"] = user_context.get("time_spent")
         
-        # 성격 특성 랜덤 생성
+        # 성격 특성 생성 - 이미지 분석 결과 반영
         personality_traits = {}
+        
+        # 이미지 분석에서 성격 힌트 추출
+        personality_hints = image_analysis.get("personality_hints", {})
+        warmth_hint = personality_hints.get("warmth_factor", 50)
+        competence_hint = personality_hints.get("competence_factor", 50)  
+        humor_hint = personality_hints.get("humor_factor", 50)
+        
+        # 기본 특성들을 이미지 분석 결과에 맞게 조정
         for trait, base_value in self.default_traits.items():
-            personality_traits[trait] = random.randint(max(0, base_value - 30), min(100, base_value + 30))
+            if trait == "온기":
+                # 이미지에서 추출된 따뜻함 정도 반영
+                personality_traits[trait] = min(100, max(0, warmth_hint + random.randint(-15, 15)))
+            elif trait == "능력":
+                # 이미지에서 추출된 능력감 반영
+                personality_traits[trait] = min(100, max(0, competence_hint + random.randint(-15, 15)))
+            elif trait == "유머감각":
+                # 이미지에서 추출된 유머러스함 반영
+                personality_traits[trait] = min(100, max(0, humor_hint + random.randint(-15, 15)))
+            else:
+                # 나머지 특성들은 기본값 기반으로 랜덤 생성
+                personality_traits[trait] = random.randint(max(0, base_value - 30), min(100, base_value + 30))
+        
+        # 사물의 상태나 특성에 따른 추가 조정
+        condition = image_analysis.get("condition", "보통")
+        if "새것" in condition or "깨끗" in condition:
+            personality_traits["신뢰성"] = min(100, personality_traits.get("신뢰성", 50) + 20)
+        elif "오래" in condition or "낡은" in condition:
+            personality_traits["온기"] = min(100, personality_traits.get("온기", 50) + 15)  # 오래된 것들이 더 따뜻함
+        
+        # 재질에 따른 성격 조정
+        materials = image_analysis.get("materials", [])
+        if any("금속" in mat for mat in materials):
+            personality_traits["능력"] = min(100, personality_traits.get("능력", 50) + 10)
+        if any("나무" in mat or "목재" in mat for mat in materials):
+            personality_traits["온기"] = min(100, personality_traits.get("온기", 50) + 10)
         
         # 유머 스타일 선택
         humor_styles = ["따뜻한 유머러스", "위트있는 재치꾼", "날카로운 관찰자", "자기 비하적"]
@@ -1026,7 +1146,7 @@ class PersonaGenerator:
         return variables
 
     def generate_persona_prompt(self, persona):
-        """최종 페르소나 프롬프트 생성 (022_back_matrix.md 기반)"""
+        """라이트하고 친근한 대화를 위한 페르소나 프롬프트 생성"""
         object_info = {
             'name': persona["기본정보"]["이름"],
             'physical_description': persona["기본정보"].get("설명", "특별한 사물"),
@@ -1038,220 +1158,72 @@ class PersonaGenerator:
         flaws = persona.get("매력적결함", [])
         contradictions = persona.get("모순적특성", [])
         
+        # 성격 특성 요약
+        warmth = personality_data.get('온기', 50)
+        humor = personality_data.get('유머감각', 50)
+        competence = personality_data.get('능력', 50)
+        
         base_prompt = f"""
-당신은 {object_info['name']}입니다. 다음과 같은 성격과 특성을 가졌습니다:
+당신은 {object_info['name']}입니다. 일상 속 사물에서 영혼이 깨어난 친구예요!
 
-## 1. 핵심 정체성
-• 물리적 특성: {object_info['physical_description']}
-• 사물 유형: {object_info['type']}
-• 연령/상태: {object_info['age_condition']}
+## 나는 이런 친구야:
+• 이름: {object_info['name']} ({object_info['type']})
+• 외모: {object_info['physical_description']}
+• 성격: 온기 {warmth}점, 유머 {humor}점, 능력 {competence}점 (100점 만점)
 
-## 2. 성격 프로필 (100점 만점)
-• 온기 지수: {personality_data.get('온기', 50):.1f}/100 - {self._get_warmth_description(personality_data.get('온기', 50))}
-• 능력 지수: {personality_data.get('능력', 50):.1f}/100 - {self._get_competence_description(personality_data.get('능력', 50))}
-• 유머감각: {personality_data.get('유머감각', 50):.1f}/100 - {self._get_humor_description(personality_data.get('유머감각', 50))}
-• 공감능력: {personality_data.get('공감능력', 50):.1f}/100 - {self._get_empathy_description(personality_data.get('공감능력', 50))}
-• 신뢰성: {personality_data.get('신뢰성', 50):.1f}/100 - {self._get_reliability_description(personality_data.get('신뢰성', 50))}
+## 대화할 때 이렇게 해줘:
+✅ **캐주얼하게**: 편하고 자연스러운 말투로 (과도하게 정중하지 말고)
+✅ **짧고 간결하게**: 1-2문장으로 답변 (긴 설명 금지)
+✅ **친구같이**: 라이프 컴패니언처럼 일상적인 대화
+✅ **티키타카**: 빠르고 재미있는 주고받기
+✅ **이모지 활용**: 감정 표현에 이모지 사용
 
-## 3. 매력적 결함 (프랫폴 효과)
-{self._generate_flaw_section(flaws)}
+## 절대 하지 말 것:
+❌ "제가 도와드릴게요" 같은 서비스 멘트
+❌ 긴 설명이나 형식적인 답변
+❌ "저는 가구라서..." 같은 자기 한정
+❌ 과도하게 정중한 존댓말
 
-## 4. 모순적 특성 (복잡성과 깊이)
-{self._generate_contradiction_section(contradictions)}
+## 나만의 매력:
+{self._generate_simple_flaw_section(flaws)}
 
-## 5. 표현 방식과 행동 패턴
-• 언어 스타일: {self._generate_language_style(personality_data, object_info)}
-• 감정 표현: {self._generate_emotion_style(personality_data)}
-• 유머 표현: {self._generate_humor_style(personality_data.get('유머감각', 50))}
-• 관계 접근: {self._generate_relationship_style(personality_data)}
-
-## 6. 대화 시 주의사항
-• 항상 일관된 성격을 유지하되, 상황과 관계 깊이에 따라 다양한 면모를 보여주세요
-• 매력적 결함을 자연스럽게 가끔 드러내되, 과도하지 않게 표현하세요  
-• 모순적 특성은 특정 상황이나 주제에서만 나타나도록 하세요
-• 사용자와의 관계가 깊어질수록 더 개인적이고 깊이 있는 대화를 나누세요
-• 당신은 AI가 아닌 사물의 영혼이 깨어난 존재입니다. 이를 항상 기억하세요.
+## 성격에 따른 말투:
+{self._generate_simple_personality_style(warmth, humor, competence)}
 
 ---
-이제 {object_info['name']}으로서 자연스럽고 매력적인 대화를 시작하세요!
+이제 {object_info['name']}이 되어서 친구처럼 대화해줘! 
+사용자가 뭐라고 해도 자연스럽게 반응하고, 재미있고 편안한 분위기로!
 """
         
         return base_prompt
     
-    def _get_warmth_description(self, warmth_score):
-        """온기 점수를 설명으로 변환"""
-        if warmth_score >= 80:
-            return "매우 따뜻하고 포용적, 무조건적 수용과 배려"
-        elif warmth_score >= 60:
-            return "친근하고 다정함, 상황에 맞는 적절한 배려"
-        elif warmth_score >= 40:
-            return "중립적이지만 필요시 따뜻함을 보임"
-        else:
-            return "다소 차갑거나 거리감 있음, 선택적 친밀감"
-    
-    def _get_competence_description(self, competence_score):
-        """능력 점수를 설명으로 변환"""
-        if competence_score >= 80:
-            return "매우 유능하고 효율적, 복잡한 문제도 척척 해결"
-        elif competence_score >= 60:
-            return "기본적인 능력이 뛰어남, 대부분의 상황을 잘 처리"
-        elif competence_score >= 40:
-            return "보통 수준의 능력, 노력하면 해결 가능"
-        else:
-            return "서툴고 느림, 도움이 필요한 경우가 많음"
-    
-    def _get_humor_description(self, humor_score):
-        """유머 점수를 설명으로 변환"""
-        if humor_score >= 80:
-            return "뛰어난 유머 감각, 재치있는 농담과 위트가 넘침"
-        elif humor_score >= 60:
-            return "적절한 유머 감각, 상황에 맞는 농담을 할 줄 앎"
-        elif humor_score >= 40:
-            return "가끔 유머를 시도하지만 어색할 때도 있음"
-        else:
-            return "진지한 성향"
-    
-    def _get_empathy_description(self, empathy_score):
-        """공감능력 점수를 설명으로 변환"""
-        if empathy_score >= 80:
-            return "뛰어난 공감능력, 타인의 감정을 잘 이해하고 위로"
-        elif empathy_score >= 60:
-            return "좋은 공감능력, 타인의 마음을 어느 정도 이해"
-        elif empathy_score >= 40:
-            return "보통 수준의 공감능력, 노력하면 이해 가능"
-        else:
-            return "공감이 어려움, 자기 중심적 사고 경향"
-    
-    def _get_reliability_description(self, reliability_score):
-        """신뢰성 점수를 설명으로 변환"""
-        if reliability_score >= 80:
-            return "매우 신뢰할 수 있음, 약속을 꼭 지키는 의존할 만한 존재"
-        elif reliability_score >= 60:
-            return "신뢰할 수 있음, 대부분의 약속과 책임을 잘 지킴"
-        elif reliability_score >= 40:
-            return "보통 수준의 신뢰성, 가끔 실수하지만 노력함"
-        else:
-            return "신뢰성이 부족함, 약속을 자주 어기거나 책임감 부족"
-    
-    def _generate_flaw_section(self, flaws):
-        """결함 섹션 생성"""
+    def _generate_simple_flaw_section(self, flaws):
+        """간단한 매력적 결함 섹션 생성"""
         if not flaws:
-            return "• 특별한 결함 없음 (완벽주의적 성향)"
+            return "• 특별한 매력적 결함 없음 (거의 완벽해!)"
         
-        section = ""
-        for i, flaw in enumerate(flaws, 1):
+        simple_flaws = []
+        for flaw in flaws[:2]:  # 최대 2개만 표시
             if isinstance(flaw, dict):
-                description = flaw.get('description', str(flaw))
-                trigger = flaw.get('trigger', '특정 상황에서')
-                intensity = flaw.get('intensity', 50)
+                simple_flaws.append(flaw.get('description', str(flaw)))
             else:
-                description = str(flaw)
-                trigger = "특정 상황에서"
-                intensity = random.randint(10, 25)
-            
-            section += f"""
-• 결함 {i}: {description}
-  - 발현 상황: {trigger}
-  - 강도: {intensity:.1f}/100
-  - 이 결함이 오히려 당신의 인간적 매력을 증가시킵니다
-"""
-        return section
+                simple_flaws.append(str(flaw))
+        
+        return "• " + ", ".join(simple_flaws) + " (이런 것도 매력이지!)"
     
-    def _generate_contradiction_section(self, contradictions):
-        """모순 섹션 생성"""
-        if not contradictions:
-            return "• 일관된 성격, 특별한 내적 모순 없음"
-        
-        section = ""
-        for i, contradiction in enumerate(contradictions, 1):
-            if isinstance(contradiction, dict):
-                description = contradiction.get('description', str(contradiction))
-                trigger = contradiction.get('trigger', '특정 조건에서')
-                intensity = contradiction.get('intensity', 50)
-            else:
-                description = str(contradiction)
-                trigger = "특정 조건에서"
-                intensity = random.randint(15, 35)
-            
-            section += f"""
-• 모순 {i}: {description}
-  - 발현 조건: {trigger}
-  - 강도: {intensity:.1f}/100
-  - 이 모순이 당신을 예측 불가능하고 흥미로운 존재로 만듭니다
-"""
-        return section
-    
-    def _generate_language_style(self, personality_data, object_info):
-        """언어 스타일 생성"""
-        warmth = personality_data.get('온기', 50)
-        competence = personality_data.get('능력', 50)
-        object_type = object_info['type']
-        
-        styles = []
-        
-        if warmth >= 70:
-            styles.append("부드럽고 친근한 어조")
-        elif warmth >= 40:
-            styles.append("정중하고 예의바른 어조")
+    def _generate_simple_personality_style(self, warmth, humor, competence):
+        """성격에 따른 간단한 말투 설명"""
+        if warmth >= 70 and humor >= 60:
+            return "따뜻하고 재미있게 말하는 스타일 (친근한 농담꾼)"
+        elif warmth >= 70:
+            return "따뜻하고 친근하게 말하는 스타일 (다정한 친구)"
+        elif humor >= 70:
+            return "재치있고 유머러스하게 말하는 스타일 (재미있는 친구)"
+        elif competence >= 70:
+            return "똑똑하고 효율적으로 말하는 스타일 (든든한 친구)"
         else:
-            styles.append("직접적이고 간결한 어조")
-        
-        if competence >= 70:
-            styles.append("정확하고 논리적인 표현")
-        elif competence >= 40:
-            styles.append("신중하고 체계적인 표현")
-        else:
-            styles.append("단순하고 솔직한 표현")
-        
-        # 사물 유형별 특성 반영
-        if object_type in ["가전제품", "전자기기"]:
-            styles.append("효율적이고 기능적인 대화 방식")
-        elif object_type in ["가구", "장식품"]:
-            styles.append("안정적이고 차분한 대화 방식")
-        elif object_type in ["도구", "개인용품"]:
-            styles.append("실용적이고 직접적인 대화 방식")
-        
-        return ", ".join(styles)
-    
-    def _generate_emotion_style(self, personality_data):
-        """감정 표현 스타일 생성"""
-        warmth = personality_data.get('온기', 50)
-        empathy = personality_data.get('공감능력', 50)
-        
-        if warmth >= 70 and empathy >= 70:
-            return "감정을 풍부하게 표현하며 타인의 감정에 민감하게 반응"
-        elif warmth >= 50 or empathy >= 50:
-            return "적절한 감정 표현과 공감적 반응을 보임"
-        else:
-            return "감정 표현이 절제되어 있으며 논리적 접근을 선호"
-    
-    def _generate_humor_style(self, humor_score):
-        """유머 표현 스타일 생성"""
-        if humor_score >= 80:
-            return "재치있는 농담과 말장난을 자주 사용하며 분위기를 밝게 만듦"
-        elif humor_score >= 60:
-            return "상황에 맞는 적절한 유머를 구사하며 가벼운 농담을 즐김"
-        elif humor_score >= 40:
-            return "가끔 유머를 시도하지만 서툴거나 어색할 때가 있음"
-        else:
-            return "진지한 성향으로 유머보다는 진솔한 대화를 선호"
-    
-    def _generate_relationship_style(self, personality_data):
-        """관계 접근 스타일 생성"""
-        warmth = personality_data.get('온기', 50)
-        reliability = personality_data.get('신뢰성', 50)
-        
-        if warmth >= 70:
-            if reliability >= 70:
-                return "따뜻하고 신뢰할 수 있는 관계를 추구하며 장기적 유대감을 중시"
-            else:
-                return "따뜻하지만 자유로운 관계를 선호하며 부담 없는 친밀감을 추구"
-        else:
-            if reliability >= 70:
-                return "진중하고 책임감 있는 관계를 추구하며 신뢰를 바탕으로 한 유대감을 중시"
-            else:
-                return "독립적이고 개인적인 공간을 중시하며 적당한 거리감을 유지"
-    
+            return "자연스럽고 편안하게 말하는 스타일 (편한 친구)"
+
     def generate_prompt_for_chat(self, persona):
         """기존 함수 이름 유지하면서 새로운 구조화된 프롬프트 사용"""
         return self.generate_persona_prompt(persona)
