@@ -50,29 +50,40 @@ persona_generator = PersonaGenerator()
 def setup_korean_font():
     """matplotlib 한글 폰트 설정"""
     try:
-        # 사용 가능한 한글 폰트 찾기
-        available_fonts = fm.findSystemFonts()
-        korean_fonts = ['NanumGothic', 'NanumBarunGothic', 'Malgun Gothic', 'AppleGothic', 'Noto Sans CJK KR']
+        # Hugging Face Spaces 환경에서 사용 가능한 폰트 찾기
+        import subprocess
+        import os
+        
+        # 시스템에서 사용 가능한 한글 폰트 찾기
+        korean_fonts = [
+            'Noto Sans CJK KR', 'Noto Sans KR', 'NanumGothic', 'NanumBarunGothic', 
+            'Malgun Gothic', 'AppleGothic', 'DejaVu Sans', 'Liberation Sans'
+        ]
         
         for font_name in korean_fonts:
             try:
                 plt.rcParams['font.family'] = font_name
-                # 테스트 텍스트로 확인
+                plt.rcParams['axes.unicode_minus'] = False
+                
+                # 간단한 테스트
                 fig, ax = plt.subplots(figsize=(1, 1))
-                ax.text(0.5, 0.5, '한글', fontsize=10)
+                ax.text(0.5, 0.5, '테스트', fontsize=8)
                 plt.close(fig)
+                
                 print(f"한글 폰트 설정 완료: {font_name}")
-                break
-            except:
+                return
+            except Exception as e:
                 continue
-        else:
-            # 폰트를 찾지 못한 경우 기본 설정
-            plt.rcParams['font.family'] = 'DejaVu Sans'
-            plt.rcParams['axes.unicode_minus'] = False
-            print("한글 폰트를 찾지 못해 기본 폰트 사용")
+        
+        # 모든 폰트가 실패한 경우 기본 설정으로 대체
+        plt.rcParams['font.family'] = 'DejaVu Sans'
+        plt.rcParams['axes.unicode_minus'] = False
+        print("한글 폰트를 찾지 못해 DejaVu Sans 사용 (한글 표시 제한)")
+        
     except Exception as e:
         print(f"폰트 설정 오류: {str(e)}")
         plt.rcParams['font.family'] = 'DejaVu Sans'
+        plt.rcParams['axes.unicode_minus'] = False
 
 # 폰트 초기 설정
 setup_korean_font()
@@ -369,14 +380,14 @@ def plot_humor_matrix(humor_data):
         self_vs_observational = humor_data.get("self_vs_observational", 50)
         subtle_vs_expressive = humor_data.get("subtle_vs_expressive", 50)
         
-        # 간단한 막대 차트로 표시
-        categories = ['따뜻함vs위트', '자기참조vs관찰', '미묘함vs표현']
+        # 영어 라벨 사용 (폰트 문제 해결)
+        categories = ['Warmth vs Wit', 'Self vs Observational', 'Subtle vs Expressive']
         values = [warmth_vs_wit, self_vs_observational, subtle_vs_expressive]
         
         bars = ax.bar(categories, values, color=['#ff9999', '#66b3ff', '#99ff99'])
         ax.set_ylim(0, 100)
-        ax.set_ylabel('점수')
-        ax.set_title('유머 스타일 매트릭스')
+        ax.set_ylabel('Score')
+        ax.set_title('Humor Style Matrix')
         
         # 값 표시
         for bar, value in zip(bars, values):
@@ -399,7 +410,19 @@ def generate_personality_chart(persona):
     
     try:
         traits = persona["성격특성"]
-        categories = list(traits.keys())
+        
+        # 영어 라벨 매핑 (폰트 문제 해결)
+        trait_mapping = {
+            "온기": "Warmth",
+            "능력": "Competence", 
+            "창의성": "Creativity",
+            "외향성": "Extraversion",
+            "유머감각": "Humor",
+            "신뢰성": "Reliability",
+            "공감능력": "Empathy"
+        }
+        
+        categories = [trait_mapping.get(trait, trait) for trait in traits.keys()]
         values = list(traits.values())
         
         # 극좌표 차트 생성
@@ -415,7 +438,7 @@ def generate_personality_chart(persona):
         ax.set_xticklabels(categories)
         ax.set_ylim(0, 100)
         
-        plt.title("성격 특성", size=16, pad=20)
+        plt.title("Personality Traits", size=16, pad=20)
         
         return fig
     except Exception as e:
@@ -511,27 +534,23 @@ def chat_with_loaded_persona(persona, user_message, chat_history=None):
     try:
         generator = PersonaGenerator()
         
-        # 대화 기록을 올바른 형태로 변환
+        # 대화 기록을 올바른 형태로 변환 (tuples 형태 사용)
         conversation_history = []
         if chat_history:
             for message in chat_history:
-                if isinstance(message, dict) and 'role' in message:
-                    # 이미 messages 형태인 경우
-                    conversation_history.append(message)
-                elif isinstance(message, (list, tuple)) and len(message) >= 2:
-                    # tuple 형태인 경우 변환
+                if isinstance(message, (list, tuple)) and len(message) >= 2:
+                    # tuple 형태: [user_message, bot_response]
                     conversation_history.append({"role": "user", "content": message[0]})
                     conversation_history.append({"role": "assistant", "content": message[1]})
         
         # 페르소나와 대화
         response = generator.chat_with_persona(persona, user_message, conversation_history)
         
-        # 새로운 대화를 messages 형태로 추가
+        # 새로운 대화를 tuples 형태로 추가
         if chat_history is None:
             chat_history = []
         
-        chat_history.append({"role": "user", "content": user_message})
-        chat_history.append({"role": "assistant", "content": response})
+        chat_history.append([user_message, response])
         
         return chat_history, ""
         
@@ -543,8 +562,7 @@ def chat_with_loaded_persona(persona, user_message, chat_history=None):
         if chat_history is None:
             chat_history = []
         
-        chat_history.append({"role": "user", "content": user_message})
-        chat_history.append({"role": "assistant", "content": error_response})
+        chat_history.append([user_message, error_response])
         
         return chat_history, ""
 
@@ -554,44 +572,46 @@ def import_persona_from_json(json_file):
         return None, "JSON 파일을 업로드해주세요.", "", {}
     
     try:
-        # JSON 파일 읽기
-        if hasattr(json_file, 'name'):
-            # 파일 객체인 경우
-            with open(json_file.name, 'r', encoding='utf-8') as f:
-                persona_data = json.load(f)
-        else:
+        # 파일 경로 확인 및 읽기
+        if isinstance(json_file, str):
             # 파일 경로인 경우
-            with open(json_file, 'r', encoding='utf-8') as f:
-                persona_data = json.load(f)
+            file_path = json_file
+        else:
+            # 파일 객체인 경우 (Gradio 업로드)
+            file_path = json_file.name if hasattr(json_file, 'name') else str(json_file)
+        
+        # JSON 파일 읽기
+        with open(file_path, 'r', encoding='utf-8') as f:
+            persona_data = json.load(f)
         
         # 페르소나 데이터 검증
-        if not isinstance(persona_data, dict) or "기본정보" not in persona_data:
-            return None, "❌ 올바른 페르소나 JSON 파일이 아닙니다.", "", {}
+        if not isinstance(persona_data, dict):
+            return None, "❌ 올바른 JSON 형식이 아닙니다.", "", {}
+        
+        if "기본정보" not in persona_data:
+            return None, "❌ 올바른 페르소나 JSON 파일이 아닙니다. '기본정보' 키가 필요합니다.", "", {}
         
         # 기본 정보 추출
-        basic_info = {
-            "이름": persona_data.get("기본정보", {}).get("이름", "Unknown"),
-            "유형": persona_data.get("기본정보", {}).get("유형", "Unknown"),
-            "설명": persona_data.get("기본정보", {}).get("설명", "")
-        }
+        basic_info = persona_data.get("기본정보", {})
+        persona_name = basic_info.get("이름", "Unknown")
         
         # 로드된 페르소나 인사말
-        persona_name = basic_info.get("이름", "친구")
         greeting = f"### 🤖 {persona_name}\n\n안녕! 나는 **{persona_name}**이야. JSON에서 다시 깨어났어! 대화해보자~ 😊"
         
         return (persona_data, f"✅ {persona_name} 페르소나를 JSON에서 불러왔습니다!", 
                 greeting, basic_info)
     
-    except json.JSONDecodeError:
-        return None, "❌ JSON 파일 형식이 올바르지 않습니다.", "", {}
+    except FileNotFoundError:
+        return None, "❌ 파일을 찾을 수 없습니다.", "", {}
+    except json.JSONDecodeError as e:
+        return None, f"❌ JSON 파일 형식이 올바르지 않습니다: {str(e)}", "", {}
     except Exception as e:
         import traceback
-        error_msg = traceback.format_exc()
-        print(f"JSON 불러오기 오류: {error_msg}")
+        traceback.print_exc()
         return None, f"❌ JSON 불러오기 중 오류 발생: {str(e)}", "", {}
 
 def format_personality_traits(persona):
-    """성격 특성을 사용자 친화적인 형태로 포맷"""
+    """성격 특성을 사용자 친화적인 형태로 포맷 (수치 없이 서술형만)"""
     if not persona or "성격특성" not in persona:
         return "페르소나가 생성되지 않았습니다."
     
@@ -601,8 +621,7 @@ def format_personality_traits(persona):
     
     result = "### 🌟 성격 특성\n\n"
     for trait, description in descriptions.items():
-        score = personality_traits.get(trait, 50)
-        result += f"**{trait}** ({score}/100)\n{description}\n\n"
+        result += f"**{trait}**: {description}\n\n"
     
     return result
 
@@ -672,9 +691,9 @@ def create_main_interface():
     }
     """
     
-    # State 변수들 - 올바른 방식으로 생성 (gr.State() 사용)
-    current_persona = gr.State()
-    personas_list = gr.State()
+    # State 변수들 - 올바른 방식으로 생성 (기본값 없이)
+    current_persona = gr.State(value=None)
+    personas_list = gr.State(value=[])
     
     # Gradio 앱 생성
     with gr.Blocks(title="놈팽쓰(MemoryTag) - 사물 페르소나 생성기", css=css, theme="soft") as app:
@@ -827,8 +846,8 @@ def create_main_interface():
                     
                     with gr.Column(scale=1):
                         gr.Markdown("### 💬 대화")
-                        # Gradio 4.x 호환을 위해 명시적으로 type 지정
-                        chatbot = gr.Chatbot(height=400, label="대화", type="messages")
+                        # Gradio 4.19.2 호환을 위해 type 파라미터 제거
+                        chatbot = gr.Chatbot(height=400, label="대화")
                         with gr.Row():
                             message_input = gr.Textbox(
                                 placeholder="메시지를 입력하세요...",
