@@ -6,6 +6,7 @@ import google.generativeai as genai
 from PIL import Image
 from dotenv import load_dotenv
 import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
 import numpy as np
 import base64
 import io
@@ -44,6 +45,37 @@ os.makedirs("data/conversations", exist_ok=True)
 
 # Initialize the persona generator
 persona_generator = PersonaGenerator()
+
+# 한글 폰트 설정
+def setup_korean_font():
+    """matplotlib 한글 폰트 설정"""
+    try:
+        # 사용 가능한 한글 폰트 찾기
+        available_fonts = fm.findSystemFonts()
+        korean_fonts = ['NanumGothic', 'NanumBarunGothic', 'Malgun Gothic', 'AppleGothic', 'Noto Sans CJK KR']
+        
+        for font_name in korean_fonts:
+            try:
+                plt.rcParams['font.family'] = font_name
+                # 테스트 텍스트로 확인
+                fig, ax = plt.subplots(figsize=(1, 1))
+                ax.text(0.5, 0.5, '한글', fontsize=10)
+                plt.close(fig)
+                print(f"한글 폰트 설정 완료: {font_name}")
+                break
+            except:
+                continue
+        else:
+            # 폰트를 찾지 못한 경우 기본 설정
+            plt.rcParams['font.family'] = 'DejaVu Sans'
+            plt.rcParams['axes.unicode_minus'] = False
+            print("한글 폰트를 찾지 못해 기본 폰트 사용")
+    except Exception as e:
+        print(f"폰트 설정 오류: {str(e)}")
+        plt.rcParams['font.family'] = 'DejaVu Sans'
+
+# 폰트 초기 설정
+setup_korean_font()
 
 # Gradio theme
 theme = gr.themes.Soft(
@@ -92,6 +124,22 @@ body, h1, h2, h3, p, div, span, button, input, textarea, label, select, option {
     border-radius: 4px;
     transition: width 0.5s ease-in-out;
 }
+
+.persona-greeting {
+    background: #f0f4ff;
+    border-left: 4px solid #6366f1;
+    padding: 15px;
+    margin: 15px 0;
+    border-radius: 8px;
+    font-style: italic;
+}
+
+.download-section {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    margin-top: 15px;
+}
 """
 
 # Variable descriptions
@@ -115,8 +163,8 @@ HUMOR_STYLE_MAPPING = {
 def create_persona_from_image(image, name, location, time_spent, object_type, progress=gr.Progress()):
     """페르소나 생성 함수"""
     if image is None:
-        return None, "이미지를 업로드해주세요.", {}, {}, None, [], [], []
-
+        return None, "이미지를 업로드해주세요.", {}, {}, None, [], [], [], "", None
+    
     progress(0.1, desc="이미지 분석 중...")
     
     user_context = {
@@ -130,7 +178,13 @@ def create_persona_from_image(image, name, location, time_spent, object_type, pr
         generator = PersonaGenerator()
         
         progress(0.3, desc="이미지 분석 중...")
-        image_analysis = generator.analyze_image(image)
+        # 이미지 처리 방식 수정 - PIL Image 객체를 직접 전달
+        if isinstance(image, str):
+            # 파일 경로인 경우
+            image_analysis = generator.analyze_image(image)
+        else:
+            # PIL Image 객체인 경우 (Gradio 4.x 기본 방식)
+            image_analysis = generator.analyze_image(image)
         
         if object_type:
             image_analysis["object_type"] = object_type
@@ -151,7 +205,11 @@ def create_persona_from_image(image, name, location, time_spent, object_type, pr
         }
         
         personality_traits = backend_persona.get("성격특성", {})
-        humor_chart = plot_humor_matrix(backend_persona.get("유머매트릭스", {}))
+        
+        # 유머 매트릭스 차트 생성
+        humor_chart = None
+        if "유머매트릭스" in backend_persona:
+            humor_chart = plot_humor_matrix(backend_persona["유머매트릭스"])
         
         attractive_flaws_df = []
         contradictions_df = []
@@ -171,48 +229,85 @@ def create_persona_from_image(image, name, location, time_spent, object_type, pr
                 personality_variables_df = [[var_name, score, VARIABLE_DESCRIPTIONS.get(var_name, "")] 
                                           for var_name, score in variables.items()]
         
-        return backend_persona, "페르소나 생성 완료!", basic_info, personality_traits, humor_chart, attractive_flaws_df, contradictions_df, personality_variables_df
+        # 페르소나 인사말 생성
+        persona_name = basic_info.get("이름", "친구")
+        greeting = f"안녕! 나는 {persona_name}이야. 드디어 깨어났구나! 뭐든 물어봐~ 😊"
+        
+        return (backend_persona, "페르소나 생성 완료!", basic_info, personality_traits, 
+                humor_chart, attractive_flaws_df, contradictions_df, personality_variables_df, 
+                greeting, None)
         
     except Exception as e:
-        print(f"페르소나 생성 오류: {str(e)}")
-        return None, f"오류 발생: {str(e)}", {}, {}, None, [], [], []
+        import traceback
+        error_msg = traceback.format_exc()
+        print(f"페르소나 생성 오류: {error_msg}")
+        return (None, f"오류 발생: {str(e)}", {}, {}, None, [], [], [], "", None)
+
+def plot_humor_matrix(humor_data):
+    """유머 매트릭스 시각화"""
+    if not humor_data:
+        return None
+    
+    try:
+        fig, ax = plt.subplots(figsize=(6, 6))
+        
+        # 데이터 추출
+        warmth_vs_wit = humor_data.get("warmth_vs_wit", 50)
+        self_vs_observational = humor_data.get("self_vs_observational", 50)
+        subtle_vs_expressive = humor_data.get("subtle_vs_expressive", 50)
+        
+        # 간단한 막대 차트로 표시
+        categories = ['따뜻함vs위트', '자기참조vs관찰', '미묘함vs표현']
+        values = [warmth_vs_wit, self_vs_observational, subtle_vs_expressive]
+        
+        bars = ax.bar(categories, values, color=['#ff9999', '#66b3ff', '#99ff99'])
+        ax.set_ylim(0, 100)
+        ax.set_ylabel('점수')
+        ax.set_title('유머 스타일 매트릭스')
+        
+        # 값 표시
+        for bar, value in zip(bars, values):
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., height + 1,
+                   f'{value:.1f}', ha='center', va='bottom')
+        
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        
+        return fig
+    except Exception as e:
+        print(f"유머 차트 생성 오류: {str(e)}")
+        return None
 
 def generate_personality_chart(persona):
     """성격 차트 생성"""
     if not persona or "성격특성" not in persona:
-        img = Image.new('RGB', (400, 400), color='white')
-        draw = PIL.ImageDraw.Draw(img)
-        draw.text((150, 180), "No data", fill='black')
-        img_path = os.path.join("data", "temp_chart.png")
-        os.makedirs("data", exist_ok=True)
-        img.save(img_path)
-        return img_path
+        return None
     
-    traits = persona["성격특성"]
-    categories = list(traits.keys())
-    values = list(traits.values())
-    
-    # 차트 생성
-    fig, ax = plt.subplots(figsize=(6, 6), subplot_kw=dict(polar=True))
-    
-    angles = np.linspace(0, 2*np.pi, len(categories), endpoint=False)
-    values_plot = values + [values[0]]  # Close the plot
-    angles_plot = np.concatenate([angles, [angles[0]]])
-    
-    ax.plot(angles_plot, values_plot, 'o-', linewidth=2, color='#6366f1')
-    ax.fill(angles_plot, values_plot, alpha=0.25, color='#6366f1')
-    ax.set_xticks(angles)
-    ax.set_xticklabels(categories)
-    ax.set_ylim(0, 100)
-    
-    plt.title("성격 특성", size=16, pad=20)
-    
-    timestamp = int(time.time())
-    img_path = os.path.join("data", f"chart_{timestamp}.png")
-    plt.savefig(img_path, format='png', bbox_inches='tight', dpi=150)
-    plt.close(fig)
-    
-    return img_path
+    try:
+        traits = persona["성격특성"]
+        categories = list(traits.keys())
+        values = list(traits.values())
+        
+        # 극좌표 차트 생성
+        fig, ax = plt.subplots(figsize=(6, 6), subplot_kw=dict(polar=True))
+        
+        angles = np.linspace(0, 2*np.pi, len(categories), endpoint=False)
+        values_plot = values + [values[0]]  # Close the plot
+        angles_plot = np.concatenate([angles, [angles[0]]])
+        
+        ax.plot(angles_plot, values_plot, 'o-', linewidth=2, color='#6366f1')
+        ax.fill(angles_plot, values_plot, alpha=0.25, color='#6366f1')
+        ax.set_xticks(angles)
+        ax.set_xticklabels(categories)
+        ax.set_ylim(0, 100)
+        
+        plt.title("성격 특성", size=16, pad=20)
+        
+        return fig
+    except Exception as e:
+        print(f"성격 차트 생성 오류: {str(e)}")
+        return None
 
 def save_persona_to_file(persona):
     """페르소나 저장"""
@@ -220,21 +315,69 @@ def save_persona_to_file(persona):
         return "저장할 페르소나가 없습니다."
     
     try:
+        # 깊은 복사로 원본 보호
         persona_copy = copy.deepcopy(persona)
         
-        # 저장 불가능한 객체 제거
-        for key in list(persona_copy.keys()):
-            if callable(persona_copy[key]):
-                persona_copy.pop(key, None)
+        # JSON 직렬화 불가능한 객체들 제거
+        keys_to_remove = []
+        for key, value in persona_copy.items():
+            if callable(value) or hasattr(value, '__call__'):
+                keys_to_remove.append(key)
         
+        for key in keys_to_remove:
+            persona_copy.pop(key, None)
+        
+        # 저장 실행
         filepath = save_persona(persona_copy)
         if filepath:
             name = persona.get("기본정보", {}).get("이름", "Unknown")
-            return f"{name} 페르소나가 저장되었습니다."
+            return f"✅ {name} 페르소나가 저장되었습니다: {filepath}"
         else:
-            return "페르소나 저장에 실패했습니다."
+            return "❌ 페르소나 저장에 실패했습니다."
     except Exception as e:
-        return f"저장 중 오류 발생: {str(e)}"
+        import traceback
+        error_msg = traceback.format_exc()
+        print(f"저장 오류: {error_msg}")
+        return f"❌ 저장 중 오류 발생: {str(e)}"
+
+def export_persona_to_json(persona):
+    """페르소나를 JSON 파일로 내보내기"""
+    if not persona:
+        return None, "내보낼 페르소나가 없습니다."
+    
+    try:
+        # 깊은 복사로 원본 보호
+        persona_copy = copy.deepcopy(persona)
+        
+        # JSON 직렬화 불가능한 객체들 제거
+        keys_to_remove = []
+        for key, value in persona_copy.items():
+            if callable(value) or hasattr(value, '__call__'):
+                keys_to_remove.append(key)
+        
+        for key in keys_to_remove:
+            persona_copy.pop(key, None)
+        
+        # JSON 파일 생성
+        persona_name = persona_copy.get("기본정보", {}).get("이름", "persona")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{persona_name}_{timestamp}.json"
+        
+        # 임시 파일 생성
+        temp_dir = "data/temp"
+        os.makedirs(temp_dir, exist_ok=True)
+        filepath = os.path.join(temp_dir, filename)
+        
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(persona_copy, f, ensure_ascii=False, indent=2)
+        
+        return filepath, f"✅ JSON 파일이 생성되었습니다: {filename}"
+        
+    except Exception as e:
+        import traceback
+        error_msg = traceback.format_exc()
+        print(f"JSON 내보내기 오류: {error_msg}")
+        return None, f"❌ JSON 내보내기 중 오류 발생: {str(e)}"
 
 def get_saved_personas():
     """저장된 페르소나 목록 가져오기"""
@@ -249,24 +392,30 @@ def get_saved_personas():
                 persona["created_at"]
             ])
         return df_data, personas
-    except Exception:
+    except Exception as e:
+        print(f"페르소나 목록 로딩 오류: {str(e)}")
         return [], []
 
 def load_persona_from_selection(selected_row, personas_list):
     """선택된 페르소나 로드"""
     if selected_row is None or len(selected_row) == 0:
-        return None, "선택된 페르소나가 없습니다.", {}, {}, None, [], [], []
+        return None, "선택된 페르소나가 없습니다.", {}, {}, None, [], [], [], ""
     
     try:
-        selected_index = selected_row.index[0] if hasattr(selected_row, 'index') else 0
+        # DataFrame에서 선택된 행의 인덱스 추출
+        if hasattr(selected_row, 'index'):
+            selected_index = selected_row.index[0]
+        else:
+            selected_index = 0
+            
         if selected_index >= len(personas_list):
-            return None, "잘못된 선택입니다.", {}, {}, None, [], [], []
+            return None, "잘못된 선택입니다.", {}, {}, None, [], [], [], ""
             
         filepath = personas_list[selected_index]["filepath"]
         persona = load_persona(filepath)
         
         if not persona:
-            return None, "페르소나 로딩에 실패했습니다.", {}, {}, None, [], [], []
+            return None, "페르소나 로딩에 실패했습니다.", {}, {}, None, [], [], [], ""
         
         basic_info = {
             "이름": persona.get("기본정보", {}).get("이름", "Unknown"),
@@ -295,10 +444,19 @@ def load_persona_from_selection(selected_row, personas_list):
                 personality_variables_df = [[var_name, score, VARIABLE_DESCRIPTIONS.get(var_name, "")] 
                                           for var_name, score in variables.items()]
         
-        return persona, f"{persona['기본정보']['이름']}을(를) 로드했습니다.", basic_info, personality_traits, humor_chart, attractive_flaws_df, contradictions_df, personality_variables_df
+        # 로드된 페르소나 인사말
+        persona_name = basic_info.get("이름", "친구")
+        greeting = f"반가워! 나는 {persona_name}이야. 다시 만나서 기뻐! 😊"
+        
+        return (persona, f"✅ {persona['기본정보']['이름']}을(를) 로드했습니다.", 
+                basic_info, personality_traits, humor_chart, attractive_flaws_df, 
+                contradictions_df, personality_variables_df, greeting)
     
     except Exception as e:
-        return None, f"로딩 중 오류 발생: {str(e)}", {}, {}, None, [], [], []
+        import traceback
+        error_msg = traceback.format_exc()
+        print(f"로딩 오류: {error_msg}")
+        return None, f"❌ 로딩 중 오류 발생: {str(e)}", {}, {}, None, [], [], [], ""
 
 def chat_with_loaded_persona(persona, user_message, chat_history=None):
     """페르소나와 대화"""
@@ -309,7 +467,7 @@ def chat_with_loaded_persona(persona, user_message, chat_history=None):
         return chat_history, ""
         
     if not persona:
-        chat_history.append([user_message, "페르소나가 로드되지 않았습니다."])
+        chat_history.append([user_message, "페르소나가 로드되지 않았습니다. 먼저 페르소나를 생성하거나 불러오세요."])
         return chat_history, ""
     
     try:
@@ -322,8 +480,9 @@ def chat_with_loaded_persona(persona, user_message, chat_history=None):
 
 # 메인 인터페이스 생성
 def create_main_interface():
-    current_persona = gr.State(value=None)
-    personas_list = gr.State(value=[])
+    # State 변수들 - 올바른 방식으로 생성
+    current_persona = gr.State()
+    personas_list = gr.State()
     
     with gr.Blocks(theme=theme, css=css, title="놈팽쓰(MemoryTag)") as app:
         gr.Markdown("""
@@ -361,12 +520,22 @@ def create_main_interface():
                         status_output = gr.Markdown("")
                     
                     with gr.Column(scale=1):
+                        # 페르소나 인사말 표시
+                        persona_greeting = gr.Markdown("", elem_classes=["persona-greeting"])
+                        
                         basic_info_output = gr.JSON(label="기본 정보")
                         personality_traits_output = gr.JSON(label="성격 특성")
                         
                         with gr.Row():
                             save_btn = gr.Button("페르소나 저장", variant="secondary")
                             chart_btn = gr.Button("성격 차트 생성", variant="secondary")
+                        
+                        # 다운로드 섹션
+                        with gr.Group():
+                            gr.Markdown("### 📁 페르소나 내보내기")
+                            export_btn = gr.Button("JSON 파일로 내보내기", variant="outline")
+                            download_file = gr.File(label="다운로드", visible=False)
+                            export_status = gr.Markdown("")
             
             # 상세 정보 탭
             with gr.Tab("상세 정보", id="details"):
@@ -384,7 +553,7 @@ def create_main_interface():
                         )
                     
                     with gr.Column():
-                        personality_chart_output = gr.Image(label="성격 차트")
+                        personality_chart_output = gr.Plot(label="성격 차트")
                         humor_chart_output = gr.Plot(label="유머 매트릭스")
                 
                 with gr.Accordion("127개 성격 변수", open=False):
@@ -410,7 +579,8 @@ def create_main_interface():
                     
                     with gr.Column(scale=1):
                         gr.Markdown("### 대화")
-                        chatbot = gr.Chatbot(height=400, label="대화")
+                        # Gradio 4.x 호환을 위해 명시적으로 type 지정
+                        chatbot = gr.Chatbot(height=400, label="대화", type="tuples")
                         with gr.Row():
                             message_input = gr.Textbox(
                                 placeholder="메시지를 입력하세요...",
@@ -425,7 +595,8 @@ def create_main_interface():
             inputs=[image_input, name_input, location_input, time_spent_input, object_type_input],
             outputs=[
                 current_persona, status_output, basic_info_output, personality_traits_output,
-                humor_chart_output, attractive_flaws_output, contradictions_output, personality_variables_output
+                humor_chart_output, attractive_flaws_output, contradictions_output, 
+                personality_variables_output, persona_greeting, download_file
             ]
         )
         
@@ -441,6 +612,16 @@ def create_main_interface():
             outputs=[personality_chart_output]
         )
         
+        export_btn.click(
+            fn=export_persona_to_json,
+            inputs=[current_persona],
+            outputs=[download_file, export_status]
+        ).then(
+            fn=lambda x: gr.update(visible=True) if x else gr.update(visible=False),
+            inputs=[download_file],
+            outputs=[download_file]
+        )
+        
         refresh_btn.click(
             fn=get_saved_personas,
             outputs=[persona_table, personas_list]
@@ -451,7 +632,8 @@ def create_main_interface():
             inputs=[persona_table, personas_list],
             outputs=[
                 current_persona, load_status, basic_info_output, personality_traits_output,
-                humor_chart_output, attractive_flaws_output, contradictions_output, personality_variables_output
+                humor_chart_output, attractive_flaws_output, contradictions_output, 
+                personality_variables_output, persona_greeting
             ]
         ).then(
             fn=generate_personality_chart,
