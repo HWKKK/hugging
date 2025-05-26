@@ -50,13 +50,21 @@ load_dotenv()
 api_key = os.getenv("GEMINI_API_KEY")
 if api_key:
     genai.configure(api_key=api_key)
+    print(f"✅ Gemini API 키가 환경변수에서 로드되었습니다.")
+else:
+    print("⚠️ GEMINI_API_KEY 환경변수가 설정되지 않았습니다.")
 
 # Create data directories
 os.makedirs("data/personas", exist_ok=True)
 os.makedirs("data/conversations", exist_ok=True)
 
-# Initialize the persona generator with default settings
-persona_generator = PersonaGenerator()
+# Initialize the persona generator with environment API key
+if api_key:
+    persona_generator = PersonaGenerator(api_provider="gemini", api_key=api_key)
+    print("🤖 PersonaGenerator가 Gemini API로 초기화되었습니다.")
+else:
+    persona_generator = PersonaGenerator()
+    print("⚠️ PersonaGenerator가 API 키 없이 초기화되었습니다.")
 
 # 한글 폰트 설정
 def setup_korean_font():
@@ -198,8 +206,8 @@ HUMOR_STYLE_MAPPING = {
     "Self-deprecating": "self_deprecating"
 }
 
-def create_persona_from_image(image, name, location, time_spent, object_type, api_provider="gemini", api_key=None, progress=gr.Progress()):
-    """페르소나 생성 함수 - API 설정 적용"""
+def create_persona_from_image(image, name, location, time_spent, object_type, progress=gr.Progress()):
+    """페르소나 생성 함수 - 환경변수 API 설정 사용"""
     global persona_generator
     
     if image is None:
@@ -207,18 +215,11 @@ def create_persona_from_image(image, name, location, time_spent, object_type, ap
     
     progress(0.1, desc="설정 확인 중...")
     
-    # API 키 검증
-    if not api_key or not api_key.strip():
-        return None, "❌ **API 키가 필요합니다!** 상단의 'API 설정' 섹션에서 먼저 API 키를 설정해주세요.", "", {}, None, [], [], [], "", None, gr.update(visible=False)
+    # 환경변수 API 키 확인
+    if not persona_generator or not hasattr(persona_generator, 'api_key') or not persona_generator.api_key:
+        return None, "❌ **API 키가 설정되지 않았습니다!** 허깅페이스 스페이스 설정에서 GEMINI_API_KEY를 환경변수로 추가해주세요.", "", {}, None, [], [], [], "", None, gr.update(visible=False)
     
-    # API 키 형식 검증
-    api_key = api_key.strip()
-    if api_provider == "gemini" and not api_key.startswith("AI"):
-        return None, "❌ **Gemini API 키 형식이 올바르지 않습니다.** 'AIza...' 형태여야 합니다.", "", {}, None, [], [], [], "", None, gr.update(visible=False)
-    elif api_provider == "openai" and not api_key.startswith("sk-"):
-        return None, "❌ **OpenAI API 키 형식이 올바르지 않습니다.** 'sk-...' 형태여야 합니다.", "", {}, None, [], [], [], "", None, gr.update(visible=False)
-    
-    progress(0.2, desc="API 연결 확인 중...")
+    progress(0.2, desc="이미지 분석 중...")
     
     user_context = {
         "name": name,
@@ -242,22 +243,16 @@ def create_persona_from_image(image, name, location, time_spent, object_type, ap
         if image.format in ['AVIF', 'WEBP'] or image.mode not in ['RGB', 'RGBA']:
             image = image.convert('RGB')
         
-        # PersonaGenerator 인스턴스 생성 (API 키 포함)
-        generator = PersonaGenerator(api_provider=api_provider, api_key=api_key)
-        
         progress(0.3, desc="이미지 분석 중...")
-        # 이미지 처리 방식 수정 - PIL Image 객체를 직접 전달
-        image_analysis = generator.analyze_image(image)
+        # 글로벌 persona_generator 사용 (환경변수에서 설정된 API 키 사용)
+        image_analysis = persona_generator.analyze_image(image)
         
         progress(0.5, desc="페르소나 생성 중...")
         # 프론트엔드 페르소나 생성
-        frontend_persona = generator.create_frontend_persona(image_analysis, user_context)
+        frontend_persona = persona_generator.create_frontend_persona(image_analysis, user_context)
         
         # 백엔드 페르소나 생성 (구조화된 프롬프트 포함)
-        backend_persona = generator.create_backend_persona(frontend_persona, image_analysis)
-        
-        # 글로벌 인스턴스 업데이트 (성공한 경우에만)
-        persona_generator = generator
+        backend_persona = persona_generator.create_backend_persona(frontend_persona, image_analysis)
         
         # 페르소나 정보 포맷팅
         persona_name = backend_persona["기본정보"]["이름"]
@@ -289,7 +284,7 @@ def create_persona_from_image(image, name, location, time_spent, object_type, ap
         
         return (
             backend_persona,  # current_persona
-            f"✅ {persona_name} 페르소나가 생성되었습니다! (API: {api_provider})",  # status_output
+            f"✅ {persona_name} 페르소나가 생성되었습니다! (Gemini API 사용)",  # status_output
             summary_display,  # persona_summary_display
             backend_persona["성격특성"],  # personality_traits_output (hidden)
             humor_chart,  # humor_chart_output
@@ -304,7 +299,7 @@ def create_persona_from_image(image, name, location, time_spent, object_type, ap
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return None, f"❌ 페르소나 생성 중 오류 발생: {str(e)}\n\n💡 **해결방법**: API 키가 올바른지 확인하고 인터넷 연결을 확인해보세요.", "", {}, None, [], [], [], "", None, gr.update(visible=False)
+        return None, f"❌ 페르소나 생성 중 오류 발생: {str(e)}\n\n💡 **해결방법**: 허깅페이스 스페이스 설정에서 GEMINI_API_KEY 환경변수를 확인하고 인터넷 연결을 확인해보세요.", "", {}, None, [], [], [], "", None, gr.update(visible=False)
 
 def generate_personality_preview(persona_name, personality_traits):
     """성격 특성을 기반으로 한 문장 미리보기 생성"""
@@ -433,29 +428,26 @@ def adjust_persona_traits(persona, warmth, competence, extraversion, humor_style
         traceback.print_exc()
         return persona, f"조정 중 오류 발생: {str(e)}", {}
 
-def finalize_persona(persona, api_provider="gemini", api_key=None):
-    """페르소나 최종 확정 - API 설정 적용"""
+def finalize_persona(persona):
+    """페르소나 최종 확정 - 환경변수 API 설정 사용"""
     global persona_generator
     
     if not persona:
         return None, "페르소나가 없습니다.", "", {}, None, [], [], [], "", None
     
-    # API 키 검증
-    if not api_key or not api_key.strip():
-        return None, "❌ **API 키가 필요합니다!** 상단의 'API 설정' 섹션에서 먼저 API 키를 설정해주세요.", "", {}, None, [], [], [], "", None
+    # 환경변수 API 키 확인
+    if not persona_generator or not hasattr(persona_generator, 'api_key') or not persona_generator.api_key:
+        return None, "❌ **API 키가 설정되지 않았습니다!** 허깅페이스 스페이스 설정에서 GEMINI_API_KEY를 환경변수로 추가해주세요.", "", {}, None, [], [], [], "", None
     
     try:
-        # PersonaGenerator 인스턴스 생성 (API 키 포함)
-        generator = PersonaGenerator(api_provider=api_provider, api_key=api_key.strip())
+        # 글로벌 persona_generator 사용 (환경변수에서 설정된 API 키 사용)
+        generator = persona_generator
         
         # 이미 백엔드 페르소나인 경우와 프론트엔드 페르소나인 경우 구분
         if "구조화프롬프트" not in persona:
             # 프론트엔드 페르소나인 경우 백엔드 페르소나로 변환
             image_analysis = {"object_type": persona.get("기본정보", {}).get("유형", "알 수 없는 사물")}
             persona = generator.create_backend_persona(persona, image_analysis)
-        
-        # 글로벌 인스턴스 업데이트 (성공한 경우에만)
-        persona_generator = generator
         
         persona_name = persona["기본정보"]["이름"]
         
@@ -490,7 +482,7 @@ def finalize_persona(persona, api_provider="gemini", api_key=None):
         
         return (
             persona,  # current_persona
-            f"✅ {persona_name} 완성! (API: {api_provider})",  # status_output
+            f"✅ {persona_name} 완성! (Gemini API 사용)",  # status_output
             summary_display,  # persona_summary_display
             persona["성격특성"],  # personality_traits_output
             humor_chart,  # humor_chart_output
@@ -504,7 +496,7 @@ def finalize_persona(persona, api_provider="gemini", api_key=None):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return None, f"❌ 페르소나 확정 중 오류 발생: {str(e)}\n\n💡 **해결방법**: API 키가 올바른지 확인하고 인터넷 연결을 확인해보세요.", "", {}, None, [], [], [], "", None
+        return None, f"❌ 페르소나 확정 중 오류 발생: {str(e)}\n\n💡 **해결방법**: 허깅페이스 스페이스 설정에서 GEMINI_API_KEY 환경변수를 확인하고 인터넷 연결을 확인해보세요.", "", {}, None, [], [], [], "", None
 
 def plot_humor_matrix(humor_data):
     """유머 매트릭스 시각화 - 영어 레이블 사용"""
@@ -697,8 +689,8 @@ def export_persona_to_json(persona):
 #     """선택된 페르소나 로드 - 더 이상 사용하지 않음"""
 #     return None, "이 기능은 더 이상 사용하지 않습니다. JSON 업로드를 사용하세요.", {}, {}, None, [], [], [], ""
 
-def chat_with_loaded_persona(persona, user_message, chat_history=None, api_provider="gemini", api_key=None):
-    """페르소나와 채팅 (3단계 기억 시스템 활용)"""
+def chat_with_loaded_persona(persona, user_message, chat_history=None):
+    """페르소나와 채팅 (환경변수 API 사용)"""
     
     if chat_history is None:
         chat_history = []
@@ -710,21 +702,16 @@ def chat_with_loaded_persona(persona, user_message, chat_history=None, api_provi
         chat_history.append({"role": "assistant", "content": error_msg})
         return chat_history, ""
     
-    # API 키 체크
-    if not api_key or not api_key.strip():
-        error_msg = "❌ API 키가 설정되지 않았습니다. 상단의 'API 설정' 섹션에서 먼저 API 키를 설정해주세요!"
+    # 환경변수 API 키 체크
+    if not persona_generator or not hasattr(persona_generator, 'api_key') or not persona_generator.api_key:
+        error_msg = "❌ API 키가 설정되지 않았습니다. 허깅페이스 스페이스 설정에서 GEMINI_API_KEY 환경변수를 추가해주세요!"
         chat_history.append({"role": "user", "content": user_message})
         chat_history.append({"role": "assistant", "content": error_msg})
         return chat_history, ""
     
     try:
-        # 글로벌 persona_generator 사용 (API 설정이 적용된 상태)
+        # 글로벌 persona_generator 사용 (환경변수에서 설정된 API 키 사용)
         generator = persona_generator
-        if generator is None or not hasattr(generator, 'api_key') or generator.api_key != api_key.strip():
-            generator = PersonaGenerator(api_provider=api_provider, api_key=api_key.strip())
-        else:
-            # API 설정 업데이트 (키가 다를 수 있으므로)
-            generator.set_api_config(api_provider, api_key.strip())
         
         # Gradio messages 형식에서 대화 기록 변환
         conversation_history = []
@@ -753,7 +740,7 @@ def chat_with_loaded_persona(persona, user_message, chat_history=None, api_provi
         
         # 사용자에게 친근한 오류 메시지
         if "API" in str(e):
-            friendly_error = "API 연결에 문제가 있어요. API 키를 다시 확인해보시겠어요? 😊"
+            friendly_error = "API 연결에 문제가 있어요. 환경변수 설정을 확인해보시겠어요? 😊"
         elif "인터넷" in str(e) or "network" in str(e).lower():
             friendly_error = "인터넷 연결을 확인해보세요! 🌐"
         else:
@@ -864,95 +851,16 @@ def display_persona_summary(persona):
     return summary
 
 def create_api_config_section():
-    """API 설정 섹션 생성"""
-    with gr.Accordion("🔧 API 설정", open=False):
-        gr.Markdown("""
-        ### AI 모델 선택 및 API 키 설정
-        **대화 기능을 사용하려면 반드시 API 키를 설정해야 합니다.**
-        
-        - **Gemini**: 무료 티어 제공, 한국어 지원 우수
-        - **OpenAI**: 고품질 응답, 유료 서비스
-        
-        ⚠️ **API 키를 설정하지 않으면 대화 기능이 작동하지 않습니다!**
-        """)
-        
-        with gr.Row():
-            api_provider = gr.Radio(
-                choices=["gemini", "openai"],
-                value="gemini",
-                label="API 제공업체",
-                info="Gemini: 무료 티어 제공, OpenAI: 고품질 응답"
-            )
-            
-            api_key_input = gr.Textbox(
-                label="API 키",
-                placeholder="여기에 API 키를 입력하세요...",
-                type="password",
-                info="OpenAI: sk-... 형태, Gemini: AI... 형태"
-            )
-        
-        with gr.Row():
-            apply_api_btn = gr.Button("🔧 API 설정 적용", variant="primary")
-            test_api_btn = gr.Button("🧪 API 연결 테스트", variant="secondary")
-        
-        api_status = gr.Markdown("⚠️ **상태**: API가 설정되지 않았습니다. 대화 기능을 사용하려면 위에서 API 키를 설정하세요.")
-        
-        return api_provider, api_key_input, apply_api_btn, test_api_btn, api_status
+    """API 설정 섹션 생성 - 더 이상 사용하지 않음"""
+    pass
 
 def apply_api_configuration(api_provider, api_key):
-    """API 설정 적용 - 개선된 피드백"""
-    global persona_generator
-    
-    if not api_key or not api_key.strip():
-        return "❌ **API 키를 입력해주세요.**\n\n🔑 **API 키 발급 방법:**\n- **Gemini**: https://makersuite.google.com/app/apikey\n- **OpenAI**: https://platform.openai.com/api-keys"
-    
-    try:
-        # API 키 형식 검증
-        api_key = api_key.strip()
-        if api_provider == "gemini" and not api_key.startswith("AI"):
-            return "❌ **Gemini API 키 형식이 올바르지 않습니다.**\n\n💡 **Gemini API 키는 'AIza...' 형태로 시작해야 합니다.**"
-        elif api_provider == "openai" and not api_key.startswith("sk-"):
-            return "❌ **OpenAI API 키 형식이 올바르지 않습니다.**\n\n💡 **OpenAI API 키는 'sk-...' 형태로 시작해야 합니다.**"
-        
-        # 새로운 PersonaGenerator 인스턴스 생성 및 테스트
-        test_generator = PersonaGenerator(api_provider=api_provider, api_key=api_key)
-        
-        # 간단한 API 테스트
-        test_response = test_generator._generate_text_with_api("안녕하세요! 간단히 응답해주세요.")
-        
-        if "API 키가 설정되지 않았습니다" in test_response or "API 오류" in test_response:
-            return f"❌ **API 연결 실패**\n\n🔍 **오류 내용**: {test_response}\n\n💡 **확인사항**:\n- API 키가 유효한지 확인하세요\n- 인터넷 연결을 확인하세요"
-        
-        # 성공시 글로벌 인스턴스 교체
-        persona_generator = test_generator
-        
-        provider_name = "Google Gemini" if api_provider == "gemini" else "OpenAI"
-        return f"✅ **{provider_name} API 설정 완료!**\n\n🎯 **이제 대화 기능을 사용할 수 있습니다.**\n\n💡 **사용법**: 대화하기 탭에서 JSON 파일을 업로드하여 페르소나와 대화를 시작하세요.\n\n🔬 **테스트 응답**: {test_response[:100]}..."
-        
-    except Exception as e:
-        return f"❌ **API 설정 중 오류 발생**\n\n🔍 **오류 내용**: {str(e)}\n\n💡 **확인사항**:\n- API 키가 올바른지 확인하세요\n- 인터넷 연결을 확인하세요"
+    """API 설정 적용 - 더 이상 사용하지 않음"""
+    pass
 
 def test_api_connection(api_provider, api_key):
-    """API 연결 테스트"""
-    if not api_key or not api_key.strip():
-        return "❌ API 키를 먼저 입력하고 설정을 적용해주세요."
-    
-    try:
-        # 임시 생성기로 테스트
-        test_generator = PersonaGenerator(api_provider=api_provider, api_key=api_key.strip())
-        
-        # 간단한 텍스트 생성 테스트
-        test_prompt = "안녕하세요!"
-        response = test_generator._generate_text_with_api(test_prompt)
-        
-        if "오류" in response or "error" in response.lower():
-            return f"❌ API 연결 실패: {response}"
-        
-        provider_name = "Google Gemini" if api_provider == "gemini" else "OpenAI"
-        return f"✅ **{provider_name}** API 연결 성공! 응답 길이: {len(response)}자"
-        
-    except Exception as e:
-        return f"❌ API 테스트 중 오류: {str(e)}"
+    """API 연결 테스트 - 더 이상 사용하지 않음"""
+    pass
 
 def export_conversation_history():
     """대화 기록을 JSON으로 내보내기"""
@@ -1132,10 +1040,29 @@ def create_main_interface():
         gr.Markdown("""
         # 놈팽쓰(MemoryTag): 당신 곁의 사물, 이제 친구가 되다
         일상 속 사물에 AI 페르소나를 부여하여 대화할 수 있게 해주는 서비스입니다.
+        
+        **🔧 API 설정**: 이 스페이스는 허깅페이스 환경변수 `GEMINI_API_KEY`를 사용합니다.
         """)
         
-        # API 설정 섹션 추가
-        api_provider, api_key_input, apply_api_btn, test_api_btn, api_status = create_api_config_section()
+        # API 설정 안내 (환경변수 방식)
+        with gr.Accordion("🔧 API 설정 정보", open=False):
+            gr.Markdown("""
+            ### 환경변수 기반 API 설정
+            이 앱은 허깅페이스 스페이스의 환경변수를 사용합니다.
+            
+            **관리자용 설정 방법:**
+            1. 허깅페이스 스페이스 설정 페이지 이동
+            2. "Repository secrets" 섹션에서 추가:
+               - Name: `GEMINI_API_KEY`
+               - Value: `AIza...` (Gemini API 키)
+            3. 스페이스 재시작
+            
+            ✅ **현재 상태**: 환경변수에서 API 키 자동 로드
+            """)
+            
+            api_status_display = gr.Markdown(
+                f"**🔑 API 상태**: {'✅ 설정됨' if api_key else '❌ 미설정'}"
+            )
         
         with gr.Tabs() as tabs:
             # 페르소나 생성 탭
@@ -1329,7 +1256,7 @@ def create_main_interface():
         # 이벤트 핸들러
         create_btn.click(
             fn=create_persona_from_image,
-            inputs=[image_input, name_input, location_input, time_spent_input, object_type_input, api_provider, api_key_input],
+            inputs=[image_input, name_input, location_input, time_spent_input, object_type_input],
             outputs=[
                 current_persona, status_output, persona_summary_display, personality_traits_output,
                 humor_chart_output, attractive_flaws_output, contradictions_output, 
@@ -1357,7 +1284,7 @@ def create_main_interface():
         # 페르소나 최종 확정
         finalize_btn.click(
             fn=finalize_persona,
-            inputs=[current_persona, api_provider, api_key_input],
+            inputs=[current_persona],
             outputs=[
                 current_persona, status_output, persona_summary_display, personality_traits_output,
                 humor_chart_output, attractive_flaws_output, contradictions_output, 
@@ -1400,13 +1327,13 @@ def create_main_interface():
         # 대화 관련 이벤트 핸들러
         send_btn.click(
             fn=chat_with_loaded_persona,
-            inputs=[current_persona, message_input, chatbot, api_provider, api_key_input],
+            inputs=[current_persona, message_input, chatbot],
             outputs=[chatbot, message_input]
         )
         
         message_input.submit(
             fn=chat_with_loaded_persona,
-            inputs=[current_persona, message_input, chatbot, api_provider, api_key_input],
+            inputs=[current_persona, message_input, chatbot],
             outputs=[chatbot, message_input]
         )
         
@@ -1417,27 +1344,27 @@ def create_main_interface():
         )
         
         # 예시 메시지 버튼들 - API 설정 정보 포함
-        def handle_example_message(persona, message, api_provider, api_key):
+        def handle_example_message(persona, message):
             if not persona:
                 return [], ""
-            chat_result, _ = chat_with_loaded_persona(persona, message, [], api_provider, api_key)
+            chat_result, _ = chat_with_loaded_persona(persona, message, [])
             return chat_result, ""
         
         example_btn1.click(
-            fn=lambda persona, api_provider, api_key: handle_example_message(persona, "안녕!", api_provider, api_key),
-            inputs=[current_persona, api_provider, api_key_input],
+            fn=lambda persona: handle_example_message(persona, "안녕!"),
+            inputs=[current_persona],
             outputs=[chatbot, message_input]
         )
         
         example_btn2.click(
-            fn=lambda persona, api_provider, api_key: handle_example_message(persona, "너는 누구야?", api_provider, api_key),
-            inputs=[current_persona, api_provider, api_key_input],
+            fn=lambda persona: handle_example_message(persona, "너는 누구야?"),
+            inputs=[current_persona],
             outputs=[chatbot, message_input]
         )
         
         example_btn3.click(
-            fn=lambda persona, api_provider, api_key: handle_example_message(persona, "뭘 좋아해?", api_provider, api_key),
-            inputs=[current_persona, api_provider, api_key_input],
+            fn=lambda persona: handle_example_message(persona, "뭘 좋아해?"),
+            inputs=[current_persona],
             outputs=[chatbot, message_input]
         )
         
