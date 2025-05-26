@@ -194,7 +194,9 @@ HUMOR_STYLE_MAPPING = {
 }
 
 def create_persona_from_image(image, name, location, time_spent, object_type, progress=gr.Progress()):
-    """페르소나 생성 함수 - 초기 생성만"""
+    """페르소나 생성 함수 - API 설정 적용"""
+    global persona_generator
+    
     if image is None:
         return None, "이미지를 업로드해주세요.", "", {}, None, [], [], [], "", None, gr.update(visible=False)
     
@@ -222,18 +224,20 @@ def create_persona_from_image(image, name, location, time_spent, object_type, pr
         if image.format in ['AVIF', 'WEBP'] or image.mode not in ['RGB', 'RGBA']:
             image = image.convert('RGB')
         
-        generator = PersonaGenerator()
+        # 글로벌 persona_generator 사용 (API 설정이 적용된 상태)
+        if persona_generator is None:
+            persona_generator = PersonaGenerator()
         
         progress(0.3, desc="이미지 분석 중...")
         # 이미지 처리 방식 수정 - PIL Image 객체를 직접 전달
-        image_analysis = generator.analyze_image(image)
+        image_analysis = persona_generator.analyze_image(image)
         
         progress(0.5, desc="페르소나 생성 중...")
         # 프론트엔드 페르소나 생성
-        frontend_persona = generator.create_frontend_persona(image_analysis, user_context)
+        frontend_persona = persona_generator.create_frontend_persona(image_analysis, user_context)
         
         # 백엔드 페르소나 생성 (구조화된 프롬프트 포함)
-        backend_persona = generator.create_backend_persona(frontend_persona, image_analysis)
+        backend_persona = persona_generator.create_backend_persona(frontend_persona, image_analysis)
         
         # 페르소나 정보 포맷팅
         persona_name = backend_persona["기본정보"]["이름"]
@@ -377,18 +381,22 @@ def adjust_persona_traits(persona, warmth, competence, humor, extraversion, humo
         return persona, f"조정 중 오류 발생: {str(e)}", {}
 
 def finalize_persona(persona):
-    """페르소나 최종 확정"""
+    """페르소나 최종 확정 - API 설정 적용"""
+    global persona_generator
+    
     if not persona:
         return None, "페르소나가 없습니다.", "", {}, None, [], [], [], "", None
     
     try:
-        generator = PersonaGenerator()
+        # 글로벌 persona_generator 사용 (API 설정이 적용된 상태)
+        if persona_generator is None:
+            persona_generator = PersonaGenerator()
         
         # 이미 백엔드 페르소나인 경우와 프론트엔드 페르소나인 경우 구분
         if "구조화프롬프트" not in persona:
             # 프론트엔드 페르소나인 경우 백엔드 페르소나로 변환
             image_analysis = {"object_type": persona.get("기본정보", {}).get("유형", "알 수 없는 사물")}
-            persona = generator.create_backend_persona(persona, image_analysis)
+            persona = persona_generator.create_backend_persona(persona, image_analysis)
         
         persona_name = persona["기본정보"]["이름"]
         
@@ -608,7 +616,9 @@ def export_persona_to_json(persona):
 #     return None, "이 기능은 더 이상 사용하지 않습니다. JSON 업로드를 사용하세요.", {}, {}, None, [], [], [], ""
 
 def chat_with_loaded_persona(persona, user_message, chat_history=None):
-    """현재 로드된 페르소나와 대화 - Gradio 5.31.0 호환"""
+    """현재 로드된 페르소나와 대화 - API 설정 적용"""
+    global persona_generator
+    
     if not persona:
         return chat_history or [], ""
     
@@ -616,7 +626,10 @@ def chat_with_loaded_persona(persona, user_message, chat_history=None):
         return chat_history or [], ""
     
     try:
-        generator = PersonaGenerator()
+        # 글로벌 persona_generator 사용 (API 설정이 적용된 상태)
+        if persona_generator is None:
+            # 기본 persona_generator가 없는 경우 생성
+            persona_generator = PersonaGenerator()
         
         # 대화 기록을 올바른 형태로 변환 (Gradio 5.x messages 형태)
         conversation_history = []
@@ -630,8 +643,8 @@ def chat_with_loaded_persona(persona, user_message, chat_history=None):
                     conversation_history.append({"role": "user", "content": message[0]})
                     conversation_history.append({"role": "assistant", "content": message[1]})
         
-        # 페르소나와 대화
-        response = generator.chat_with_persona(persona, user_message, conversation_history)
+        # 페르소나와 대화 (설정된 API 사용)
+        response = persona_generator.chat_with_persona(persona, user_message, conversation_history)
         
         # 새로운 대화를 messages 형태로 추가
         if chat_history is None:
@@ -707,13 +720,18 @@ def import_persona_from_json(json_file):
         return None, f"❌ JSON 불러오기 중 오류 발생: {str(e)}", "", {}
 
 def format_personality_traits(persona):
-    """성격 특성을 사용자 친화적인 형태로 포맷 (수치 없이 서술형만)"""
+    """성격 특성을 사용자 친화적인 형태로 포맷 (수치 없이 서술형만) - API 설정 적용"""
+    global persona_generator
+    
     if not persona or "성격특성" not in persona:
         return "페르소나가 생성되지 않았습니다."
     
-    generator = PersonaGenerator()
+    # 글로벌 persona_generator 사용 (API 설정이 적용된 상태)
+    if persona_generator is None:
+        persona_generator = PersonaGenerator()
+    
     personality_traits = persona["성격특성"]
-    descriptions = generator.get_personality_descriptions(personality_traits)
+    descriptions = persona_generator.get_personality_descriptions(personality_traits)
     
     result = "### 🌟 성격 특성\n\n"
     for trait, description in descriptions.items():
