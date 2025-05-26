@@ -1368,19 +1368,6 @@ def create_main_interface():
             outputs=[chatbot, message_input]
         )
         
-        # API 설정 이벤트 핸들러
-        apply_api_btn.click(
-            fn=apply_api_configuration,
-            inputs=[api_provider, api_key_input],
-            outputs=[api_status]
-        )
-        
-        test_api_btn.click(
-            fn=test_api_connection,
-            inputs=[api_provider, api_key_input],
-            outputs=[api_status]
-        )
-        
         # 앱 로드 시 페르소나 목록 로드 (백엔드에서 사용)
         app.load(
             fn=lambda: [],
