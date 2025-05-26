@@ -198,14 +198,27 @@ HUMOR_STYLE_MAPPING = {
     "Self-deprecating": "self_deprecating"
 }
 
-def create_persona_from_image(image, name, location, time_spent, object_type, progress=gr.Progress()):
+def create_persona_from_image(image, name, location, time_spent, object_type, api_provider="gemini", api_key=None, progress=gr.Progress()):
     """페르소나 생성 함수 - API 설정 적용"""
     global persona_generator
     
     if image is None:
         return None, "이미지를 업로드해주세요.", "", {}, None, [], [], [], "", None, gr.update(visible=False)
     
-    progress(0.1, desc="이미지 분석 중...")
+    progress(0.1, desc="설정 확인 중...")
+    
+    # API 키 검증
+    if not api_key or not api_key.strip():
+        return None, "❌ **API 키가 필요합니다!** 상단의 'API 설정' 섹션에서 먼저 API 키를 설정해주세요.", "", {}, None, [], [], [], "", None, gr.update(visible=False)
+    
+    # API 키 형식 검증
+    api_key = api_key.strip()
+    if api_provider == "gemini" and not api_key.startswith("AI"):
+        return None, "❌ **Gemini API 키 형식이 올바르지 않습니다.** 'AIza...' 형태여야 합니다.", "", {}, None, [], [], [], "", None, gr.update(visible=False)
+    elif api_provider == "openai" and not api_key.startswith("sk-"):
+        return None, "❌ **OpenAI API 키 형식이 올바르지 않습니다.** 'sk-...' 형태여야 합니다.", "", {}, None, [], [], [], "", None, gr.update(visible=False)
+    
+    progress(0.2, desc="API 연결 확인 중...")
     
     user_context = {
         "name": name,
@@ -229,20 +242,22 @@ def create_persona_from_image(image, name, location, time_spent, object_type, pr
         if image.format in ['AVIF', 'WEBP'] or image.mode not in ['RGB', 'RGBA']:
             image = image.convert('RGB')
         
-        # 글로벌 persona_generator 사용 (API 설정이 적용된 상태)
-        if persona_generator is None:
-            persona_generator = PersonaGenerator()
+        # PersonaGenerator 인스턴스 생성 (API 키 포함)
+        generator = PersonaGenerator(api_provider=api_provider, api_key=api_key)
         
         progress(0.3, desc="이미지 분석 중...")
         # 이미지 처리 방식 수정 - PIL Image 객체를 직접 전달
-        image_analysis = persona_generator.analyze_image(image)
+        image_analysis = generator.analyze_image(image)
         
         progress(0.5, desc="페르소나 생성 중...")
         # 프론트엔드 페르소나 생성
-        frontend_persona = persona_generator.create_frontend_persona(image_analysis, user_context)
+        frontend_persona = generator.create_frontend_persona(image_analysis, user_context)
         
         # 백엔드 페르소나 생성 (구조화된 프롬프트 포함)
-        backend_persona = persona_generator.create_backend_persona(frontend_persona, image_analysis)
+        backend_persona = generator.create_backend_persona(frontend_persona, image_analysis)
+        
+        # 글로벌 인스턴스 업데이트 (성공한 경우에만)
+        persona_generator = generator
         
         # 페르소나 정보 포맷팅
         persona_name = backend_persona["기본정보"]["이름"]
@@ -274,7 +289,7 @@ def create_persona_from_image(image, name, location, time_spent, object_type, pr
         
         return (
             backend_persona,  # current_persona
-            f"✅ {persona_name} 페르소나가 생성되었습니다!",  # status_output
+            f"✅ {persona_name} 페르소나가 생성되었습니다! (API: {api_provider})",  # status_output
             summary_display,  # persona_summary_display
             backend_persona["성격특성"],  # personality_traits_output (hidden)
             humor_chart,  # humor_chart_output
@@ -289,7 +304,7 @@ def create_persona_from_image(image, name, location, time_spent, object_type, pr
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return None, f"❌ 페르소나 생성 중 오류 발생: {str(e)}", "", {}, None, [], [], [], "", None, gr.update(visible=False)
+        return None, f"❌ 페르소나 생성 중 오류 발생: {str(e)}\n\n💡 **해결방법**: API 키가 올바른지 확인하고 인터넷 연결을 확인해보세요.", "", {}, None, [], [], [], "", None, gr.update(visible=False)
 
 def generate_personality_preview(persona_name, personality_traits):
     """성격 특성을 기반으로 한 문장 미리보기 생성"""
@@ -418,23 +433,29 @@ def adjust_persona_traits(persona, warmth, competence, extraversion, humor_style
         traceback.print_exc()
         return persona, f"조정 중 오류 발생: {str(e)}", {}
 
-def finalize_persona(persona):
+def finalize_persona(persona, api_provider="gemini", api_key=None):
     """페르소나 최종 확정 - API 설정 적용"""
     global persona_generator
     
     if not persona:
         return None, "페르소나가 없습니다.", "", {}, None, [], [], [], "", None
     
+    # API 키 검증
+    if not api_key or not api_key.strip():
+        return None, "❌ **API 키가 필요합니다!** 상단의 'API 설정' 섹션에서 먼저 API 키를 설정해주세요.", "", {}, None, [], [], [], "", None
+    
     try:
-        # 글로벌 persona_generator 사용 (API 설정이 적용된 상태)
-        if persona_generator is None:
-            persona_generator = PersonaGenerator()
+        # PersonaGenerator 인스턴스 생성 (API 키 포함)
+        generator = PersonaGenerator(api_provider=api_provider, api_key=api_key.strip())
         
         # 이미 백엔드 페르소나인 경우와 프론트엔드 페르소나인 경우 구분
         if "구조화프롬프트" not in persona:
             # 프론트엔드 페르소나인 경우 백엔드 페르소나로 변환
             image_analysis = {"object_type": persona.get("기본정보", {}).get("유형", "알 수 없는 사물")}
-            persona = persona_generator.create_backend_persona(persona, image_analysis)
+            persona = generator.create_backend_persona(persona, image_analysis)
+        
+        # 글로벌 인스턴스 업데이트 (성공한 경우에만)
+        persona_generator = generator
         
         persona_name = persona["기본정보"]["이름"]
         
@@ -469,7 +490,7 @@ def finalize_persona(persona):
         
         return (
             persona,  # current_persona
-            f"✅ {persona_name} 완성!",  # status_output
+            f"✅ {persona_name} 완성! (API: {api_provider})",  # status_output
             summary_display,  # persona_summary_display
             persona["성격특성"],  # personality_traits_output
             humor_chart,  # humor_chart_output
@@ -483,7 +504,7 @@ def finalize_persona(persona):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return None, f"❌ 페르소나 확정 중 오류 발생: {str(e)}", "", {}, None, [], [], [], "", None
+        return None, f"❌ 페르소나 확정 중 오류 발생: {str(e)}\n\n💡 **해결방법**: API 키가 올바른지 확인하고 인터넷 연결을 확인해보세요.", "", {}, None, [], [], [], "", None
 
 def plot_humor_matrix(humor_data):
     """유머 매트릭스 시각화 - 영어 레이블 사용"""
@@ -1253,6 +1274,13 @@ def create_main_interface():
                             gr.Markdown("### 🤖 현재 페르소나")
                             chat_persona_greeting = gr.Markdown("", elem_classes=["persona-greeting"])
                             current_persona_info = gr.JSON(label="현재 페르소나 정보", visible=False)
+                        
+                        # 대화 기록 관리
+                        with gr.Group():
+                            gr.Markdown("### 💾 대화 기록 관리")
+                            gr.Markdown("현재 대화를 JSON 파일로 다운로드하여 보관하세요.")
+                            chat_export_btn = gr.Button("📥 현재 대화 기록 다운로드", variant="secondary")
+                            chat_download_file = gr.File(label="다운로드", visible=False)
                     
                     with gr.Column(scale=1):
                         gr.Markdown("### 💬 대화")
@@ -1275,16 +1303,15 @@ def create_main_interface():
             
             # 🧠 대화 분석 탭 추가
             with gr.Tab("🧠 대화 분석"):
-                gr.Markdown("### 📊 대화 기록 관리 및 분석")
+                gr.Markdown("### 📊 대화 기록 분석 및 키워드 추출")
                 
                 with gr.Row():
                     with gr.Column():
-                        gr.Markdown("#### 💾 대화 기록 저장/불러오기")
-                        conversation_export_btn = gr.Button("📥 대화 기록 JSON 다운로드", variant="secondary")
-                        conversation_download_file = gr.File(label="다운로드", visible=False)
+                        gr.Markdown("#### 📤 대화 기록 분석하기")
+                        gr.Markdown("저장된 대화 기록 JSON 파일을 업로드하여 분석해보세요.")
                         
                         import_file = gr.File(label="📤 대화 기록 JSON 업로드", file_types=[".json"])
-                        import_result = gr.Textbox(label="가져오기 결과", lines=3, interactive=False)
+                        import_result = gr.Textbox(label="업로드 결과", lines=3, interactive=False)
                         
                     with gr.Column():
                         gr.Markdown("#### 🔍 실시간 키워드 분석")
@@ -1302,7 +1329,7 @@ def create_main_interface():
         # 이벤트 핸들러
         create_btn.click(
             fn=create_persona_from_image,
-            inputs=[image_input, name_input, location_input, time_spent_input, object_type_input],
+            inputs=[image_input, name_input, location_input, time_spent_input, object_type_input, api_provider, api_key_input],
             outputs=[
                 current_persona, status_output, persona_summary_display, personality_traits_output,
                 humor_chart_output, attractive_flaws_output, contradictions_output, 
@@ -1330,7 +1357,7 @@ def create_main_interface():
         # 페르소나 최종 확정
         finalize_btn.click(
             fn=finalize_persona,
-            inputs=[current_persona],
+            inputs=[current_persona, api_provider, api_key_input],
             outputs=[
                 current_persona, status_output, persona_summary_display, personality_traits_output,
                 humor_chart_output, attractive_flaws_output, contradictions_output, 
@@ -1433,16 +1460,17 @@ def create_main_interface():
             outputs=[personas_list]
         )
         
-        # 이벤트 연결
-        conversation_export_btn.click(
+        # 대화하기 탭의 대화 기록 다운로드 이벤트
+        chat_export_btn.click(
             export_conversation_history,
-            outputs=[conversation_download_file]
+            outputs=[chat_download_file]
         ).then(
             lambda x: gr.update(visible=True) if x else gr.update(visible=False),
-            inputs=[conversation_download_file],
-            outputs=[conversation_download_file]
+            inputs=[chat_download_file],
+            outputs=[chat_download_file]
         )
         
+        # 대화 분석 탭의 업로드 이벤트
         import_file.upload(
             import_conversation_history,
             inputs=[import_file],
