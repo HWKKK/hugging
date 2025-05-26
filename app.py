@@ -615,9 +615,8 @@ def export_persona_to_json(persona):
 #     """선택된 페르소나 로드 - 더 이상 사용하지 않음"""
 #     return None, "이 기능은 더 이상 사용하지 않습니다. JSON 업로드를 사용하세요.", {}, {}, None, [], [], [], ""
 
-def chat_with_loaded_persona(persona, user_message, chat_history=None):
-    """현재 로드된 페르소나와 대화 - API 설정 적용"""
-    global persona_generator
+def chat_with_loaded_persona(persona, user_message, chat_history=None, api_provider="gemini", api_key=None):
+    """현재 로드된 페르소나와 대화 - 동적 API 설정 적용"""
     
     if not persona:
         return chat_history or [], ""
@@ -626,10 +625,15 @@ def chat_with_loaded_persona(persona, user_message, chat_history=None):
         return chat_history or [], ""
     
     try:
-        # 글로벌 persona_generator 사용 (API 설정이 적용된 상태)
-        if persona_generator is None:
-            # 기본 persona_generator가 없는 경우 생성
-            persona_generator = PersonaGenerator()
+        # API 설정이 제공된 경우 동적으로 PersonaGenerator 생성
+        if api_key and api_key.strip():
+            generator = PersonaGenerator(api_provider=api_provider, api_key=api_key.strip())
+        else:
+            # 글로벌 persona_generator 사용 (기본 설정)
+            global persona_generator
+            if persona_generator is None:
+                persona_generator = PersonaGenerator()
+            generator = persona_generator
         
         # 대화 기록을 올바른 형태로 변환 (Gradio 5.x messages 형태)
         conversation_history = []
@@ -644,7 +648,7 @@ def chat_with_loaded_persona(persona, user_message, chat_history=None):
                     conversation_history.append({"role": "assistant", "content": message[1]})
         
         # 페르소나와 대화 (설정된 API 사용)
-        response = persona_generator.chat_with_persona(persona, user_message, conversation_history)
+        response = generator.chat_with_persona(persona, user_message, conversation_history)
         
         # 새로운 대화를 messages 형태로 추가
         if chat_history is None:
@@ -660,7 +664,12 @@ def chat_with_loaded_persona(persona, user_message, chat_history=None):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        error_response = f"죄송해요, 대화 중 오류가 발생했어요: {str(e)}"
+        
+        # API 키가 없거나 잘못된 경우의 에러 메시지
+        if not api_key or not api_key.strip():
+            error_response = "😅 API 키가 설정되지 않았어요! 상단의 '🔧 API 설정'에서 Gemini 또는 OpenAI API 키를 입력해주세요."
+        else:
+            error_response = f"😓 API 연결에 문제가 있어요: {str(e)}"
         
         if chat_history is None:
             chat_history = []
@@ -777,7 +786,12 @@ def create_api_config_section():
     with gr.Accordion("🔧 API 설정", open=False):
         gr.Markdown("""
         ### AI 모델 선택 및 API 키 설정
-        **OpenAI** 또는 **Google Gemini** API를 선택하여 사용할 수 있습니다.
+        **대화 기능을 사용하려면 반드시 API 키를 설정해야 합니다.**
+        
+        - **Gemini**: 무료 티어 제공, 한국어 지원 우수
+        - **OpenAI**: 고품질 응답, 유료 서비스
+        
+        ⚠️ **API 키를 설정하지 않으면 대화 기능이 작동하지 않습니다!**
         """)
         
         with gr.Row():
@@ -799,26 +813,26 @@ def create_api_config_section():
             apply_api_btn = gr.Button("🔧 API 설정 적용", variant="primary")
             test_api_btn = gr.Button("🧪 API 연결 테스트", variant="secondary")
         
-        api_status = gr.Markdown("**상태**: API가 설정되지 않았습니다.")
+        api_status = gr.Markdown("⚠️ **상태**: API가 설정되지 않았습니다. 대화 기능을 사용하려면 위에서 API 키를 설정하세요.")
         
         return api_provider, api_key_input, apply_api_btn, test_api_btn, api_status
 
 def apply_api_configuration(api_provider, api_key):
-    """API 설정 적용"""
+    """API 설정 적용 - 개선된 피드백"""
     global persona_generator
     
     if not api_key or not api_key.strip():
-        return "❌ API 키를 입력해주세요."
+        return "❌ **API 키를 입력해주세요.**\n\n🔑 **API 키 발급 방법:**\n- **Gemini**: https://makersuite.google.com/app/apikey\n- **OpenAI**: https://platform.openai.com/api-keys"
     
     try:
         # 새로운 PersonaGenerator 인스턴스 생성
         persona_generator = PersonaGenerator(api_provider=api_provider, api_key=api_key.strip())
         
         provider_name = "Google Gemini" if api_provider == "gemini" else "OpenAI"
-        return f"✅ **{provider_name}** API 설정이 완료되었습니다!"
+        return f"✅ **{provider_name} API 설정 완료!**\n\n🎯 **이제 대화 기능을 사용할 수 있습니다.**\n\n💡 **사용법**: 대화하기 탭에서 JSON 파일을 업로드하여 페르소나와 대화를 시작하세요."
         
     except Exception as e:
-        return f"❌ API 설정 중 오류 발생: {str(e)}"
+        return f"❌ **API 설정 중 오류 발생**\n\n🔍 **오류 내용**: {str(e)}\n\n💡 **확인사항**:\n- API 키가 올바른지 확인하세요\n- 인터넷 연결을 확인하세요"
 
 def test_api_connection(api_provider, api_key):
     """API 연결 테스트"""
@@ -1124,13 +1138,13 @@ def create_main_interface():
         # 대화 관련 이벤트 핸들러
         send_btn.click(
             fn=chat_with_loaded_persona,
-            inputs=[current_persona, message_input, chatbot],
+            inputs=[current_persona, message_input, chatbot, api_provider, api_key_input],
             outputs=[chatbot, message_input]
         )
         
         message_input.submit(
             fn=chat_with_loaded_persona,
-            inputs=[current_persona, message_input, chatbot],
+            inputs=[current_persona, message_input, chatbot, api_provider, api_key_input],
             outputs=[chatbot, message_input]
         )
         
@@ -1140,20 +1154,29 @@ def create_main_interface():
             outputs=[chatbot]
         )
         
-        # 예시 메시지 버튼들
+        # 예시 메시지 버튼들 - API 설정 정보 포함
+        def handle_example_message(persona, message, api_provider, api_key):
+            if not persona:
+                return [], ""
+            chat_result, _ = chat_with_loaded_persona(persona, message, [], api_provider, api_key)
+            return chat_result, ""
+        
         example_btn1.click(
-            fn=lambda: "안녕!",
-            outputs=[message_input]
+            fn=lambda persona, api_provider, api_key: handle_example_message(persona, "안녕!", api_provider, api_key),
+            inputs=[current_persona, api_provider, api_key_input],
+            outputs=[chatbot, message_input]
         )
         
         example_btn2.click(
-            fn=lambda: "너는 누구야?",
-            outputs=[message_input]
+            fn=lambda persona, api_provider, api_key: handle_example_message(persona, "너는 누구야?", api_provider, api_key),
+            inputs=[current_persona, api_provider, api_key_input],
+            outputs=[chatbot, message_input]
         )
         
         example_btn3.click(
-            fn=lambda: "뭘 좋아해?",
-            outputs=[message_input]
+            fn=lambda persona, api_provider, api_key: handle_example_message(persona, "뭘 좋아해?", api_provider, api_key),
+            inputs=[current_persona, api_provider, api_key_input],
+            outputs=[chatbot, message_input]
         )
         
         # API 설정 이벤트 핸들러
