@@ -50,7 +50,7 @@ if api_key:
 os.makedirs("data/personas", exist_ok=True)
 os.makedirs("data/conversations", exist_ok=True)
 
-# Initialize the persona generator
+# Initialize the persona generator with default settings
 persona_generator = PersonaGenerator()
 
 # 한글 폰트 설정
@@ -754,6 +754,76 @@ def display_persona_summary(persona):
     
     return summary
 
+def create_api_config_section():
+    """API 설정 섹션 생성"""
+    with gr.Accordion("🔧 API 설정", open=False):
+        gr.Markdown("""
+        ### AI 모델 선택 및 API 키 설정
+        **OpenAI** 또는 **Google Gemini** API를 선택하여 사용할 수 있습니다.
+        """)
+        
+        with gr.Row():
+            api_provider = gr.Radio(
+                choices=["gemini", "openai"],
+                value="gemini",
+                label="API 제공업체",
+                info="Gemini: 무료 티어 제공, OpenAI: 고품질 응답"
+            )
+            
+            api_key_input = gr.Textbox(
+                label="API 키",
+                placeholder="여기에 API 키를 입력하세요...",
+                type="password",
+                info="OpenAI: sk-... 형태, Gemini: AI... 형태"
+            )
+        
+        with gr.Row():
+            apply_api_btn = gr.Button("🔧 API 설정 적용", variant="primary")
+            test_api_btn = gr.Button("🧪 API 연결 테스트", variant="secondary")
+        
+        api_status = gr.Markdown("**상태**: API가 설정되지 않았습니다.")
+        
+        return api_provider, api_key_input, apply_api_btn, test_api_btn, api_status
+
+def apply_api_configuration(api_provider, api_key):
+    """API 설정 적용"""
+    global persona_generator
+    
+    if not api_key or not api_key.strip():
+        return "❌ API 키를 입력해주세요."
+    
+    try:
+        # 새로운 PersonaGenerator 인스턴스 생성
+        persona_generator = PersonaGenerator(api_provider=api_provider, api_key=api_key.strip())
+        
+        provider_name = "Google Gemini" if api_provider == "gemini" else "OpenAI"
+        return f"✅ **{provider_name}** API 설정이 완료되었습니다!"
+        
+    except Exception as e:
+        return f"❌ API 설정 중 오류 발생: {str(e)}"
+
+def test_api_connection(api_provider, api_key):
+    """API 연결 테스트"""
+    if not api_key or not api_key.strip():
+        return "❌ API 키를 먼저 입력하고 설정을 적용해주세요."
+    
+    try:
+        # 임시 생성기로 테스트
+        test_generator = PersonaGenerator(api_provider=api_provider, api_key=api_key.strip())
+        
+        # 간단한 텍스트 생성 테스트
+        test_prompt = "안녕하세요!"
+        response = test_generator._generate_text_with_api(test_prompt)
+        
+        if "오류" in response or "error" in response.lower():
+            return f"❌ API 연결 실패: {response}"
+        
+        provider_name = "Google Gemini" if api_provider == "gemini" else "OpenAI"
+        return f"✅ **{provider_name}** API 연결 성공! 응답 길이: {len(response)}자"
+        
+    except Exception as e:
+        return f"❌ API 테스트 중 오류: {str(e)}"
+
 # 메인 인터페이스 생성
 def create_main_interface():
     # 한글 폰트 설정
@@ -797,6 +867,9 @@ def create_main_interface():
         # 놈팽쓰(MemoryTag): 당신 곁의 사물, 이제 친구가 되다
         일상 속 사물에 AI 페르소나를 부여하여 대화할 수 있게 해주는 서비스입니다.
         """)
+        
+        # API 설정 섹션 추가
+        api_provider, api_key_input, apply_api_btn, test_api_btn, api_status = create_api_config_section()
         
         with gr.Tabs() as tabs:
             # 페르소나 생성 탭
@@ -1063,6 +1136,19 @@ def create_main_interface():
         example_btn3.click(
             fn=lambda: "뭘 좋아해?",
             outputs=[message_input]
+        )
+        
+        # API 설정 이벤트 핸들러
+        apply_api_btn.click(
+            fn=apply_api_configuration,
+            inputs=[api_provider, api_key_input],
+            outputs=[api_status]
+        )
+        
+        test_api_btn.click(
+            fn=test_api_connection,
+            inputs=[api_provider, api_key_input],
+            outputs=[api_status]
         )
         
         # 앱 로드 시 페르소나 목록 로드 (백엔드에서 사용)

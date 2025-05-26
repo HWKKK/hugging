@@ -1,5 +1,6 @@
 gradio==5.31.0
 google-generativeai==0.3.2
+openai==1.54.3
 Pillow==10.3.0
 pillow-avif-plugin==1.4.3
 python-dotenv==1.0.0

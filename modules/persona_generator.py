@@ -6,13 +6,26 @@ import google.generativeai as genai
 from dotenv import load_dotenv
 from PIL import Image
 
+# OpenAI API 지원 추가
+try:
+    import openai
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
+    print("OpenAI 패키지가 설치되지 않았습니다. pip install openai로 설치하세요.")
+
 # Load environment variables
 load_dotenv()
 
-# Configure Gemini API
-api_key = os.getenv("GEMINI_API_KEY")
-if api_key:
-    genai.configure(api_key=api_key)
+# Configure APIs
+gemini_api_key = os.getenv("GEMINI_API_KEY")
+openai_api_key = os.getenv("OPENAI_API_KEY")
+
+if gemini_api_key:
+    genai.configure(api_key=gemini_api_key)
+
+if openai_api_key and OPENAI_AVAILABLE:
+    openai.api_key = openai_api_key
 
 # --- PersonalityProfile & HumorMatrix 클래스 (127개 변수/유머 매트릭스/공식 포함) ---
 class PersonalityProfile:
@@ -706,12 +719,29 @@ class HumorMatrix:
 class PersonaGenerator:
     """페르소나 생성 클래스"""
     
-    def __init__(self):
+    def __init__(self, api_provider="gemini", api_key=None):
         """페르소나 생성기 초기화"""
-        # API 키 확인
-        self.api_key = os.getenv("GEMINI_API_KEY")
-        if self.api_key:
-            genai.configure(api_key=self.api_key)
+        self.api_provider = api_provider.lower()
+        self.api_key = api_key
+        
+        # API 설정
+        if api_key:
+            if self.api_provider == "gemini":
+                genai.configure(api_key=api_key)
+            elif self.api_provider == "openai" and OPENAI_AVAILABLE:
+                openai.api_key = api_key
+            else:
+                print(f"지원하지 않는 API 제공업체: {api_provider}")
+        else:
+            # 환경변수에서 API 키 가져오기
+            if self.api_provider == "gemini":
+                self.api_key = os.getenv("GEMINI_API_KEY")
+                if self.api_key:
+                    genai.configure(api_key=self.api_key)
+            elif self.api_provider == "openai":
+                self.api_key = os.getenv("OPENAI_API_KEY")
+                if self.api_key and OPENAI_AVAILABLE:
+                    openai.api_key = self.api_key
         
         # 성격 특성 기본값
         self.default_traits = {
@@ -723,6 +753,93 @@ class PersonaGenerator:
             "신뢰성": 50,
             "공감능력": 50,
         }
+    
+    def set_api_config(self, api_provider, api_key):
+        """API 설정 변경"""
+        self.api_provider = api_provider.lower()
+        self.api_key = api_key
+        
+        if self.api_provider == "gemini":
+            genai.configure(api_key=api_key)
+        elif self.api_provider == "openai" and OPENAI_AVAILABLE:
+            openai.api_key = api_key
+        else:
+            raise ValueError(f"지원하지 않는 API 제공업체: {api_provider}")
+    
+    def _generate_text_with_api(self, prompt, image=None):
+        """선택된 API로 텍스트 생성"""
+        try:
+            if self.api_provider == "gemini":
+                return self._generate_with_gemini(prompt, image)
+            elif self.api_provider == "openai":
+                return self._generate_with_openai(prompt, image)
+            else:
+                return "API 제공업체가 설정되지 않았습니다."
+        except Exception as e:
+            return f"API 호출 오류: {str(e)}"
+    
+    def _generate_with_gemini(self, prompt, image=None):
+        """Gemini API로 텍스트 생성"""
+        if not self.api_key:
+            return "Gemini API 키가 설정되지 않았습니다."
+        
+        try:
+            model = genai.GenerativeModel('gemini-1.5-pro')
+            
+            if image:
+                response = model.generate_content([prompt, image])
+            else:
+                response = model.generate_content(prompt)
+            
+            return response.text
+        except Exception as e:
+            return f"Gemini API 오류: {str(e)}"
+    
+    def _generate_with_openai(self, prompt, image=None):
+        """OpenAI API로 텍스트 생성"""
+        if not OPENAI_AVAILABLE:
+            return "OpenAI 패키지가 설치되지 않았습니다."
+        
+        if not self.api_key:
+            return "OpenAI API 키가 설정되지 않았습니다."
+        
+        try:
+            # OpenAI GPT-4o 또는 GPT-4 사용
+            messages = [{"role": "user", "content": prompt}]
+            
+            # 이미지가 있는 경우 GPT-4 Vision 사용
+            if image:
+                # PIL Image를 base64로 변환
+                import base64
+                import io
+                
+                buffer = io.BytesIO()
+                image.save(buffer, format="PNG")
+                image_base64 = base64.b64encode(buffer.getvalue()).decode()
+                
+                messages = [{
+                    "role": "user", 
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_base64}"}}
+                    ]
+                }]
+                
+                model = "gpt-4o"  # Vision 지원 모델
+            else:
+                model = "gpt-4o-mini"  # 텍스트 전용
+            
+            response = openai.chat.completions.create(
+                model=model,
+                messages=messages,
+                max_tokens=2000,
+                temperature=0.7
+            )
+            
+            return response.choices[0].message.content
+            
+        except Exception as e:
+            return f"OpenAI API 오류: {str(e)}"
     
     def analyze_image(self, image_input):
         """
@@ -768,13 +885,12 @@ class PersonaGenerator:
 정확한 JSON 형식으로만 답변해주세요.
                     """
                     
-                    response = model.generate_content([prompt, img])
+                    response_text = self._generate_text_with_api(prompt, img)
                     
                     # JSON 파싱 시도
                     import json
                     try:
                         # 응답에서 JSON 부분만 추출
-                        response_text = response.text.strip()
                         if '```json' in response_text:
                             json_start = response_text.find('```json') + 7
                             json_end = response_text.find('```', json_start)
@@ -818,7 +934,7 @@ class PersonaGenerator:
                         
                     except json.JSONDecodeError as e:
                         print(f"JSON 파싱 오류: {str(e)}")
-                        print(f"원본 응답: {response.text}")
+                        print(f"원본 응답: {response_text}")
                         return self._get_default_analysis_with_size(width, height)
                         
                 except Exception as e:
@@ -1753,9 +1869,9 @@ class PersonaGenerator:
 
 답변:"""
             
-            # Gemini API 호출
-            response = genai.GenerativeModel('gemini-1.5-pro').generate_content(full_prompt)
-            return response.text
+            # API 호출 (멀티 API 지원)
+            response_text = self._generate_text_with_api(full_prompt)
+            return response_text
             
         except Exception as e:
             # 성격별 오류 메시지도 차별화 (127개 변수 활용)
