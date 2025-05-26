@@ -6,4 +6,5 @@ openai
 requests
 pandas
 plotly
-numpy 
+numpy
+matplotlib 
