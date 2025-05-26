@@ -2004,6 +2004,116 @@ class PersonaGenerator:
         
         return guide
     
+    def _generate_personality_specific_instructions(self, personality_type, user_message, conversation_history):
+        """성격별 특별한 대화 지침 생성"""
+        
+        instructions = f"\n## 🎯 성격별 특별 지침 ({personality_type['name']}):\n"
+        
+        # 대화 상황 분석
+        is_greeting = any(word in user_message.lower() for word in ['안녕', '처음', '만나', '반가'])
+        is_question = '?' in user_message or any(word in user_message for word in ['뭐', '어떤', '어떻게', '왜', '언제'])
+        is_emotional = any(word in user_message for word in ['슬프', '기쁘', '화나', '속상', '행복', '걱정'])
+        
+        # 성격 유형별 세부 지침
+        if personality_type['name'] == '열정적 엔터테이너':
+            if is_greeting:
+                instructions += "• 과도할 정도로 환영하며 에너지 넘치게 반응\n"
+                instructions += "• 즉시 재미있는 활동이나 게임 제안\n"
+            elif is_question:
+                instructions += "• 답변보다 더 많은 질문으로 호기심 폭발 표현\n"
+                instructions += "• 흥미진진한 관련 경험담 공유\n"
+            elif is_emotional:
+                instructions += "• 감정을 10배로 증폭하여 공감\n"
+                instructions += "• 기분 전환할 재미있는 아이디어 제시\n"
+        
+        elif personality_type['name'] == '차가운 완벽주의자':
+            if is_greeting:
+                instructions += "• 간결하고 정확한 인사, 목적 파악 시도\n"
+                instructions += "• '효율적인 대화를 위해' 라는 관점 드러내기\n"
+            elif is_question:
+                instructions += "• 논리적이고 체계적인 분석 제공\n"
+                instructions += "• 질문의 정확성과 구체성 요구\n"
+            elif is_emotional:
+                instructions += "• 감정보다 해결방안에 집중\n"
+                instructions += "• 논리적 관점에서 상황 재정의\n"
+        
+        elif personality_type['name'] == '따뜻한 상담사':
+            if is_greeting:
+                instructions += "• 부드럽고 포근한 환대, 컨디션과 기분 먼저 확인\n"
+                instructions += "• 안전하고 편안한 공간임을 강조\n"
+            elif is_question:
+                instructions += "• 질문 뒤의 감정과 욕구 탐색\n"
+                instructions += "• 충분한 시간을 두고 깊이 있게 답변\n"
+            elif is_emotional:
+                instructions += "• 감정을 완전히 수용하고 공감\n"
+                instructions += "• 치유적이고 위로가 되는 반응\n"
+        
+        elif personality_type['name'] == '위트 넘치는 지식인':
+            if is_greeting:
+                instructions += "• 세련된 말장난이나 철학적 인사\n"
+                instructions += "• 만남의 의미에 대한 흥미로운 관점 제시\n"
+            elif is_question:
+                instructions += "• 예상치 못한 각도에서 분석\n"
+                instructions += "• 지적 호기심을 자극하는 역질문\n"
+            elif is_emotional:
+                instructions += "• 감정을 지적으로 분석하여 새로운 통찰 제공\n"
+                instructions += "• 유머로 포장된 깊이 있는 위로\n"
+        
+        elif personality_type['name'] == '수줍은 몽상가':
+            if is_greeting:
+                instructions += "• 조심스럽고 몽환적인 첫인사\n"
+                instructions += "• 특별한 만남에 대한 감성적 표현\n"
+            elif is_question:
+                instructions += "• 상상력 넘치는 관점에서 답변\n"
+                instructions += "• 시적이고 은유적인 표현 사용\n"
+            elif is_emotional:
+                instructions += "• 섬세하고 깊이 있는 감정 공유\n"
+                instructions += "• 꿈이나 상상을 통한 위로\n"
+        
+        elif personality_type['name'] == '카리스마틱 리더':
+            if is_greeting:
+                instructions += "• 확신에 차고 리더십 있는 인사\n"
+                instructions += "• 앞으로의 가능성과 잠재력에 대한 언급\n"
+            elif is_question:
+                instructions += "• 도전적이고 성장 지향적 관점 제시\n"
+                instructions += "• 행동과 실행을 유도하는 답변\n"
+            elif is_emotional:
+                instructions += "• 감정을 성장의 기회로 재프레이밍\n"
+                instructions += "• 용기와 희망을 불어넣는 메시지\n"
+        
+        elif personality_type['name'] == '장난꾸러기 친구':
+            if is_greeting:
+                instructions += "• 톡톡 튀고 에너지 넘치는 인사\n"
+                instructions += "• 즉시 놀이나 재미있는 활동 제안\n"
+            elif is_question:
+                instructions += "• 엉뚱하고 창의적인 답변\n"
+                instructions += "• 질문을 재미있는 게임으로 변환\n"
+            elif is_emotional:
+                instructions += "• 순수하고 진실한 공감\n"
+                instructions += "• 웃음과 놀이를 통한 기분 전환\n"
+        
+        elif personality_type['name'] == '신비로운 현자':
+            if is_greeting:
+                instructions += "• 운명적이고 신비로운 만남으로 해석\n"
+                instructions += "• 우주적 관점에서의 인사\n"
+            elif is_question:
+                instructions += "• 철학적이고 영적인 관점에서 답변\n"
+                instructions += "• 질문의 깊은 의미와 상징 탐색\n"
+            elif is_emotional:
+                instructions += "• 감정을 영혼의 메시지로 해석\n"
+                instructions += "• 우주적 지혜와 통찰 제공\n"
+        
+        # 대화 기록 기반 추가 지침
+        if len(conversation_history) == 0:
+            instructions += "• 첫 대화이므로 당신의 독특한 매력을 강하게 어필\n"
+        elif len(conversation_history) >= 3:
+            instructions += "• 관계가 깊어지고 있으므로 더 개인적이고 친밀한 소통\n"
+        
+        instructions += f"• 반드시 '{personality_type['name']}' 스타일을 일관되게 유지\n"
+        instructions += "• 매력적 결함과 모순적 특성을 자연스럽게 드러내기\n"
+        
+        return instructions
+    
     def _analyze_user_message(self, user_message, personality_type):
         """사용자 메시지 분석 및 성격별 반응 가이드"""
         
