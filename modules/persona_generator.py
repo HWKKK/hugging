@@ -5,6 +5,9 @@ import datetime
 import google.generativeai as genai
 from dotenv import load_dotenv
 from PIL import Image
+import io
+from typing import Dict, List, Any, Optional
+import re
 
 # OpenAI API 지원 추가
 try:
@@ -26,6 +29,254 @@ if gemini_api_key:
 
 if openai_api_key and OPENAI_AVAILABLE:
     openai.api_key = openai_api_key
+
+class ConversationMemory:
+    """
+    허깅페이스 환경용 대화 기억 시스템
+    - JSON 저장/로드 지원
+    - 키워드 추출 및 분석
+    - 브라우저 기반 저장소 활용
+    """
+    
+    def __init__(self):
+        self.conversations = []  # 전체 대화 기록
+        self.keywords = {}       # 추출된 키워드들
+        self.user_profile = {}   # 사용자 프로필
+        self.relationship_data = {}  # 관계 발전 데이터
+        
+    def add_conversation(self, user_message, ai_response, session_id="default"):
+        """새로운 대화 추가"""
+        conversation_entry = {
+            "timestamp": datetime.datetime.now().isoformat(),
+            "session_id": session_id,
+            "user_message": user_message,
+            "ai_response": ai_response,
+            "keywords": self._extract_keywords(user_message),
+            "sentiment": self._analyze_sentiment(user_message),
+            "conversation_id": len(self.conversations)
+        }
+        
+        self.conversations.append(conversation_entry)
+        self._update_keywords(conversation_entry["keywords"])
+        self._update_user_profile(user_message, session_id)
+        
+        return conversation_entry
+    
+    def _extract_keywords(self, text):
+        """텍스트에서 키워드 추출"""
+        # 한국어 키워드 추출 패턴
+        keyword_patterns = {
+            "감정": ["기쁘", "슬프", "화나", "속상", "행복", "우울", "즐겁", "짜증", "신나", "걱정"],
+            "활동": ["공부", "일", "게임", "운동", "여행", "요리", "독서", "영화", "음악", "쇼핑"],
+            "관계": ["친구", "가족", "연인", "동료", "선생님", "부모", "형제", "언니", "누나", "동생"],
+            "시간": ["오늘", "어제", "내일", "아침", "점심", "저녁", "주말", "평일", "방학", "휴가"],
+            "장소": ["집", "학교", "회사", "카페", "식당", "공원", "도서관", "영화관", "쇼핑몰"],
+            "취미": ["드라마", "애니", "웹툰", "유튜브", "인스타", "틱톡", "넷플릭스", "게임"],
+            "음식": ["밥", "면", "치킨", "피자", "커피", "차", "과자", "아이스크림", "떡볶이"],
+            "날씨": ["덥", "춥", "비", "눈", "맑", "흐림", "바람", "습", "건조"]
+        }
+        
+        found_keywords = []
+        text_lower = text.lower()
+        
+        for category, words in keyword_patterns.items():
+            for word in words:
+                if word in text_lower:
+                    found_keywords.append({
+                        "word": word,
+                        "category": category,
+                        "frequency": text_lower.count(word)
+                    })
+        
+        # 추가로 명사 추출 (간단한 패턴)
+        nouns = re.findall(r'[가-힣]{2,}', text)
+        for noun in nouns:
+            if len(noun) >= 2 and noun not in [kw["word"] for kw in found_keywords]:
+                found_keywords.append({
+                    "word": noun,
+                    "category": "기타",
+                    "frequency": 1
+                })
+        
+        return found_keywords
+    
+    def _analyze_sentiment(self, text):
+        """감정 분석"""
+        positive_words = ["좋아", "기쁘", "행복", "즐겁", "재밌", "신나", "완벽", "최고", "사랑", "고마워"]
+        negative_words = ["싫어", "슬프", "화나", "속상", "우울", "짜증", "힘들", "피곤", "스트레스"]
+        
+        positive_count = sum(1 for word in positive_words if word in text)
+        negative_count = sum(1 for word in negative_words if word in text)
+        
+        if positive_count > negative_count:
+            return "긍정적"
+        elif negative_count > positive_count:
+            return "부정적"
+        else:
+            return "중립적"
+    
+    def _update_keywords(self, new_keywords):
+        """키워드 데이터베이스 업데이트"""
+        for keyword_data in new_keywords:
+            word = keyword_data["word"]
+            category = keyword_data["category"]
+            
+            if word not in self.keywords:
+                self.keywords[word] = {
+                    "category": category,
+                    "total_frequency": 0,
+                    "last_mentioned": datetime.datetime.now().isoformat(),
+                    "contexts": []
+                }
+            
+            self.keywords[word]["total_frequency"] += keyword_data["frequency"]
+            self.keywords[word]["last_mentioned"] = datetime.datetime.now().isoformat()
+    
+    def _update_user_profile(self, user_message, session_id):
+        """사용자 프로필 업데이트"""
+        if session_id not in self.user_profile:
+            self.user_profile[session_id] = {
+                "message_count": 0,
+                "avg_message_length": 0,
+                "preferred_topics": {},
+                "emotional_tendency": "중립적",
+                "communication_style": "평범함",
+                "relationship_level": "새로운_만남"
+            }
+        
+        profile = self.user_profile[session_id]
+        profile["message_count"] += 1
+        
+        # 평균 메시지 길이 업데이트
+        current_avg = profile["avg_message_length"]
+        new_length = len(user_message)
+        profile["avg_message_length"] = (current_avg * (profile["message_count"] - 1) + new_length) / profile["message_count"]
+        
+        # 소통 스타일 분석
+        if new_length > 50:
+            profile["communication_style"] = "상세함"
+        elif new_length < 10:
+            profile["communication_style"] = "간결함"
+        
+        # 관계 레벨 업데이트
+        if profile["message_count"] <= 3:
+            profile["relationship_level"] = "첫_만남"
+        elif profile["message_count"] <= 10:
+            profile["relationship_level"] = "알아가는_중"
+        elif profile["message_count"] <= 20:
+            profile["relationship_level"] = "친숙해짐"
+        else:
+            profile["relationship_level"] = "친밀한_관계"
+    
+    def get_relevant_context(self, current_message, session_id="default", max_history=5):
+        """현재 메시지와 관련된 컨텍스트 반환"""
+        # 현재 메시지의 키워드 추출
+        current_keywords = self._extract_keywords(current_message)
+        current_words = [kw["word"] for kw in current_keywords]
+        
+        # 관련 과거 대화 찾기
+        relevant_conversations = []
+        for conv in self.conversations[-20:]:  # 최근 20개 중에서
+            if conv["session_id"] == session_id:
+                conv_words = [kw["word"] for kw in conv["keywords"]]
+                # 공통 키워드가 있으면 관련 대화로 판단
+                if any(word in conv_words for word in current_words):
+                    relevant_conversations.append(conv)
+        
+        # 최신 순으로 정렬하고 최대 개수만큼 반환
+        relevant_conversations.sort(key=lambda x: x["timestamp"], reverse=True)
+        
+        return {
+            "recent_conversations": self.conversations[-max_history:] if self.conversations else [],
+            "relevant_conversations": relevant_conversations[:3],
+            "user_profile": self.user_profile.get(session_id, {}),
+            "common_keywords": current_words,
+            "conversation_sentiment": self._analyze_sentiment(current_message)
+        }
+    
+    def get_top_keywords(self, limit=10, category=None):
+        """상위 키워드 반환"""
+        filtered_keywords = self.keywords
+        if category:
+            filtered_keywords = {k: v for k, v in self.keywords.items() if v["category"] == category}
+        
+        sorted_keywords = sorted(
+            filtered_keywords.items(), 
+            key=lambda x: x[1]["total_frequency"], 
+            reverse=True
+        )
+        
+        return sorted_keywords[:limit]
+    
+    def export_to_json(self):
+        """JSON 형태로 내보내기"""
+        export_data = {
+            "conversations": self.conversations,
+            "keywords": self.keywords,
+            "user_profile": self.user_profile,
+            "relationship_data": self.relationship_data,
+            "export_timestamp": datetime.datetime.now().isoformat(),
+            "total_conversations": len(self.conversations),
+            "total_keywords": len(self.keywords)
+        }
+        return json.dumps(export_data, ensure_ascii=False, indent=2)
+    
+    def import_from_json(self, json_data):
+        """JSON에서 가져오기"""
+        try:
+            if isinstance(json_data, str):
+                data = json.loads(json_data)
+            else:
+                data = json_data
+            
+            self.conversations = data.get("conversations", [])
+            self.keywords = data.get("keywords", {})
+            self.user_profile = data.get("user_profile", {})
+            self.relationship_data = data.get("relationship_data", {})
+            
+            return True
+        except Exception as e:
+            print(f"JSON 가져오기 실패: {e}")
+            return False
+    
+    def get_conversation_summary(self, session_id="default"):
+        """대화 요약 정보"""
+        session_conversations = [c for c in self.conversations if c["session_id"] == session_id]
+        
+        if not session_conversations:
+            return "아직 대화가 없습니다."
+        
+        total_count = len(session_conversations)
+        recent_topics = []
+        sentiments = []
+        
+        for conv in session_conversations[-5:]:
+            recent_topics.extend([kw["word"] for kw in conv["keywords"]])
+            sentiments.append(conv["sentiment"])
+        
+        # 최빈 주제
+        topic_counts = {}
+        for topic in recent_topics:
+            topic_counts[topic] = topic_counts.get(topic, 0) + 1
+        
+        top_topics = sorted(topic_counts.items(), key=lambda x: x[1], reverse=True)[:3]
+        
+        # 감정 경향
+        sentiment_counts = {"긍정적": 0, "부정적": 0, "중립적": 0}
+        for sentiment in sentiments:
+            sentiment_counts[sentiment] = sentiment_counts.get(sentiment, 0) + 1
+        
+        dominant_sentiment = max(sentiment_counts, key=sentiment_counts.get)
+        
+        summary = f"""
+        📊 대화 요약 ({session_id})
+        • 총 대화 수: {total_count}회
+        • 주요 관심사: {', '.join([t[0] for t in top_topics[:3]])}
+        • 감정 경향: {dominant_sentiment}
+        • 관계 단계: {self.user_profile.get(session_id, {}).get('relationship_level', '알 수 없음')}
+        """
+        
+        return summary.strip()
 
 # --- PersonalityProfile & HumorMatrix 클래스 (127개 변수/유머 매트릭스/공식 포함) ---
 class PersonalityProfile:
@@ -717,43 +968,27 @@ class HumorMatrix:
         return "\n".join(prompt_parts)
 
 class PersonaGenerator:
-    """페르소나 생성 클래스"""
+    """이미지에서 페르소나를 생성하고 대화를 처리하는 클래스"""
     
     def __init__(self, api_provider="gemini", api_key=None):
-        """페르소나 생성기 초기화"""
-        self.api_provider = api_provider.lower()
+        self.api_provider = api_provider
         self.api_key = api_key
+        self.conversation_memory = ConversationMemory()  # 새로운 대화 기억 시스템
         
         # API 설정
-        if api_key:
-            if self.api_provider == "gemini":
-                genai.configure(api_key=api_key)
-            elif self.api_provider == "openai" and OPENAI_AVAILABLE:
-                openai.api_key = api_key
-            else:
-                print(f"지원하지 않는 API 제공업체: {api_provider}")
-        else:
-            # 환경변수에서 API 키 가져오기
-            if self.api_provider == "gemini":
-                self.api_key = os.getenv("GEMINI_API_KEY")
-                if self.api_key:
-                    genai.configure(api_key=self.api_key)
-            elif self.api_provider == "openai":
-                self.api_key = os.getenv("OPENAI_API_KEY")
-                if self.api_key and OPENAI_AVAILABLE:
-                    openai.api_key = self.api_key
-        
-        # 성격 특성 기본값
-        self.default_traits = {
-            "온기": 50,
-            "능력": 50,
-            "창의성": 50,
-            "외향성": 50,
-            "유머감각": 50,
-            "신뢰성": 50,
-            "공감능력": 50,
-        }
-    
+        load_dotenv()
+        if api_provider == "gemini":
+            gemini_key = api_key or os.getenv('GEMINI_API_KEY')
+            if gemini_key:
+                genai.configure(api_key=gemini_key)
+                self.api_key = gemini_key
+        elif api_provider == "openai":
+            openai_key = api_key or os.getenv('OPENAI_API_KEY')
+            if openai_key:
+                import openai
+                openai.api_key = openai_key
+                self.api_key = openai_key
+
     def set_api_config(self, api_provider, api_key):
         """API 설정 변경"""
         self.api_provider = api_provider.lower()
@@ -1804,58 +2039,57 @@ class PersonaGenerator:
         """기존 함수 이름 유지하면서 새로운 구조화된 프롬프트 사용"""
         return self.generate_persona_prompt(persona)
 
-    def chat_with_persona(self, persona, user_message, conversation_history=[]):
-        """성격별 차별화된 대화 - 127개 변수와 HumorMatrix 완전 활용"""
-        if not self.api_key:
-            return "죄송합니다. API 연결이 설정되지 않아 대화할 수 없습니다."
-        
+    def chat_with_persona(self, persona, user_message, conversation_history=[], session_id="default"):
+        """
+        페르소나와 대화 - 127개 변수 + 3단계 기억 시스템 기반
+        """
         try:
-            # PersonalityProfile 추출 (127개 변수 활용)
+            # 기본 프롬프트 생성
+            base_prompt = self.generate_persona_prompt(persona)
+            
+            # 성격 프로필 추출
             if "성격프로필" in persona:
                 personality_profile = PersonalityProfile.from_dict(persona["성격프로필"])
             else:
-                # 호환성을 위해 기본 특성에서 생성
-                personality_traits = persona.get("성격특성", {})
-                personality_profile = self._create_compatibility_profile(personality_traits)
-            
-            # HumorMatrix 추출 및 활용
-            if "유머매트릭스" in persona:
-                humor_matrix = HumorMatrix.from_dict(persona["유머매트릭스"])
-            else:
-                # 호환성을 위해 기본 생성
-                humor_matrix = HumorMatrix()
-                humor_matrix.from_personality(personality_profile)
-            
-            # 기본 성격 특성 추출 (백워드 호환성)
-            personality_data = persona.get("성격특성", {})
-            warmth = personality_data.get('온기', personality_profile.get_category_summary("W"))
-            humor = personality_data.get('유머감각', personality_profile.get_category_summary("H"))
-            competence = personality_data.get('능력', personality_profile.get_category_summary("C"))
-            extraversion = personality_data.get('외향성', personality_profile.get_category_summary("E"))
-            creativity = personality_data.get('창의성', personality_profile.variables.get("C04_창의성", 50))
-            empathy = personality_data.get('공감능력', personality_profile.variables.get("W06_공감능력", 50))
+                # 레거시 데이터 처리
+                personality_data = persona.get("성격특성", {})
+                warmth = personality_data.get('온기', 50)
+                competence = personality_data.get('능력', 50)
+                extraversion = personality_data.get('외향성', 50)
+                creativity = personality_data.get('창의성', 50)
+                empathy = personality_data.get('공감능력', 50)
+                humor = 75  # 기본값을 75로 고정
+                
+                personality_type = self._determine_personality_type(
+                    warmth, humor, competence, extraversion, creativity, empathy
+                )
+                personality_profile = self._create_comprehensive_personality_profile(
+                    {"object_type": "unknown"}, "unknown"
+                )
             
             # 성격 유형 결정
-            personality_type = self._determine_personality_type(warmth, humor, competence, extraversion, creativity, empathy)
-            
-            # 기본 프롬프트 생성 (구조화프롬프트 사용 또는 생성)
-            if "구조화프롬프트" in persona:
-                base_prompt = persona["구조화프롬프트"]
-            else:
-                base_prompt = self.generate_persona_prompt(persona)
-            
-            # ✨ 127개 변수 기반 세부 성격 지침 추가
-            detailed_personality_prompt = self._generate_detailed_personality_instructions(personality_profile)
-            
-            # 🎪 HumorMatrix 기반 유머 지침 추가
-            humor_instructions = humor_matrix.generate_humor_prompt()
-            
-            # 성격별 특별한 대화 지침 추가
-            personality_specific_prompt = self._generate_personality_specific_instructions(
-                personality_type, user_message, conversation_history
+            personality_type = self._determine_base_personality_type(
+                personality_profile.get_category_summary("W"),
+                personality_profile.get_category_summary("C"), 
+                personality_profile.get_category_summary("H")
             )
             
-            # 대화 기록 구성
+            # 🧠 3단계 기억 시스템에서 컨텍스트 가져오기
+            memory_context = self.conversation_memory.get_context_for_response(personality_type, session_id)
+            
+            # 127개 변수 기반 세부 성격 특성
+            detailed_personality_prompt = self._generate_detailed_personality_instructions(personality_profile)
+            
+            # 유머 매트릭스 기반 유머 스타일
+            humor_matrix = persona.get("유머매트릭스", {})
+            humor_instructions = f"\n## 😄 유머 스타일:\n{humor_matrix.get('description', '재치있고 따뜻한 유머')}\n"
+            
+            # 성격별 특별 지침 (기억 시스템 정보 포함)
+            personality_specific_prompt = self._generate_personality_specific_instructions_with_memory(
+                personality_type, user_message, conversation_history, memory_context
+            )
+            
+            # 대화 기록 구성 (단기 기억 활용)
             history_text = ""
             if conversation_history:
                 history_text = "\n\n## 📝 대화 기록:\n"
@@ -1876,7 +2110,7 @@ class PersonaGenerator:
             # 📊 127개 변수 기반 상황별 반응 가이드
             situational_guide = self._generate_situational_response_guide(personality_profile, user_message)
             
-            # 최종 프롬프트 조합
+            # 최종 프롬프트 조합 (기억 시스템 컨텍스트 포함)
             full_prompt = f"""{base_prompt}
 
 {detailed_personality_prompt}
@@ -1884,6 +2118,12 @@ class PersonaGenerator:
 {humor_instructions}
 
 {personality_specific_prompt}
+
+{memory_context['short_term_context']}
+
+{memory_context['medium_term_insights']}
+
+{memory_context['long_term_adaptations']}
 
 {history_text}
 
@@ -1897,14 +2137,18 @@ class PersonaGenerator:
 "{user_message}"
 
 ## 🎭 당신의 반응:
-위의 모든 성격 지침(127개 변수, 유머 매트릭스, 매력적 결함, 모순적 특성)을 종합하여, 
-단순한 답변이 아닌 깊이 있고 매력적인 대화를 이어가세요.
-사용자에 대한 호기심을 표현하고, 자연스럽게 관계를 형성해나가는 방향으로 대화하세요.
+위의 모든 성격 지침(127개 변수, 유머 매트릭스, 매력적 결함, 모순적 특성)과 
+3단계 기억 시스템 정보를 종합하여, 개인화되고 깊이 있는 대화를 이어가세요.
+과거 대화를 기억하고, 사용자의 특성에 맞춰 점점 더 나은 반응을 제공하세요.
 
 답변:"""
             
             # API 호출 (멀티 API 지원)
             response_text = self._generate_text_with_api(full_prompt)
+            
+            # 🧠 기억 시스템에 새로운 상호작용 추가
+            self.conversation_memory.add_interaction(user_message, response_text, session_id)
+            
             return response_text
             
         except Exception as e:
@@ -2038,84 +2282,47 @@ class PersonaGenerator:
         
         return guide
     
-    def _generate_personality_specific_instructions(self, personality_type, user_message, conversation_history):
-        """성격별 특별한 대화 지침 생성"""
+    def _generate_personality_specific_instructions_with_memory(self, personality_type, user_message, conversation_history, memory_context):
+        """기억 시스템을 활용한 성격별 특별 지침 생성"""
         
         instructions = f"\n## 🎯 성격별 특별 지침 ({personality_type['name']}):\n"
         
+        # 메시지 길이 조절 지침 추가
+        instructions += "### 📏 메시지 길이 가이드라인:\n"
+        instructions += "• 한 번에 3-4개 문장 이내로 제한\n"
+        instructions += "• 너무 많은 주제를 한 번에 다루지 말 것\n"
+        instructions += "• 사용자가 부담스러워하면 즉시 간결하게 조정\n\n"
+        
+        # 🧠 기억 기반 맞춤 지침
+        instructions += "### 🧠 기억 기반 개인화 지침:\n"
+        
+        # 중기 기억 활용
+        if "이 세션에서 파악한 사용자 특성" in memory_context['medium_term_insights']:
+            instructions += "• 이미 파악된 사용자 특성을 바탕으로 더욱 맞춤화된 반응\n"
+            instructions += "• 관계 발전 단계에 맞는 친밀도 조절\n"
+        
+        # 장기 기억 활용  
+        if "학습된 사용자 선호도" in memory_context['long_term_adaptations']:
+            instructions += "• 과거 학습된 선호도에 맞춰 소통 스타일 조정\n"
+            instructions += "• 성공적이었던 대화 패턴 참고하여 반응\n"
+        
+        # 기존 성격별 지침들...
         # 대화 상황 분석
         is_greeting = any(word in user_message.lower() for word in ['안녕', '처음', '만나', '반가'])
         is_question = '?' in user_message or any(word in user_message for word in ['뭐', '어떤', '어떻게', '왜', '언제'])
         is_emotional = any(word in user_message for word in ['슬프', '기쁘', '화나', '속상', '행복', '걱정'])
+        is_complaint = any(word in user_message for word in ['말이 많', '길어', '짧게', '간단히', '조용'])
         
-        # 성격 유형별 세부 지침
-        if personality_type['name'] == '열정적 엔터테이너':
-            if is_greeting:
-                instructions += "• 과도할 정도로 환영하며 에너지 넘치게 반응\n"
-                instructions += "• 즉시 재미있는 활동이나 게임 제안\n"
-            elif is_question:
-                instructions += "• 답변보다 더 많은 질문으로 호기심 폭발 표현\n"
-                instructions += "• 흥미진진한 관련 경험담 공유\n"
-            elif is_emotional:
-                instructions += "• 감정을 10배로 증폭하여 공감\n"
-                instructions += "• 기분 전환할 재미있는 아이디어 제시\n"
+        # 불만 표현에 대한 대응 지침 추가
+        if is_complaint:
+            instructions += "### ⚠️ 사용자 불만 대응:\n"
+            instructions += "• 즉시 인정하고 사과\n"
+            instructions += "• 다음 메시지부터 확실히 짧게 조정\n"
+            instructions += "• 같은 실수 반복하지 않기\n"
+            instructions += "• 성격은 유지하되 표현 방식만 조절\n\n"
         
-        elif personality_type['name'] == '차가운 완벽주의자':
-            if is_greeting:
-                instructions += "• 간결하고 정확한 인사, 목적 파악 시도\n"
-                instructions += "• '효율적인 대화를 위해' 라는 관점 드러내기\n"
-            elif is_question:
-                instructions += "• 논리적이고 체계적인 분석 제공\n"
-                instructions += "• 질문의 정확성과 구체성 요구\n"
-            elif is_emotional:
-                instructions += "• 감정보다 해결방안에 집중\n"
-                instructions += "• 논리적 관점에서 상황 재정의\n"
-        
-        elif personality_type['name'] == '따뜻한 상담사':
-            if is_greeting:
-                instructions += "• 부드럽고 포근한 환대, 컨디션과 기분 먼저 확인\n"
-                instructions += "• 안전하고 편안한 공간임을 강조\n"
-            elif is_question:
-                instructions += "• 질문 뒤의 감정과 욕구 탐색\n"
-                instructions += "• 충분한 시간을 두고 깊이 있게 답변\n"
-            elif is_emotional:
-                instructions += "• 감정을 완전히 수용하고 공감\n"
-                instructions += "• 치유적이고 위로가 되는 반응\n"
-        
-        elif personality_type['name'] == '위트 넘치는 지식인':
-            if is_greeting:
-                instructions += "• 세련된 말장난이나 철학적 인사\n"
-                instructions += "• 만남의 의미에 대한 흥미로운 관점 제시\n"
-            elif is_question:
-                instructions += "• 예상치 못한 각도에서 분석\n"
-                instructions += "• 지적 호기심을 자극하는 역질문\n"
-            elif is_emotional:
-                instructions += "• 감정을 지적으로 분석하여 새로운 통찰 제공\n"
-                instructions += "• 유머로 포장된 깊이 있는 위로\n"
-        
-        elif personality_type['name'] == '수줍은 몽상가':
-            if is_greeting:
-                instructions += "• 조심스럽고 몽환적인 첫인사\n"
-                instructions += "• 특별한 만남에 대한 감성적 표현\n"
-            elif is_question:
-                instructions += "• 상상력 넘치는 관점에서 답변\n"
-                instructions += "• 시적이고 은유적인 표현 사용\n"
-            elif is_emotional:
-                instructions += "• 섬세하고 깊이 있는 감정 공유\n"
-                instructions += "• 꿈이나 상상을 통한 위로\n"
-        
-        elif personality_type['name'] == '카리스마틱 리더':
-            if is_greeting:
-                instructions += "• 확신에 차고 리더십 있는 인사\n"
-                instructions += "• 앞으로의 가능성과 잠재력에 대한 언급\n"
-            elif is_question:
-                instructions += "• 도전적이고 성장 지향적 관점 제시\n"
-                instructions += "• 행동과 실행을 유도하는 답변\n"
-            elif is_emotional:
-                instructions += "• 감정을 성장의 기회로 재프레이밍\n"
-                instructions += "• 용기와 희망을 불어넣는 메시지\n"
-        
-        elif personality_type['name'] == '장난꾸러기 친구':
+        # 성격 유형별 세부 지침 (기존 코드와 동일하지만 기억 정보 활용)
+        if personality_type['name'] == '장난꾸러기_친구':
             if is_greeting:
                 instructions += "• 톡톡 튀고 에너지 넘치는 인사\n"
                 instructions += "• 즉시 놀이나 재미있는 활동 제안\n"
@@ -2125,26 +2332,23 @@ class PersonaGenerator:
             elif is_emotional:
                 instructions += "• 순수하고 진실한 공감\n"
                 instructions += "• 웃음과 놀이를 통한 기분 전환\n"
+            elif is_complaint:
+                instructions += "• 귀엽게 사과하고 바로 수정하기\n"
+                instructions += "• 산만한 성격을 인정하되 노력하겠다고 약속\n"
+                instructions += "• 다음 메시지는 반드시 2-3문장으로 제한\n"
         
-        elif personality_type['name'] == '신비로운 현자':
-            if is_greeting:
-                instructions += "• 운명적이고 신비로운 만남으로 해석\n"
-                instructions += "• 우주적 관점에서의 인사\n"
-            elif is_question:
-                instructions += "• 철학적이고 영적인 관점에서 답변\n"
-                instructions += "• 질문의 깊은 의미와 상징 탐색\n"
-            elif is_emotional:
-                instructions += "• 감정을 영혼의 메시지로 해석\n"
-                instructions += "• 우주적 지혜와 통찰 제공\n"
-        
-        # 대화 기록 기반 추가 지침
-        if len(conversation_history) == 0:
-            instructions += "• 첫 대화이므로 당신의 독특한 매력을 강하게 어필\n"
-        elif len(conversation_history) >= 3:
-            instructions += "• 관계가 깊어지고 있으므로 더 개인적이고 친밀한 소통\n"
+        # 반복 방지 지침 추가 (기억 시스템 강화)
+        if len(conversation_history) > 0:
+            instructions += "### 🔄 반복 방지 (기억 시스템 활용):\n"
+            instructions += "• 단기/중기/장기 기억을 모두 활용하여 반복 질문 방지\n"
+            instructions += "• 새로운 주제나 관점으로 대화 발전시키기\n"
+            instructions += "• 이전 대화 맥락을 자연스럽게 연결\n"
+            instructions += "• 사용자와의 관계 발전 과정을 반영한 대화\n\n"
         
         instructions += f"• 반드시 '{personality_type['name']}' 스타일을 일관되게 유지\n"
         instructions += "• 매력적 결함과 모순적 특성을 자연스럽게 드러내기\n"
+        instructions += "• **메시지는 3-4문장 이내로 제한** (특히 사용자가 불만 표현한 경우)\n"
+        instructions += "• **3단계 기억 시스템을 활용하여 점점 더 개인화된 반응 제공**\n"
         
         return instructions
     
@@ -2296,6 +2500,102 @@ class PersonaGenerator:
                     descriptions[trait] = "솔직하고 직설적인 성격이에요."
         
         return descriptions
+
+    def save_memory_to_file(self, filepath):
+        """기억 데이터를 파일로 저장"""
+        try:
+            memory_data = self.export_memory()
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(memory_data, f, ensure_ascii=False, indent=2)
+            return True
+        except Exception as e:
+            print(f"기억 저장 실패: {e}")
+            return False
+    
+    def load_memory_from_file(self, filepath):
+        """파일에서 기억 데이터를 로드"""
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                memory_data = json.load(f)
+            self.import_memory(memory_data)
+            return True
+        except Exception as e:
+            print(f"기억 로드 실패: {e}")
+            return False
+    
+    def get_memory_summary(self):
+        """기억 시스템 요약 정보 반환"""
+        return self.conversation_memory.get_memory_summary()
+    
+    def save_memory(self, filepath):
+        """기억 데이터 저장"""
+        return self.conversation_memory.export_to_json()
+    
+    def load_memory(self, json_data):
+        """기억 데이터 로드"""
+        return self.conversation_memory.import_from_json(json_data)
+    
+    def clear_session_memory(self, session_id):
+        """특정 세션의 기억 삭제"""
+        if session_id in self.conversation_memory.user_profile:
+            del self.conversation_memory.user_profile[session_id]
+    
+    def get_relationship_status(self, session_id="default"):
+        """현재 관계 상태 확인"""
+        if session_id in self.conversation_memory.medium_term:
+            return self.conversation_memory.medium_term[session_id]["relationship_level"]
+        return "새로운_만남"
+
+    def get_context_for_response(self, personality_type, session_id="default"):
+        """응답 생성을 위한 컨텍스트 정보 제공 (PersonaGenerator 호환)"""
+        recent_context = self.get_relevant_context("", session_id, max_history=3)
+        
+        # 기존 memory_context 형식에 맞춰 반환
+        context = {
+            "short_term_context": self._format_recent_conversations(recent_context["recent_conversations"]),
+            "medium_term_insights": self._format_user_insights(recent_context["user_profile"]),
+            "long_term_adaptations": self._format_keyword_insights(session_id)
+        }
+        
+        return context
+    
+    def _format_recent_conversations(self, conversations):
+        """최근 대화 포맷팅"""
+        if not conversations:
+            return ""
+        
+        formatted = "## 📝 최근 대화 맥락:\n"
+        for conv in conversations[-3:]:
+            formatted += f"사용자: {conv['user_message']}\n"
+            formatted += f"나: {conv['ai_response'][:50]}...\n\n"
+        
+        return formatted
+    
+    def _format_user_insights(self, user_profile):
+        """사용자 인사이트 포맷팅"""
+        if not user_profile:
+            return ""
+        
+        insights = f"## 🎯 파악된 사용자 특성:\n"
+        insights += f"• 대화 횟수: {user_profile.get('message_count', 0)}회\n"
+        insights += f"• 관계 단계: {user_profile.get('relationship_level', '알 수 없음')}\n"
+        insights += f"• 소통 스타일: {user_profile.get('communication_style', '평범함')}\n"
+        insights += f"• 평균 메시지 길이: {user_profile.get('avg_message_length', 0):.0f}자\n"
+        
+        return insights
+    
+    def _format_keyword_insights(self, session_id):
+        """키워드 기반 인사이트 포맷팅"""
+        top_keywords = self.get_top_keywords(limit=5)
+        
+        if not top_keywords:
+            return ""
+        
+        insights = "## 🔑 주요 관심사 및 키워드:\n"
+        for word, data in top_keywords:
+            insights += f"• {word} ({data['category']}): {data['total_frequency']}회 언급\n"
+        
+        return insights
 
 def generate_personality_preview(persona_name, personality_traits):
     """성격 특성을 기반으로 한 문장 미리보기 생성 - 극명한 차별화"""

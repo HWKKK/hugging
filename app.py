@@ -16,6 +16,10 @@ import PIL.ImageDraw
 import random
 import copy
 from modules.persona_generator import PersonaGenerator, PersonalityProfile, HumorMatrix
+import pandas as pd
+import plotly.graph_objects as go
+import plotly.express as px
+from plotly.subplots import make_subplots
 
 # AVIF 지원을 위한 플러그인 활성화
 try:
@@ -622,7 +626,7 @@ def export_persona_to_json(persona):
         
         # JSON 파일 생성
         persona_name = persona_copy.get("기본정보", {}).get("이름", "persona")
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"{persona_name}_{timestamp}.json"
         
         # 임시 파일 생성
@@ -650,70 +654,45 @@ def export_persona_to_json(persona):
 #     return None, "이 기능은 더 이상 사용하지 않습니다. JSON 업로드를 사용하세요.", {}, {}, None, [], [], [], ""
 
 def chat_with_loaded_persona(persona, user_message, chat_history=None, api_provider="gemini", api_key=None):
-    """현재 로드된 페르소나와 대화 - 동적 API 설정 적용"""
+    """페르소나와 채팅 (3단계 기억 시스템 활용)"""
     
-    if not persona:
-        return chat_history or [], ""
-    
-    if not user_message.strip():
-        return chat_history or [], ""
+    if chat_history is None:
+        chat_history = []
     
     try:
-        # API 설정이 제공된 경우 동적으로 PersonaGenerator 생성
-        if api_key and api_key.strip():
-            generator = PersonaGenerator(api_provider=api_provider, api_key=api_key.strip())
+        # 글로벌 persona_generator 사용 (API 설정이 적용된 상태)
+        generator = persona_generator
+        if generator is None:
+            generator = PersonaGenerator(api_provider=api_provider, api_key=api_key)
         else:
-            # 글로벌 persona_generator 사용 (기본 설정)
-            global persona_generator
-            if persona_generator is None:
-                persona_generator = PersonaGenerator()
-            generator = persona_generator
+            # API 설정 업데이트
+            generator.set_api_config(api_provider, api_key)
         
-        # 대화 기록을 올바른 형태로 변환 (Gradio 5.x messages 형태)
+        # 대화 기록 변환
         conversation_history = []
-        if chat_history:
-            for message in chat_history:
-                if isinstance(message, dict) and "role" in message and "content" in message:
-                    # 이미 올바른 messages 형태
-                    conversation_history.append(message)
-                elif isinstance(message, (list, tuple)) and len(message) >= 2:
-                    # 이전 버전의 tuple 형태 처리
-                    conversation_history.append({"role": "user", "content": message[0]})
-                    conversation_history.append({"role": "assistant", "content": message[1]})
+        for message in chat_history:
+            if isinstance(message, tuple):
+                conversation_history.append(message)
+            else:
+                conversation_history.append({"role": "user", "content": message[0]})
+                conversation_history.append({"role": "assistant", "content": message[1]})
         
-        # 페르소나와 대화 (설정된 API 사용)
-        response = generator.chat_with_persona(persona, user_message, conversation_history)
+        # 🧠 세션 ID 생성 (페르소나 이름 기반)
+        persona_name = persona.get("기본정보", {}).get("이름", "알 수 없는 페르소나")
+        session_id = f"{persona_name}_{hash(str(persona)) % 10000}"  # 간단한 세션 ID
         
-        # 새로운 대화를 messages 형태로 추가
-        if chat_history is None:
-            chat_history = []
+        # 페르소나와 채팅 (3단계 기억 시스템 활용)
+        response = generator.chat_with_persona(persona, user_message, conversation_history, session_id)
         
-        # Gradio 5.31.0 messages 형식: 각 메시지는 별도로 추가
-        new_history = chat_history.copy()
-        new_history.append({"role": "user", "content": user_message})
-        new_history.append({"role": "assistant", "content": response})
+        # 채팅 기록 업데이트
+        chat_history.append((user_message, response))
         
-        return new_history, ""
+        return chat_history, ""
         
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        
-        # API 키가 없거나 잘못된 경우의 에러 메시지
-        if not api_key or not api_key.strip():
-            error_response = "😅 API 키가 설정되지 않았어요! 상단의 '🔧 API 설정'에서 Gemini 또는 OpenAI API 키를 입력해주세요."
-        else:
-            error_response = f"😓 API 연결에 문제가 있어요: {str(e)}"
-        
-        if chat_history is None:
-            chat_history = []
-        
-        # 에러 메시지도 올바른 형식으로 추가
-        new_history = chat_history.copy()
-        new_history.append({"role": "user", "content": user_message})
-        new_history.append({"role": "assistant", "content": error_response})
-        
-        return new_history, ""
+        error_message = f"채팅 중 오류가 발생했습니다: {str(e)}"
+        chat_history.append((user_message, "앗, 미안해... 뭔가 문제가 생긴 것 같아... 😅"))
+        return chat_history, ""
 
 def import_persona_from_json(json_file):
     """JSON 파일에서 페르소나 가져오기"""
@@ -889,6 +868,134 @@ def test_api_connection(api_provider, api_key):
         
     except Exception as e:
         return f"❌ API 테스트 중 오류: {str(e)}"
+
+def export_conversation_history():
+    """대화 기록을 JSON으로 내보내기"""
+    global persona_generator
+    if persona_generator and hasattr(persona_generator, 'conversation_memory'):
+        json_data = persona_generator.conversation_memory.export_to_json()
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"conversation_history_{timestamp}.json"
+        return json_data, filename
+    else:
+        return None, "conversation_empty.json"
+
+def import_conversation_history(json_file):
+    """JSON에서 대화 기록 가져오기"""
+    global persona_generator
+    try:
+        if json_file is None:
+            return "파일을 선택해주세요."
+        
+        # 파일 내용 읽기
+        content = json_file.read().decode('utf-8')
+        
+        # persona_generator 초기화 확인
+        if persona_generator is None:
+            persona_generator = PersonaGenerator()
+        
+        # 대화 기록 가져오기
+        success = persona_generator.conversation_memory.import_from_json(content)
+        
+        if success:
+            summary = persona_generator.conversation_memory.get_conversation_summary()
+            return f"✅ 대화 기록을 성공적으로 가져왔습니다!\n\n{summary}"
+        else:
+            return "❌ 파일 형식이 올바르지 않습니다."
+    
+    except Exception as e:
+        return f"❌ 가져오기 실패: {str(e)}"
+
+def show_conversation_analytics():
+    """대화 분석 결과 표시"""
+    global persona_generator
+    if not persona_generator or not hasattr(persona_generator, 'conversation_memory'):
+        return "분석할 대화가 없습니다."
+    
+    memory = persona_generator.conversation_memory
+    
+    # 기본 통계
+    analytics = f"## 📊 대화 분석 리포트\n\n"
+    analytics += f"### 🔢 기본 통계\n"
+    analytics += f"• 총 대화 수: {len(memory.conversations)}회\n"
+    analytics += f"• 키워드 수: {len(memory.keywords)}개\n"
+    analytics += f"• 활성 세션: {len(memory.user_profile)}개\n\n"
+    
+    # 상위 키워드
+    top_keywords = memory.get_top_keywords(limit=10)
+    if top_keywords:
+        analytics += f"### 🔑 상위 키워드 TOP 10\n"
+        for i, (word, data) in enumerate(top_keywords, 1):
+            analytics += f"{i}. **{word}** ({data['category']}) - {data['total_frequency']}회\n"
+        analytics += "\n"
+    
+    # 카테고리별 키워드
+    categories = {}
+    for word, data in memory.keywords.items():
+        category = data['category']
+        if category not in categories:
+            categories[category] = []
+        categories[category].append((word, data['total_frequency']))
+    
+    analytics += f"### 📂 카테고리별 관심사\n"
+    for category, words in categories.items():
+        top_words = sorted(words, key=lambda x: x[1], reverse=True)[:3]
+        word_list = ", ".join([f"{word}({freq})" for word, freq in top_words])
+        analytics += f"**{category}**: {word_list}\n"
+    
+    analytics += "\n"
+    
+    # 최근 감정 경향
+    if memory.conversations:
+        recent_sentiments = [conv['sentiment'] for conv in memory.conversations[-10:]]
+        sentiment_counts = {"긍정적": 0, "부정적": 0, "중립적": 0}
+        for sentiment in recent_sentiments:
+            sentiment_counts[sentiment] = sentiment_counts.get(sentiment, 0) + 1
+        
+        analytics += f"### 😊 최근 감정 경향 (최근 10회)\n"
+        for sentiment, count in sentiment_counts.items():
+            percentage = (count / len(recent_sentiments)) * 100
+            analytics += f"• {sentiment}: {count}회 ({percentage:.1f}%)\n"
+    
+    return analytics
+
+def get_keyword_suggestions(current_message=""):
+    """현재 메시지 기반 키워드 제안"""
+    global persona_generator
+    if not persona_generator or not hasattr(persona_generator, 'conversation_memory'):
+        return "키워드 분석을 위한 대화 기록이 없습니다."
+    
+    memory = persona_generator.conversation_memory
+    
+    if current_message:
+        # 현재 메시지에서 키워드 추출
+        extracted = memory._extract_keywords(current_message)
+        suggestions = f"## 🎯 '{current_message}'에서 추출된 키워드\n\n"
+        
+        if extracted:
+            for kw in extracted:
+                suggestions += f"• **{kw['word']}** ({kw['category']}) - {kw['frequency']}회\n"
+        else:
+            suggestions += "추출된 키워드가 없습니다.\n"
+        
+        # 관련 과거 대화 찾기
+        context = memory.get_relevant_context(current_message)
+        if context["relevant_conversations"]:
+            suggestions += f"\n### 🔗 관련된 과거 대화\n"
+            for conv in context["relevant_conversations"][:3]:
+                suggestions += f"• {conv['user_message'][:30]}... (감정: {conv['sentiment']})\n"
+        
+        return suggestions
+    else:
+        # 전체 키워드 요약
+        top_keywords = memory.get_top_keywords(limit=15)
+        if top_keywords:
+            suggestions = "## 🔑 전체 키워드 요약\n\n"
+            for word, data in top_keywords:
+                suggestions += f"• **{word}** ({data['category']}) - {data['total_frequency']}회, 최근: {data['last_mentioned'][:10]}\n"
+            return suggestions
+        else:
+            return "아직 수집된 키워드가 없습니다."
 
 # 메인 인터페이스 생성
 def create_main_interface():
@@ -1093,6 +1200,32 @@ def create_main_interface():
                             example_btn1 = gr.Button("\"안녕!\"", variant="outline", size="sm")
                             example_btn2 = gr.Button("\"너는 누구야?\"", variant="outline", size="sm")
                             example_btn3 = gr.Button("\"뭘 좋아해?\"", variant="outline", size="sm")
+            
+            # 🧠 대화 분석 탭 추가
+            with gr.Tab("🧠 대화 분석"):
+                gr.Markdown("### 📊 대화 기록 관리 및 분석")
+                
+                with gr.Row():
+                    with gr.Column():
+                        gr.Markdown("#### 💾 대화 기록 저장/불러오기")
+                        export_btn = gr.Button("📥 대화 기록 JSON 다운로드", variant="secondary")
+                        download_file = gr.File(label="다운로드", visible=False)
+                        
+                        import_file = gr.File(label="📤 대화 기록 JSON 업로드", file_types=[".json"])
+                        import_result = gr.Textbox(label="가져오기 결과", lines=3, interactive=False)
+                        
+                    with gr.Column():
+                        gr.Markdown("#### 🔍 실시간 키워드 분석")
+                        keyword_input = gr.Textbox(label="분석할 메시지 (선택사항)", placeholder="메시지를 입력하면 키워드를 분석합니다")
+                        keyword_btn = gr.Button("🎯 키워드 분석", variant="primary")
+                        keyword_result = gr.Textbox(label="키워드 분석 결과", lines=10, interactive=False)
+                
+                gr.Markdown("---")
+                
+                with gr.Row():
+                    analytics_btn = gr.Button("📈 전체 대화 분석 리포트", variant="primary", size="lg")
+                
+                analytics_result = gr.Markdown("### 분석 결과가 여기에 표시됩니다")
         
         # 이벤트 핸들러
         create_btn.click(
@@ -1225,6 +1358,33 @@ def create_main_interface():
         app.load(
             fn=lambda: [],
             outputs=[personas_list]
+        )
+        
+        # 이벤트 연결
+        export_btn.click(
+            export_conversation_history,
+            outputs=[download_file, download_file]
+        ).then(
+            lambda x: gr.update(visible=True) if x[0] else gr.update(visible=False),
+            inputs=[download_file],
+            outputs=[download_file]
+        )
+        
+        import_file.upload(
+            import_conversation_history,
+            inputs=[import_file],
+            outputs=[import_result]
+        )
+        
+        keyword_btn.click(
+            get_keyword_suggestions,
+            inputs=[keyword_input],
+            outputs=[keyword_result]
+        )
+        
+        analytics_btn.click(
+            show_conversation_analytics,
+            outputs=[analytics_result]
         )
     
     return app
