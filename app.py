@@ -652,7 +652,7 @@ def export_persona_to_json(persona):
         
         # 파일명 생성
         persona_name = persona_clean.get("기본정보", {}).get("이름", "persona")
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"{persona_name}_{timestamp}.json"
         
         # 임시 파일 저장
@@ -691,14 +691,11 @@ def chat_with_loaded_persona(persona, user_message, chat_history=None, api_provi
             # API 설정 업데이트
             generator.set_api_config(api_provider, api_key)
         
-        # 대화 기록 변환
+        # Gradio messages 형식에서 대화 기록 변환
         conversation_history = []
         for message in chat_history:
-            if isinstance(message, tuple):
+            if isinstance(message, dict) and 'role' in message and 'content' in message:
                 conversation_history.append(message)
-            else:
-                conversation_history.append({"role": "user", "content": message[0]})
-                conversation_history.append({"role": "assistant", "content": message[1]})
         
         # 🧠 세션 ID 생성 (페르소나 이름 기반)
         persona_name = persona.get("기본정보", {}).get("이름", "알 수 없는 페르소나")
@@ -707,14 +704,16 @@ def chat_with_loaded_persona(persona, user_message, chat_history=None, api_provi
         # 페르소나와 채팅 (3단계 기억 시스템 활용)
         response = generator.chat_with_persona(persona, user_message, conversation_history, session_id)
         
-        # 채팅 기록 업데이트
-        chat_history.append((user_message, response))
+        # Gradio messages 형식으로 채팅 기록 업데이트
+        chat_history.append({"role": "user", "content": user_message})
+        chat_history.append({"role": "assistant", "content": response})
         
         return chat_history, ""
         
     except Exception as e:
         error_message = f"채팅 중 오류가 발생했습니다: {str(e)}"
-        chat_history.append((user_message, "앗, 미안해... 뭔가 문제가 생긴 것 같아... 😅"))
+        chat_history.append({"role": "user", "content": user_message})
+        chat_history.append({"role": "assistant", "content": "앗, 미안해... 뭔가 문제가 생긴 것 같아... 😅"})
         return chat_history, ""
 
 def import_persona_from_json(json_file):
@@ -897,9 +896,17 @@ def export_conversation_history():
     global persona_generator
     if persona_generator and hasattr(persona_generator, 'conversation_memory'):
         json_data = persona_generator.conversation_memory.export_to_json()
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"conversation_history_{timestamp}.json"
-        return json_data, filename
+        
+        # 임시 파일 저장
+        temp_dir = "/tmp" if os.path.exists("/tmp") else "."
+        filepath = os.path.join(temp_dir, filename)
+        
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(json_data)
+        
+        return filepath, filename
     else:
         return None, "conversation_empty.json"
 
@@ -1387,9 +1394,9 @@ def create_main_interface():
         # 이벤트 연결
         conversation_export_btn.click(
             export_conversation_history,
-            outputs=[conversation_download_file, conversation_download_file]
+            outputs=[conversation_download_file]
         ).then(
-            lambda x: gr.update(visible=True) if x[0] else gr.update(visible=False),
+            lambda x: gr.update(visible=True) if x else gr.update(visible=False),
             inputs=[conversation_download_file],
             outputs=[conversation_download_file]
         )
