@@ -682,14 +682,28 @@ def chat_with_loaded_persona(persona, user_message, chat_history=None, api_provi
     if chat_history is None:
         chat_history = []
     
+    # 페르소나 체크
+    if not persona:
+        error_msg = "❌ 먼저 페르소나를 불러와주세요! 대화하기 탭에서 JSON 파일을 업로드하세요."
+        chat_history.append({"role": "user", "content": user_message})
+        chat_history.append({"role": "assistant", "content": error_msg})
+        return chat_history, ""
+    
+    # API 키 체크
+    if not api_key or not api_key.strip():
+        error_msg = "❌ API 키가 설정되지 않았습니다. 상단의 'API 설정' 섹션에서 먼저 API 키를 설정해주세요!"
+        chat_history.append({"role": "user", "content": user_message})
+        chat_history.append({"role": "assistant", "content": error_msg})
+        return chat_history, ""
+    
     try:
         # 글로벌 persona_generator 사용 (API 설정이 적용된 상태)
         generator = persona_generator
-        if generator is None:
-            generator = PersonaGenerator(api_provider=api_provider, api_key=api_key)
+        if generator is None or not hasattr(generator, 'api_key') or generator.api_key != api_key.strip():
+            generator = PersonaGenerator(api_provider=api_provider, api_key=api_key.strip())
         else:
-            # API 설정 업데이트
-            generator.set_api_config(api_provider, api_key)
+            # API 설정 업데이트 (키가 다를 수 있으므로)
+            generator.set_api_config(api_provider, api_key.strip())
         
         # Gradio messages 형식에서 대화 기록 변환
         conversation_history = []
@@ -712,8 +726,20 @@ def chat_with_loaded_persona(persona, user_message, chat_history=None, api_provi
         
     except Exception as e:
         error_message = f"채팅 중 오류가 발생했습니다: {str(e)}"
+        print(f"🚨 대화 오류: {error_message}")  # 디버깅용
+        import traceback
+        traceback.print_exc()  # 자세한 오류 정보
+        
+        # 사용자에게 친근한 오류 메시지
+        if "API" in str(e):
+            friendly_error = "API 연결에 문제가 있어요. API 키를 다시 확인해보시겠어요? 😊"
+        elif "인터넷" in str(e) or "network" in str(e).lower():
+            friendly_error = "인터넷 연결을 확인해보세요! 🌐"
+        else:
+            friendly_error = f"앗, 미안해... 뭔가 문제가 생긴 것 같아... 😅\n\n🔍 **기술적 정보**: {str(e)}"
+        
         chat_history.append({"role": "user", "content": user_message})
-        chat_history.append({"role": "assistant", "content": "앗, 미안해... 뭔가 문제가 생긴 것 같아... 😅"})
+        chat_history.append({"role": "assistant", "content": friendly_error})
         return chat_history, ""
 
 def import_persona_from_json(json_file):
@@ -860,11 +886,27 @@ def apply_api_configuration(api_provider, api_key):
         return "❌ **API 키를 입력해주세요.**\n\n🔑 **API 키 발급 방법:**\n- **Gemini**: https://makersuite.google.com/app/apikey\n- **OpenAI**: https://platform.openai.com/api-keys"
     
     try:
-        # 새로운 PersonaGenerator 인스턴스 생성
-        persona_generator = PersonaGenerator(api_provider=api_provider, api_key=api_key.strip())
+        # API 키 형식 검증
+        api_key = api_key.strip()
+        if api_provider == "gemini" and not api_key.startswith("AI"):
+            return "❌ **Gemini API 키 형식이 올바르지 않습니다.**\n\n💡 **Gemini API 키는 'AIza...' 형태로 시작해야 합니다.**"
+        elif api_provider == "openai" and not api_key.startswith("sk-"):
+            return "❌ **OpenAI API 키 형식이 올바르지 않습니다.**\n\n💡 **OpenAI API 키는 'sk-...' 형태로 시작해야 합니다.**"
+        
+        # 새로운 PersonaGenerator 인스턴스 생성 및 테스트
+        test_generator = PersonaGenerator(api_provider=api_provider, api_key=api_key)
+        
+        # 간단한 API 테스트
+        test_response = test_generator._generate_text_with_api("안녕하세요! 간단히 응답해주세요.")
+        
+        if "API 키가 설정되지 않았습니다" in test_response or "API 오류" in test_response:
+            return f"❌ **API 연결 실패**\n\n🔍 **오류 내용**: {test_response}\n\n💡 **확인사항**:\n- API 키가 유효한지 확인하세요\n- 인터넷 연결을 확인하세요"
+        
+        # 성공시 글로벌 인스턴스 교체
+        persona_generator = test_generator
         
         provider_name = "Google Gemini" if api_provider == "gemini" else "OpenAI"
-        return f"✅ **{provider_name} API 설정 완료!**\n\n🎯 **이제 대화 기능을 사용할 수 있습니다.**\n\n💡 **사용법**: 대화하기 탭에서 JSON 파일을 업로드하여 페르소나와 대화를 시작하세요."
+        return f"✅ **{provider_name} API 설정 완료!**\n\n🎯 **이제 대화 기능을 사용할 수 있습니다.**\n\n💡 **사용법**: 대화하기 탭에서 JSON 파일을 업로드하여 페르소나와 대화를 시작하세요.\n\n🔬 **테스트 응답**: {test_response[:100]}..."
         
     except Exception as e:
         return f"❌ **API 설정 중 오류 발생**\n\n🔍 **오류 내용**: {str(e)}\n\n💡 **확인사항**:\n- API 키가 올바른지 확인하세요\n- 인터넷 연결을 확인하세요"

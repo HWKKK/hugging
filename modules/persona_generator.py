@@ -1019,7 +1019,12 @@ class PersonaGenerator:
             return "Gemini API 키가 설정되지 않았습니다."
         
         try:
-            model = genai.GenerativeModel('gemini-1.5-pro')
+            # Gemini 2.0 Flash 모델 사용 (최신 버전)
+            try:
+                model = genai.GenerativeModel('gemini-2.0-flash-exp')
+            except:
+                # fallback to stable version
+                model = genai.GenerativeModel('gemini-1.5-pro')
             
             if image:
                 response = model.generate_content([prompt, image])
@@ -2075,7 +2080,7 @@ class PersonaGenerator:
             )
             
             # 🧠 3단계 기억 시스템에서 컨텍스트 가져오기
-            memory_context = self.conversation_memory.get_context_for_response(personality_type, session_id)
+            memory_context = self.conversation_memory.get_relevant_context(user_message, session_id)
             
             # 127개 변수 기반 세부 성격 특성
             detailed_personality_prompt = self._generate_detailed_personality_instructions(personality_profile)
@@ -2110,6 +2115,23 @@ class PersonaGenerator:
             # 📊 127개 변수 기반 상황별 반응 가이드
             situational_guide = self._generate_situational_response_guide(personality_profile, user_message)
             
+            # 기억 컨텍스트 포맷팅
+            memory_insights = ""
+            if memory_context:
+                if memory_context.get("recent_conversations"):
+                    memory_insights += "\n## 🧠 최근 대화 기억:\n"
+                    for conv in memory_context["recent_conversations"][-2:]:
+                        memory_insights += f"- {conv.get('user_message', '')[:30]}...\n"
+                
+                if memory_context.get("user_profile"):
+                    profile = memory_context["user_profile"]
+                    relationship_level = profile.get("relationship_level", "새로운_만남")
+                    memory_insights += f"\n## 👥 관계 수준: {relationship_level}\n"
+                    
+                    if profile.get("message_count", 0) > 3:
+                        memory_insights += f"- 대화 횟수: {profile['message_count']}회\n"
+                        memory_insights += f"- 소통 스타일: {profile.get('communication_style', '보통')}\n"
+            
             # 최종 프롬프트 조합 (기억 시스템 컨텍스트 포함)
             full_prompt = f"""{base_prompt}
 
@@ -2119,11 +2141,7 @@ class PersonaGenerator:
 
 {personality_specific_prompt}
 
-{memory_context['short_term_context']}
-
-{memory_context['medium_term_insights']}
-
-{memory_context['long_term_adaptations']}
+{memory_insights}
 
 {history_text}
 
@@ -2147,7 +2165,7 @@ class PersonaGenerator:
             response_text = self._generate_text_with_api(full_prompt)
             
             # 🧠 기억 시스템에 새로운 상호작용 추가
-            self.conversation_memory.add_interaction(user_message, response_text, session_id)
+            self.conversation_memory.add_conversation(user_message, response_text, session_id)
             
             return response_text
             
