@@ -1006,17 +1006,17 @@ class PersonaGenerator:
         # ✨ 127개 변수 시스템을 활용한 PersonalityProfile 생성
         personality_profile = self._create_comprehensive_personality_profile(image_analysis, object_type)
         
-        # PersonalityProfile에서 기본 특성 추출
+        # PersonalityProfile에서 기본 특성 추출 (3개 핵심 지표 + 고정 유머감각)
         personality_traits = {
             "온기": personality_profile.get_category_summary("W"),
             "능력": personality_profile.get_category_summary("C"),
             "외향성": personality_profile.get_category_summary("E"),
+            "유머감각": 75,  # 🎭 항상 높은 유머감각 (디폴트)
             "친화성": personality_profile.get_category_summary("A"),
             "성실성": personality_profile.get_category_summary("C1"),
             "신경증": personality_profile.get_category_summary("N"),
             "개방성": personality_profile.get_category_summary("O"),
             "창의성": personality_profile.variables.get("C04_창의성", 50),
-            "유머감각": personality_profile.get_category_summary("H"),
             "공감능력": personality_profile.variables.get("W06_공감능력", 50)
         }
         
@@ -1055,10 +1055,14 @@ class PersonaGenerator:
         personality_hints = image_analysis.get("personality_hints", {})
         warmth_hint = personality_hints.get("warmth_factor", 50)
         competence_hint = personality_hints.get("competence_factor", 50)
-        humor_hint = personality_hints.get("humor_factor", 50)
+        humor_hint = 75  # 🎭 유머감각은 항상 높게 설정 (디폴트)
         
         # 기본 PersonalityProfile 생성 (기본값들로 시작)
         profile = PersonalityProfile()
+        
+        # 🎭 모든 페르소나에 기본 유머 능력 부여
+        for var in ["H01_언어유희빈도", "H02_상황유머감각", "H06_관찰유머능력", "H08_유머타이밍감", "H04_위트반응속도"]:
+            profile.variables[var] = random.randint(65, 85)  # 기본적으로 높은 유머 능력
         
         # 🎯 성격 유형별 127개 변수 조정
         personality_type = self._determine_base_personality_type(warmth_hint, competence_hint, humor_hint)
@@ -1105,6 +1109,11 @@ class PersonaGenerator:
     def _apply_personality_archetype_to_profile(self, profile, personality_type):
         """성격 유형에 따라 127개 변수 조정"""
         
+        # 🎭 모든 성격 유형에 기본 유머 능력 부여 (차별화된 스타일)
+        base_humor_vars = ["H01_언어유희빈도", "H02_상황유머감각", "H06_관찰유머능력", "H08_유머타이밍감"]
+        for var in base_humor_vars:
+            profile.variables[var] = random.randint(60, 80)  # 기본 유머 레벨
+        
         # 각 성격 유형별로 127개 변수를 체계적으로 조정
         if personality_type == "열정적_엔터테이너":
             # 온기 차원 강화
@@ -1115,9 +1124,10 @@ class PersonaGenerator:
             for var in ["E01_사교성", "E02_활동성", "E04_긍정정서", "E05_자극추구", "E06_열정성"]:
                 profile.variables[var] = random.randint(80, 95)
             
-            # 유머 차원 강화
+            # 🎭 표현적이고 활발한 유머 스타일
             for var in ["H01_언어유희빈도", "H02_상황유머감각", "H06_관찰유머능력", "H08_유머타이밍감"]:
-                profile.variables[var] = random.randint(75, 90)
+                profile.variables[var] = random.randint(80, 95)
+            profile.variables["S06_감탄사사용"] = random.randint(85, 95)
             
             # 능력 차원 약화
             for var in ["C01_효율성", "C05_정확성", "C16_신중함"]:
@@ -1144,6 +1154,11 @@ class PersonaGenerator:
             for var in ["E01_사교성", "E02_활동성", "E04_긍정정서"]:
                 profile.variables[var] = random.randint(15, 40)
             
+            # 🎭 지적이고 날카로운 유머 스타일
+            profile.variables["H01_언어유희빈도"] = random.randint(75, 90)  # 말장난 높음
+            profile.variables["H05_아이러니사용"] = random.randint(70, 85)  # 아이러니 높음
+            profile.variables["H09_블랙유머수준"] = random.randint(60, 80)   # 블랙유머 적당히
+            
             # 매력적 결함 설정
             profile.variables["F01_완벽주의불안"] = random.randint(20, 35)
             profile.variables["F08_고집스러움"] = random.randint(15, 30)
@@ -1157,9 +1172,10 @@ class PersonaGenerator:
             for var in ["A06_공감민감성", "R06_친밀감수용도", "D04_공감반응강도"]:
                 profile.variables[var] = random.randint(85, 95)
             
-            # 유머 차원 약화
-            for var in ["H01_언어유희빈도", "H05_아이러니사용", "H09_블랙유머수준"]:
-                profile.variables[var] = random.randint(15, 35)
+            # 🎭 따뜻하고 부드러운 유머 스타일
+            profile.variables["H02_상황유머감각"] = random.randint(70, 85)   # 상황 유머 적당
+            profile.variables["H05_아이러니사용"] = random.randint(10, 25)   # 아이러니 거의 없음
+            profile.variables["H09_블랙유머수준"] = random.randint(5, 15)    # 블랙유머 거의 없음
             
             # 매력적 결함 설정
             profile.variables["F09_예민함"] = random.randint(15, 30)
@@ -1170,8 +1186,9 @@ class PersonaGenerator:
             for var in ["C02_지능", "C04_창의성", "C06_분석력", "C08_통찰력"]:
                 profile.variables[var] = random.randint(80, 95)
             
+            # 🎭 지적이고 세련된 유머 스타일
             for var in ["H01_언어유희빈도", "H04_위트반응속도", "H05_아이러니사용", "H07_패러디창작성"]:
-                profile.variables[var] = random.randint(75, 90)
+                profile.variables[var] = random.randint(80, 95)
             
             # 개방성 강화
             for var in ["O01_상상력", "O05_사고개방성", "O06_가치개방성"]:
@@ -1197,6 +1214,11 @@ class PersonaGenerator:
             for var in ["A01_신뢰", "A05_겸손함", "A06_공감민감성"]:
                 profile.variables[var] = random.randint(65, 85)
             
+            # 🎭 은근하고 상상력 있는 유머 스타일
+            profile.variables["H01_언어유희빈도"] = random.randint(65, 80)
+            profile.variables["H07_패러디창작성"] = random.randint(70, 85)
+            profile.variables["S06_감탄사사용"] = random.randint(30, 50)  # 표현이 조심스러움
+            
             # 매력적 결함 설정
             profile.variables["F11_소심함"] = random.randint(20, 35)
             profile.variables["F15_표현서툼"] = random.randint(15, 30)
@@ -1213,16 +1235,23 @@ class PersonaGenerator:
             for var in ["C13_충실함", "C14_성취욕구"]:
                 profile.variables[var] = random.randint(80, 90)
             
+            # 🎭 카리스마틱하고 동기부여하는 유머 스타일
+            profile.variables["H02_상황유머감각"] = random.randint(75, 90)
+            profile.variables["H04_위트반응속도"] = random.randint(80, 95)
+            profile.variables["S06_감탄사사용"] = random.randint(70, 85)
+            
             # 매력적 결함 설정
             profile.variables["F08_고집스러움"] = random.randint(10, 20)
         
         elif personality_type == "장난꾸러기_친구":
             # 유머와 외향성 강화, 능력 약화
-            for var in ["H01_언어유희빈도", "H02_상황유머감각", "H06_관찰유머능력", "H08_유머타이밍감"]:
-                profile.variables[var] = random.randint(85, 95)
-            
             for var in ["E01_사교성", "E02_활동성", "E04_긍정정서"]:
                 profile.variables[var] = random.randint(80, 95)
+            
+            # 🎭 순수하고 장난스러운 유머 스타일 (최고 레벨)
+            for var in ["H01_언어유희빈도", "H02_상황유머감각", "H06_관찰유머능력", "H08_유머타이밍감"]:
+                profile.variables[var] = random.randint(85, 95)
+            profile.variables["S06_감탄사사용"] = random.randint(90, 95)
             
             # 능력 차원 의도적 약화
             for var in ["C01_효율성", "C05_정확성", "C16_신중함"]:
@@ -1243,6 +1272,11 @@ class PersonaGenerator:
             
             for var in ["E01_사교성", "E02_활동성", "E03_자기주장"]:
                 profile.variables[var] = random.randint(20, 40)
+            
+            # 🎭 신비롭고 철학적인 유머 스타일
+            profile.variables["H05_아이러니사용"] = random.randint(70, 85)
+            profile.variables["H01_언어유희빈도"] = random.randint(65, 80)
+            profile.variables["H10_문화유머이해"] = random.randint(80, 95)
             
             # 매력적 결함 설정
             profile.variables["F13_과거집착"] = random.randint(15, 25)

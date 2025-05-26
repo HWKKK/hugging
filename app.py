@@ -15,6 +15,7 @@ from datetime import datetime
 import PIL.ImageDraw
 import random
 import copy
+from modules.persona_generator import PersonaGenerator, PersonalityProfile, HumorMatrix
 
 # AVIF 지원을 위한 플러그인 활성화
 try:
@@ -320,8 +321,8 @@ def generate_personality_preview(persona_name, personality_traits):
     else:
         return f"🌟 **{persona_name}** - 안녕? 나는 {persona_name}... 뭔가 어색하네. 😅"
 
-def adjust_persona_traits(persona, warmth, competence, humor, extraversion, humor_style):
-    """페르소나 성격 특성 조정 - Gradio 5.x 호환"""
+def adjust_persona_traits(persona, warmth, competence, extraversion, humor_style):
+    """페르소나 성격 특성 조정 - 3개 핵심 지표 + 유머스타일"""
     if not persona or not isinstance(persona, dict):
         return None, "조정할 페르소나가 없습니다.", {}
     
@@ -330,22 +331,53 @@ def adjust_persona_traits(persona, warmth, competence, humor, extraversion, humo
         import copy
         adjusted_persona = copy.deepcopy(persona)
         
-        # 성격 특성 업데이트
+        # 성격 특성 업데이트 (유머감각은 항상 높게 고정)
         if "성격특성" not in adjusted_persona:
             adjusted_persona["성격특성"] = {}
             
         adjusted_persona["성격특성"]["온기"] = warmth
         adjusted_persona["성격특성"]["능력"] = competence  
-        adjusted_persona["성격특성"]["유머감각"] = humor
+        adjusted_persona["성격특성"]["유머감각"] = 75  # 🎭 항상 높은 유머감각
         adjusted_persona["성격특성"]["외향성"] = extraversion
         adjusted_persona["유머스타일"] = humor_style
+        
+        # 127개 변수 시스템도 업데이트 (사용자 지표가 반영되도록)
+        if "성격프로필" in adjusted_persona:
+            from modules.persona_generator import PersonalityProfile
+            profile = PersonalityProfile.from_dict(adjusted_persona["성격프로필"])
+            
+            # 온기 관련 변수들 조정
+            warmth_vars = ["W01_친절함", "W02_친근함", "W06_공감능력", "W07_포용력"]
+            for var in warmth_vars:
+                profile.variables[var] = warmth + random.randint(-10, 10)
+                profile.variables[var] = max(0, min(100, profile.variables[var]))
+            
+            # 능력 관련 변수들 조정
+            competence_vars = ["C01_효율성", "C02_지능", "C05_정확성", "C09_실행력"]
+            for var in competence_vars:
+                profile.variables[var] = competence + random.randint(-10, 10)
+                profile.variables[var] = max(0, min(100, profile.variables[var]))
+            
+            # 외향성 관련 변수들 조정
+            extraversion_vars = ["E01_사교성", "E02_활동성", "E04_긍정정서"]
+            for var in extraversion_vars:
+                profile.variables[var] = extraversion + random.randint(-10, 10)
+                profile.variables[var] = max(0, min(100, profile.variables[var]))
+            
+            # 유머 관련 변수들은 항상 높게 유지
+            humor_vars = ["H01_언어유희빈도", "H02_상황유머감각", "H06_관찰유머능력", "H08_유머타이밍감"]
+            for var in humor_vars:
+                profile.variables[var] = random.randint(70, 85)
+            
+            # 업데이트된 프로필 저장
+            adjusted_persona["성격프로필"] = profile.to_dict()
         
         # 조정된 정보 표시
         adjusted_info = {
             "이름": adjusted_persona.get("기본정보", {}).get("이름", "Unknown"),
             "온기": warmth,
             "능력": competence,
-            "유머감각": humor, 
+            "유머감각": 75,  # 고정값 표시
             "외향성": extraversion,
             "유머스타일": humor_style
         }
@@ -356,7 +388,7 @@ def adjust_persona_traits(persona, warmth, competence, humor, extraversion, humo
         personality_preview = generate_personality_preview(persona_name, {
             "온기": warmth,
             "능력": competence,
-            "유머감각": humor,
+            "유머감각": 75,  # 항상 높은 유머감각
             "외향성": extraversion
         })
         
@@ -365,12 +397,14 @@ def adjust_persona_traits(persona, warmth, competence, humor, extraversion, humo
 
 {personality_preview}
 
-✨ **조정된 성격:**
+✨ **조정된 성격 (3가지 핵심 지표):**
 • 온기: {warmth}/100 
 • 능력: {competence}/100
-• 유머감각: {humor}/100  
 • 외향성: {extraversion}/100
+• 유머감각: 75/100 (고정 - 모든 페르소나가 유머러스!)
 • 유머스타일: {humor_style}
+
+🧬 **백그라운드**: 127개 세부 변수가 이 설정에 맞춰 자동 조정되었습니다.
         """
         
         return adjusted_persona, adjustment_message, adjusted_info
@@ -944,7 +978,7 @@ def create_main_interface():
                         adjustment_section = gr.Group(visible=False)
                         with adjustment_section:
                             gr.Markdown("### 🎯 2단계: 친구 성격 미세조정")
-                            gr.Markdown("생성된 페르소나의 성격을 원하는 대로 조정해보세요!")
+                            gr.Markdown("**3가지 핵심 지표**로 성격을 조정해보세요! (유머감각은 모든 페르소나가 기본적으로 높습니다 😄)")
                             
                             with gr.Row():
                                 with gr.Column():
@@ -960,22 +994,18 @@ def create_main_interface():
                                     )
                                 
                                 with gr.Column():
-                                    humor_slider = gr.Slider(
-                                        minimum=0, maximum=100, value=50, step=1,
-                                        label="유머감각",
-                                        info="0: 진지함 ↔ 100: 유머러스"
-                                    )
                                     extraversion_slider = gr.Slider(
                                         minimum=0, maximum=100, value=50, step=1,
-                                        label="외향성",
-                                        info="0: 내향적 ↔ 100: 외향적"
+                                        label="외향성 (활발함 정도)",
+                                        info="0: 내향적, 조용함 ↔ 100: 외향적, 활발함"
                                     )
-                            
-                            humor_style_radio = gr.Radio(
-                                choices=["따뜻한 유머러스", "위트있는 재치꾼", "날카로운 관찰자", "자기 비하적"],
-                                value="따뜻한 유머러스",
-                                label="유머 스타일"
-                            )
+                                    
+                                    humor_style_radio = gr.Radio(
+                                        choices=["따뜻한 유머러스", "위트있는 재치꾼", "날카로운 관찰자", "자기 비하적", "장난꾸러기"],
+                                        value="따뜻한 유머러스",
+                                        label="유머 스타일 (모든 페르소나는 유머감각이 높습니다!)",
+                                        info="어떤 방식으로 재미있게 만들까요?"
+                                    )
                             
                             with gr.Row():
                                 adjust_btn = gr.Button("✨ 성격 조정 적용", variant="primary")
@@ -1078,18 +1108,17 @@ def create_main_interface():
             fn=lambda persona: (
                 persona["성격특성"]["온기"] if persona else 50,
                 persona["성격특성"]["능력"] if persona else 50,
-                persona["성격특성"]["유머감각"] if persona else 50,
                 persona["성격특성"]["외향성"] if persona else 50,
                 persona["유머스타일"] if persona else "따뜻한 유머러스"
             ),
             inputs=[current_persona],
-            outputs=[warmth_slider, competence_slider, humor_slider, extraversion_slider, humor_style_radio]
+            outputs=[warmth_slider, competence_slider, extraversion_slider, humor_style_radio]
         )
         
         # 성격 조정 적용
         adjust_btn.click(
             fn=adjust_persona_traits,
-            inputs=[current_persona, warmth_slider, competence_slider, humor_slider, extraversion_slider, humor_style_radio],
+            inputs=[current_persona, warmth_slider, competence_slider, extraversion_slider, humor_style_radio],
             outputs=[current_persona, adjustment_result, adjusted_info_output]
         )
         
