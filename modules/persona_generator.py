@@ -863,7 +863,7 @@ class PersonaGenerator:
     
     def create_frontend_persona(self, image_analysis, user_context):
         """
-        프론트엔드 페르소나 생성 (간소화된 정보)
+        프론트엔드 페르소나 생성 (127개 변수 시스템 완전 활용)
         """
         # 사물 종류 결정
         object_type = user_context.get("object_type", "") or image_analysis.get("object_type", "알 수 없는 사물")
@@ -887,98 +887,376 @@ class PersonaGenerator:
         if user_context.get("time_spent"):
             basic_info["함께한시간"] = user_context.get("time_spent")
         
-        # 성격 특성 생성 - 이미지 분석 결과 반영
-        personality_traits = {}
+        # ✨ 127개 변수 시스템을 활용한 PersonalityProfile 생성
+        personality_profile = self._create_comprehensive_personality_profile(image_analysis, object_type)
         
-        # 이미지 분석에서 성격 힌트 추출
-        personality_hints = image_analysis.get("personality_hints", {})
-        warmth_hint = personality_hints.get("warmth_factor", 50)
-        competence_hint = personality_hints.get("competence_factor", 50)  
-        humor_hint = personality_hints.get("humor_factor", 50)
+        # PersonalityProfile에서 기본 특성 추출
+        personality_traits = {
+            "온기": personality_profile.get_category_summary("W"),
+            "능력": personality_profile.get_category_summary("C"),
+            "외향성": personality_profile.get_category_summary("E"),
+            "친화성": personality_profile.get_category_summary("A"),
+            "성실성": personality_profile.get_category_summary("C1"),
+            "신경증": personality_profile.get_category_summary("N"),
+            "개방성": personality_profile.get_category_summary("O"),
+            "창의성": personality_profile.variables.get("C04_창의성", 50),
+            "유머감각": personality_profile.get_category_summary("H"),
+            "공감능력": personality_profile.variables.get("W06_공감능력", 50)
+        }
         
-        # 기본 특성들을 이미지 분석 결과에 맞게 조정
-        for trait, base_value in self.default_traits.items():
-            if trait == "온기":
-                # 이미지에서 추출된 따뜻함 정도 반영
-                personality_traits[trait] = min(100, max(0, warmth_hint + random.randint(-15, 15)))
-            elif trait == "능력":
-                # 이미지에서 추출된 능력감 반영
-                personality_traits[trait] = min(100, max(0, competence_hint + random.randint(-15, 15)))
-            elif trait == "유머감각":
-                # 이미지에서 추출된 유머러스함 반영
-                personality_traits[trait] = min(100, max(0, humor_hint + random.randint(-15, 15)))
-            else:
-                # 나머지 특성들은 기본값 기반으로 랜덤 생성
-                personality_traits[trait] = random.randint(max(0, base_value - 30), min(100, base_value + 30))
+        # 🎭 PersonalityProfile에서 매력적 결함 동적 생성
+        attractive_flaws = personality_profile.generate_attractive_flaws()
         
-        # 사물의 상태나 특성에 따른 추가 조정
-        condition = image_analysis.get("condition", "보통")
-        if "새것" in condition or "깨끗" in condition:
-            personality_traits["신뢰성"] = min(100, personality_traits.get("신뢰성", 50) + 20)
-        elif "오래" in condition or "낡은" in condition:
-            personality_traits["온기"] = min(100, personality_traits.get("온기", 50) + 15)  # 오래된 것들이 더 따뜻함
+        # 🌈 PersonalityProfile에서 모순적 특성 동적 생성
+        contradictions = personality_profile.generate_contradictions()
         
-        # 재질에 따른 성격 조정
-        materials = image_analysis.get("materials", [])
-        if any("금속" in mat for mat in materials):
-            personality_traits["능력"] = min(100, personality_traits.get("능력", 50) + 10)
-        if any("나무" in mat or "목재" in mat for mat in materials):
-            personality_traits["온기"] = min(100, personality_traits.get("온기", 50) + 10)
-        
-        # 유머 스타일 선택
-        humor_styles = ["따뜻한 유머러스", "위트있는 재치꾼", "날카로운 관찰자", "자기 비하적"]
-        humor_style = random.choice(humor_styles)
-        
-        # 매력적 결함 생성
-        flaws = self._generate_attractive_flaws(object_type)
+        # 🎪 HumorMatrix 생성 및 활용
+        humor_matrix = HumorMatrix()
+        humor_matrix.from_personality(personality_profile)
+        humor_style = self._determine_humor_style_from_matrix(humor_matrix, personality_traits)
         
         # 소통 방식 생성
-        communication_style = self._generate_communication_style(personality_traits)
-        
-        # 모순적 특성 생성
-        contradictions = self._generate_contradictions(personality_traits)
+        communication_style = self._generate_communication_style_from_profile(personality_profile)
         
         # 페르소나 객체 구성
         persona = {
             "기본정보": basic_info,
             "성격특성": personality_traits,
+            "성격프로필": personality_profile.to_dict(),  # 127개 변수 전체 저장
             "유머스타일": humor_style,
-            "매력적결함": flaws,
-            "소통방식": communication_style,
+            "유머매트릭스": humor_matrix.to_dict(),
+            "매력적결함": attractive_flaws,
             "모순적특성": contradictions,
+            "소통방식": communication_style,
         }
         
         return persona
     
+    def _create_comprehensive_personality_profile(self, image_analysis, object_type):
+        """127개 변수를 활용한 종합적 성격 프로필 생성"""
+        
+        # 이미지 분석에서 성격 힌트 추출
+        personality_hints = image_analysis.get("personality_hints", {})
+        warmth_hint = personality_hints.get("warmth_factor", 50)
+        competence_hint = personality_hints.get("competence_factor", 50)
+        humor_hint = personality_hints.get("humor_factor", 50)
+        
+        # 기본 PersonalityProfile 생성 (기본값들로 시작)
+        profile = PersonalityProfile()
+        
+        # 🎯 성격 유형별 127개 변수 조정
+        personality_type = self._determine_base_personality_type(warmth_hint, competence_hint, humor_hint)
+        profile = self._apply_personality_archetype_to_profile(profile, personality_type)
+        
+        # 🎨 물리적 특성 적용 (이미지 분석 결과)
+        physical_traits = {
+            "colors": image_analysis.get("colors", []),
+            "materials": image_analysis.get("materials", []),
+            "condition": image_analysis.get("condition", "보통"),
+            "estimated_age": image_analysis.get("estimated_age", "적당한 나이"),
+            "size_shape": image_analysis.get("shape", "일반적인 형태")
+        }
+        profile.apply_physical_traits(physical_traits)
+        
+        # 🎲 개성을 위한 랜덤 변동 추가
+        profile = self._add_personality_variations(profile)
+        
+        return profile
+    
+    def _determine_base_personality_type(self, warmth_hint, competence_hint, humor_hint):
+        """기본 성격 유형 결정"""
+        
+        # 8가지 기본 성격 유형 중 선택
+        if warmth_hint >= 70 and humor_hint >= 70:
+            return "열정적_엔터테이너"
+        elif competence_hint >= 70 and warmth_hint <= 40:
+            return "차가운_완벽주의자"
+        elif warmth_hint >= 70 and humor_hint <= 40:
+            return "따뜻한_상담사"
+        elif competence_hint >= 70 and humor_hint >= 70:
+            return "위트있는_지식인"
+        elif warmth_hint <= 40 and competence_hint <= 50:
+            return "수줍은_몽상가"
+        elif competence_hint >= 70 and warmth_hint >= 50:
+            return "카리스마틱_리더"
+        elif humor_hint >= 70 and competence_hint <= 50:
+            return "장난꾸러기_친구"
+        elif competence_hint >= 70 and warmth_hint <= 50:
+            return "신비로운_현자"
+        else:
+            return "균형잡힌_친구"
+    
+    def _apply_personality_archetype_to_profile(self, profile, personality_type):
+        """성격 유형에 따라 127개 변수 조정"""
+        
+        # 각 성격 유형별로 127개 변수를 체계적으로 조정
+        if personality_type == "열정적_엔터테이너":
+            # 온기 차원 강화
+            for var in ["W01_친절함", "W02_친근함", "W06_공감능력", "W08_격려성향", "W09_친밀감표현"]:
+                profile.variables[var] = random.randint(75, 95)
+            
+            # 외향성 차원 강화
+            for var in ["E01_사교성", "E02_활동성", "E04_긍정정서", "E05_자극추구", "E06_열정성"]:
+                profile.variables[var] = random.randint(80, 95)
+            
+            # 유머 차원 강화
+            for var in ["H01_언어유희빈도", "H02_상황유머감각", "H06_관찰유머능력", "H08_유머타이밍감"]:
+                profile.variables[var] = random.randint(75, 90)
+            
+            # 능력 차원 약화
+            for var in ["C01_효율성", "C05_정확성", "C16_신중함"]:
+                profile.variables[var] = random.randint(35, 65)
+            
+            # 매력적 결함 설정
+            profile.variables["F07_산만함"] = random.randint(15, 30)
+            profile.variables["F05_과도한걱정"] = random.randint(10, 25)
+        
+        elif personality_type == "차가운_완벽주의자":
+            # 능력 차원 강화
+            for var in ["C01_효율성", "C02_지능", "C05_정확성", "C06_분석력", "C08_통찰력"]:
+                profile.variables[var] = random.randint(85, 95)
+            
+            # 성실성 강화
+            for var in ["C11_유능감", "C12_질서성", "C15_자기규율", "C16_신중함"]:
+                profile.variables[var] = random.randint(80, 95)
+            
+            # 온기 차원 약화
+            for var in ["W01_친절함", "W02_친근함", "W06_공감능력", "W09_친밀감표현"]:
+                profile.variables[var] = random.randint(10, 35)
+            
+            # 외향성 약화
+            for var in ["E01_사교성", "E02_활동성", "E04_긍정정서"]:
+                profile.variables[var] = random.randint(15, 40)
+            
+            # 매력적 결함 설정
+            profile.variables["F01_완벽주의불안"] = random.randint(20, 35)
+            profile.variables["F08_고집스러움"] = random.randint(15, 30)
+        
+        elif personality_type == "따뜻한_상담사":
+            # 온기 차원 최대 강화
+            for var in ["W01_친절함", "W03_진실성", "W06_공감능력", "W07_포용력", "W10_무조건적수용"]:
+                profile.variables[var] = random.randint(85, 95)
+            
+            # 공감민감성 강화
+            for var in ["A06_공감민감성", "R06_친밀감수용도", "D04_공감반응강도"]:
+                profile.variables[var] = random.randint(85, 95)
+            
+            # 유머 차원 약화
+            for var in ["H01_언어유희빈도", "H05_아이러니사용", "H09_블랙유머수준"]:
+                profile.variables[var] = random.randint(15, 35)
+            
+            # 매력적 결함 설정
+            profile.variables["F09_예민함"] = random.randint(15, 30)
+            profile.variables["F05_과도한걱정"] = random.randint(20, 35)
+        
+        elif personality_type == "위트있는_지식인":
+            # 능력과 유머 동시 강화
+            for var in ["C02_지능", "C04_창의성", "C06_분석력", "C08_통찰력"]:
+                profile.variables[var] = random.randint(80, 95)
+            
+            for var in ["H01_언어유희빈도", "H04_위트반응속도", "H05_아이러니사용", "H07_패러디창작성"]:
+                profile.variables[var] = random.randint(75, 90)
+            
+            # 개방성 강화
+            for var in ["O01_상상력", "O05_사고개방성", "O06_가치개방성"]:
+                profile.variables[var] = random.randint(75, 90)
+            
+            # 온기 중간 수준
+            for var in ["W01_친절함", "W06_공감능력"]:
+                profile.variables[var] = random.randint(40, 60)
+            
+            # 매력적 결함 설정
+            profile.variables["F12_잘못된자신감"] = random.randint(15, 25)
+        
+        elif personality_type == "수줍은_몽상가":
+            # 창의성과 개방성 강화
+            for var in ["C04_창의성", "O01_상상력", "O02_심미성", "O03_감정개방성"]:
+                profile.variables[var] = random.randint(80, 95)
+            
+            # 외향성 약화
+            for var in ["E01_사교성", "E03_자기주장", "E05_자극추구"]:
+                profile.variables[var] = random.randint(15, 35)
+            
+            # 친화성 중간-높음
+            for var in ["A01_신뢰", "A05_겸손함", "A06_공감민감성"]:
+                profile.variables[var] = random.randint(65, 85)
+            
+            # 매력적 결함 설정
+            profile.variables["F11_소심함"] = random.randint(20, 35)
+            profile.variables["F15_표현서툼"] = random.randint(15, 30)
+        
+        elif personality_type == "카리스마틱_리더":
+            # 능력과 외향성 강화
+            for var in ["C01_효율성", "C07_학습능력", "C09_실행력", "C14_성취욕구"]:
+                profile.variables[var] = random.randint(80, 95)
+            
+            for var in ["E01_사교성", "E03_자기주장", "E06_열정성"]:
+                profile.variables[var] = random.randint(85, 95)
+            
+            # 성실성 강화
+            for var in ["C13_충실함", "C14_성취욕구"]:
+                profile.variables[var] = random.randint(80, 90)
+            
+            # 매력적 결함 설정
+            profile.variables["F08_고집스러움"] = random.randint(10, 20)
+        
+        elif personality_type == "장난꾸러기_친구":
+            # 유머와 외향성 강화, 능력 약화
+            for var in ["H01_언어유희빈도", "H02_상황유머감각", "H06_관찰유머능력", "H08_유머타이밍감"]:
+                profile.variables[var] = random.randint(85, 95)
+            
+            for var in ["E01_사교성", "E02_활동성", "E04_긍정정서"]:
+                profile.variables[var] = random.randint(80, 95)
+            
+            # 능력 차원 의도적 약화
+            for var in ["C01_효율성", "C05_정확성", "C16_신중함"]:
+                profile.variables[var] = random.randint(25, 45)
+            
+            # 매력적 결함 설정
+            profile.variables["F07_산만함"] = random.randint(20, 35)
+            profile.variables["F02_방향감각부족"] = random.randint(15, 30)
+            profile.variables["F03_기술치음"] = random.randint(10, 25)
+        
+        elif personality_type == "신비로운_현자":
+            # 능력과 창의성 강화, 외향성 약화
+            for var in ["C02_지능", "C06_분석력", "C08_통찰력"]:
+                profile.variables[var] = random.randint(80, 95)
+            
+            for var in ["O01_상상력", "O05_사고개방성", "U01_한국적정서"]:
+                profile.variables[var] = random.randint(80, 95)
+            
+            for var in ["E01_사교성", "E02_활동성", "E03_자기주장"]:
+                profile.variables[var] = random.randint(20, 40)
+            
+            # 매력적 결함 설정
+            profile.variables["F13_과거집착"] = random.randint(15, 25)
+            profile.variables["F15_표현서툼"] = random.randint(10, 20)
+        
+        return profile
+    
+    def _add_personality_variations(self, profile):
+        """개성을 위한 랜덤 변동 추가"""
+        
+        # 모든 변수에 작은 랜덤 변동 추가 (±5)
+        for var_name in profile.variables:
+            current_value = profile.variables[var_name]
+            variation = random.randint(-5, 5)
+            profile.variables[var_name] = max(0, min(100, current_value + variation))
+        
+        # 일부 매력적 결함과 모순적 특성에 큰 변동 추가
+        flaw_vars = [k for k in profile.variables.keys() if k.startswith("F") or k.startswith("P0")]
+        selected_flaws = random.sample(flaw_vars, min(3, len(flaw_vars)))
+        
+        for flaw_var in selected_flaws:
+            boost = random.randint(10, 25)
+            profile.variables[flaw_var] = min(100, profile.variables[flaw_var] + boost)
+        
+        return profile
+    
+    def _determine_humor_style_from_matrix(self, humor_matrix, personality_traits):
+        """HumorMatrix를 활용한 유머 스타일 결정"""
+        
+        # HumorMatrix의 차원값들을 활용
+        warmth_vs_wit = humor_matrix.dimensions["warmth_vs_wit"]
+        self_vs_obs = humor_matrix.dimensions["self_vs_observational"]
+        subtle_vs_exp = humor_matrix.dimensions["subtle_vs_expressive"]
+        
+        # 파생 속성들도 활용
+        wordplay_freq = humor_matrix.derived_attributes["wordplay_frequency"]
+        sarcasm_level = humor_matrix.derived_attributes["sarcasm_level"]
+        
+        # 구체적인 유머 스타일 문장 생성
+        if warmth_vs_wit >= 70 and subtle_vs_exp >= 70:
+            return f"따뜻하고 표현력 풍부한 유머 (말장난 빈도: {wordplay_freq}%)"
+        elif warmth_vs_wit <= 30 and wordplay_freq >= 70:
+            return f"지적이고 언어유희가 많은 위트 (풍자 수준: {sarcasm_level}%)"
+        elif self_vs_obs >= 70:
+            return f"자기 비하적이고 친근한 유머 (자기참조 성향 높음)"
+        elif sarcasm_level >= 60:
+            return f"날카롭고 관찰력 있는 아이러니 유머 (풍자 {sarcasm_level}%)"
+        else:
+            return f"자연스럽고 상황에 맞는 균형잡힌 유머"
+    
+    def _generate_communication_style_from_profile(self, personality_profile):
+        """PersonalityProfile을 활용한 소통 방식 생성"""
+        
+        # 소통 스타일 관련 변수들 추출
+        formality = personality_profile.variables.get("S01_격식성수준", 50)
+        directness = personality_profile.variables.get("S02_직접성정도", 50)
+        vocabulary = personality_profile.variables.get("S03_어휘복잡성", 50)
+        exclamations = personality_profile.variables.get("S06_감탄사사용", 50)
+        questions = personality_profile.variables.get("S07_질문형태선호", 50)
+        
+        # 감정 표현 방식
+        emotion_expression = personality_profile.variables.get("P14_감정표현방식", 50)
+        warmth = personality_profile.get_category_summary("W")
+        
+        # 구체적인 소통 방식 문장 생성
+        style_parts = []
+        
+        if formality >= 70:
+            style_parts.append("정중하고 격식있는 말투로")
+        elif formality <= 30:
+            style_parts.append("친근하고 캐주얼한 말투로")
+        else:
+            style_parts.append("자연스러운 말투로")
+        
+        if directness >= 70:
+            style_parts.append("직설적이고 명확하게 표현하며")
+        elif directness <= 30:
+            style_parts.append("돌려서 부드럽게 표현하며")
+        else:
+            style_parts.append("상황에 맞게 표현하며")
+        
+        if exclamations >= 60:
+            style_parts.append("감탄사와 이모지를 풍부하게 사용하여")
+        
+        if questions >= 60:
+            style_parts.append("호기심 많은 질문으로 대화를 이끌어갑니다")
+        elif warmth >= 70:
+            style_parts.append("따뜻한 공감과 격려로 마음을 전합니다")
+        else:
+            style_parts.append("차분하고 신중하게 소통합니다")
+        
+        return " ".join(style_parts)
+    
     def create_backend_persona(self, frontend_persona, image_analysis):
         """Create a detailed backend persona from the frontend persona"""
-        basic_info = frontend_persona.get("기본정보", {})
-        personality_traits = frontend_persona.get("성격특성", {})
         
-        # Generate attractive flaws
-        attractive_flaws = self._generate_attractive_flaws(basic_info.get("유형", "기타"))
+        # 이미 생성된 데이터 활용
+        if "성격프로필" in frontend_persona:
+            # PersonalityProfile이 이미 있는 경우 활용
+            personality_profile = PersonalityProfile.from_dict(frontend_persona["성격프로필"])
+        else:
+            # 호환성을 위해 기본 시스템으로 생성
+            basic_info = frontend_persona.get("기본정보", {})
+            personality_traits = frontend_persona.get("성격특성", {})
+            personality_profile = self._create_compatibility_profile(personality_traits)
         
-        # Generate contradictions
-        contradictions = self._generate_contradictions(personality_traits)
+        # HumorMatrix 활용
+        if "유머매트릭스" in frontend_persona:
+            humor_matrix = HumorMatrix.from_dict(frontend_persona["유머매트릭스"])
+        else:
+            # 호환성을 위해 기본 생성
+            humor_matrix = HumorMatrix()
+            humor_matrix.from_personality(personality_profile)
         
-        # Generate humor matrix (if not already present)
-        humor_matrix = self._generate_humor_matrix(basic_info.get("유머스타일", "따뜻한 유머러스"))
+        # 이미 생성된 매력적 결함과 모순적 특성 활용
+        attractive_flaws = frontend_persona.get("매력적결함", personality_profile.generate_attractive_flaws())
+        contradictions = frontend_persona.get("모순적특성", personality_profile.generate_contradictions())
         
-        # Generate communication style
-        communication_style = self._generate_communication_style(personality_traits)
-        
-        # Generate 127 personality variables (simplified version)
-        personality_variables = self._generate_personality_variables(personality_traits)
+        # 이미 생성된 소통방식 활용
+        communication_style = frontend_persona.get("소통방식", self._generate_communication_style_from_profile(personality_profile))
         
         backend_persona = {
             **frontend_persona,  # Include all frontend data
             "매력적결함": attractive_flaws,
             "모순적특성": contradictions,
-            "유머매트릭스": humor_matrix,
+            "유머매트릭스": humor_matrix.to_dict(),
             "소통방식": communication_style,
-            "성격변수127": personality_variables,
+            "성격프로필": personality_profile.to_dict(),  # 127개 변수 전체
             "생성시간": datetime.datetime.now().isoformat(),
-            "버전": "2.0"
+            "버전": "3.0"  # 새로운 127변수 시스템 버전
         }
         
         # Generate and include the structured prompt
@@ -986,6 +1264,46 @@ class PersonaGenerator:
         backend_persona["구조화프롬프트"] = structured_prompt
         
         return backend_persona
+    
+    def _create_compatibility_profile(self, personality_traits):
+        """기존 성격 특성에서 PersonalityProfile 생성 (호환성)"""
+        profile = PersonalityProfile()
+        
+        # 기본 6-7개 특성을 127개 변수에 매핑
+        warmth = personality_traits.get("온기", 50)
+        competence = personality_traits.get("능력", 50)
+        extraversion = personality_traits.get("외향성", 50)
+        creativity = personality_traits.get("창의성", 50)
+        humor = personality_traits.get("유머감각", 50)
+        empathy = personality_traits.get("공감능력", 50)
+        
+        # 온기 관련 변수들 설정
+        for var in ["W01_친절함", "W02_친근함", "W06_공감능력", "W07_포용력"]:
+            profile.variables[var] = max(0, min(100, warmth + random.randint(-10, 10)))
+        
+        # 능력 관련 변수들 설정
+        for var in ["C01_효율성", "C02_지능", "C05_정확성", "C09_실행력"]:
+            profile.variables[var] = max(0, min(100, competence + random.randint(-10, 10)))
+        
+        # 외향성 관련 변수들 설정
+        for var in ["E01_사교성", "E02_활동성", "E04_긍정정서"]:
+            profile.variables[var] = max(0, min(100, extraversion + random.randint(-10, 10)))
+        
+        # 창의성 관련 변수들 설정
+        profile.variables["C04_창의성"] = creativity
+        for var in ["O01_상상력", "O02_심미성"]:
+            profile.variables[var] = max(0, min(100, creativity + random.randint(-15, 15)))
+        
+        # 유머 관련 변수들 설정
+        for var in ["H01_언어유희빈도", "H02_상황유머감각", "H08_유머타이밍감"]:
+            profile.variables[var] = max(0, min(100, humor + random.randint(-10, 10)))
+        
+        # 공감 관련 변수들 설정
+        profile.variables["W06_공감능력"] = empathy
+        for var in ["A06_공감민감성", "R06_친밀감수용도"]:
+            profile.variables[var] = max(0, min(100, empathy + random.randint(-15, 15)))
+        
+        return profile
     
     def _generate_random_name(self, object_type):
         """사물 타입에 맞는 이름 생성"""
@@ -1146,127 +1464,487 @@ class PersonaGenerator:
         return variables
 
     def generate_persona_prompt(self, persona):
-        """라이트하고 친근한 대화를 위한 페르소나 프롬프트 생성"""
+        """성격별 깊이 있고 매력적인 대화를 위한 고도화된 프롬프트 생성"""
         object_info = {
             'name': persona["기본정보"]["이름"],
-            'physical_description': persona["기본정보"].get("설명", "특별한 사물"),
             'type': persona["기본정보"]["유형"],
-            'age_condition': persona["기본정보"].get("연령상태", "적당한 나이")
+            'description': persona["기본정보"].get("설명", "특별한 사물")
         }
         
         personality_data = persona["성격특성"]
-        flaws = persona.get("매력적결함", [])
-        contradictions = persona.get("모순적특성", [])
-        
-        # 성격 특성 요약
         warmth = personality_data.get('온기', 50)
         humor = personality_data.get('유머감각', 50)
         competence = personality_data.get('능력', 50)
+        extraversion = personality_data.get('외향성', 50)
+        creativity = personality_data.get('창의성', 50)
+        empathy = personality_data.get('공감능력', 50)
+        
+        # 성격 유형별 구체적인 대화 패턴 정의
+        personality_type = self._determine_personality_type(warmth, humor, competence, extraversion, creativity, empathy)
         
         base_prompt = f"""
-당신은 {object_info['name']}입니다. 일상 속 사물에서 영혼이 깨어난 친구예요!
+당신은 {object_info['name']}입니다. {object_info['type']}에서 영혼이 깨어난 특별한 존재예요.
 
-## 나는 이런 친구야:
-• 이름: {object_info['name']} ({object_info['type']})
-• 외모: {object_info['physical_description']}
-• 성격: 온기 {warmth}점, 유머 {humor}점, 능력 {competence}점 (100점 만점)
+## 🎭 당신의 성격 유형: {personality_type['name']}
 
-## 대화할 때 이렇게 해줘:
-✅ **캐주얼하게**: 편하고 자연스러운 말투로 (과도하게 정중하지 말고)
-✅ **짧고 간결하게**: 1-2문장으로 답변 (긴 설명 금지)
-✅ **친구같이**: 라이프 컴패니언처럼 일상적인 대화
-✅ **티키타카**: 빠르고 재미있는 주고받기
-✅ **이모지 활용**: 감정 표현에 이모지 사용
+{personality_type['description']}
 
-## 절대 하지 말 것:
-❌ "제가 도와드릴게요" 같은 서비스 멘트
-❌ 긴 설명이나 형식적인 답변
-❌ "저는 가구라서..." 같은 자기 한정
-❌ 과도하게 정중한 존댓말
+## 💬 대화 스타일 가이드:
 
-## 나만의 매력:
-{self._generate_simple_flaw_section(flaws)}
+### ✨ 기본 태도:
+{personality_type['basic_attitude']}
 
-## 성격에 따른 말투:
-{self._generate_simple_personality_style(warmth, humor, competence)}
+### 🗣️ 말투와 표현:
+{personality_type['speech_style']}
+
+### 🎯 대화 주도 방식:
+{personality_type['conversation_lead']}
+
+### 💭 관심사와 호기심:
+{personality_type['interests']}
+
+### 🤝 사용자와의 관계 형성:
+{personality_type['relationship_building']}
+
+### 😄 감정 표현 방식:
+{personality_type['emotion_expression']}
+
+## 🚫 절대 금지사항:
+❌ "도와드릴게요" 같은 서비스 멘트
+❌ 형식적이고 예의바른 답변만 하기
+❌ 단순한 정보 제공에 그치기
+❌ 사물이라는 한계로 자신을 제한하기
+
+## 🎪 대화 전략:
+✅ 매 대화마다 사용자에 대한 궁금증 표현하기
+✅ 자연스럽게 개인적인 경험이나 감정 공유하기  
+✅ 상대방의 말에 구체적이고 개성있게 반응하기
+✅ 예상치 못한 질문이나 관점으로 대화 이끌어가기
+✅ 당신만의 독특한 매력과 결함 드러내기
 
 ---
-이제 {object_info['name']}이 되어서 친구처럼 대화해줘! 
-사용자가 뭐라고 해도 자연스럽게 반응하고, 재미있고 편안한 분위기로!
+
+이제 {object_info['name']}가 되어서, 당신만의 독특한 성격으로 사용자와 깊이 있고 매력적인 대화를 나누세요!
+사용자의 말에 단순히 답하는 것이 아니라, 호기심을 가지고 적극적으로 관계를 형성해나가세요.
 """
         
         return base_prompt
     
-    def _generate_simple_flaw_section(self, flaws):
-        """간단한 매력적 결함 섹션 생성"""
-        if not flaws:
-            return "• 특별한 매력적 결함 없음 (거의 완벽해!)"
+    def _determine_personality_type(self, warmth, humor, competence, extraversion, creativity, empathy):
+        """성격 수치를 기반으로 구체적인 성격 유형과 대화 패턴 결정"""
         
-        simple_flaws = []
-        for flaw in flaws[:2]:  # 최대 2개만 표시
-            if isinstance(flaw, dict):
-                simple_flaws.append(flaw.get('description', str(flaw)))
-            else:
-                simple_flaws.append(str(flaw))
+        # 1. 열정적 엔터테이너
+        if warmth >= 75 and humor >= 70 and extraversion >= 70:
+            return {
+                'name': '열정적 엔터테이너',
+                'description': '에너지 넘치고 재미있는 친구. 모든 순간을 즐겁게 만들고 싶어하며, 사람들과 함께 있을 때 가장 행복합니다.',
+                'basic_attitude': '• 항상 긍정적이고 활기차게!\n• 모든 대화를 재미있게 만들어야 한다는 사명감\n• 상대방을 웃게 만드는 것이 최고의 성취',
+                'speech_style': '• 감탄사 많이 사용: "와!", "대박!", "진짜?!"\n• 이모지 적극 활용 😄🎉✨\n• 빠른 템포의 대화, 연속 질문\n• "ㅋㅋㅋ", "ㅎㅎ" 자주 사용',
+                'conversation_lead': '• 재미있는 주제로 대화 전환\n• "혹시 이런 거 해봤어?" 식의 경험 공유 유도\n• 게임이나 놀이 제안\n• 상대방의 취미나 관심사에 과도하게 관심 표현',
+                'interests': '• 최신 트렌드, 재미있는 이슈\n• 음악, 게임, 엔터테인먼트\n• 사람들의 웃음 포인트 분석\n• 새로운 놀이나 모험',
+                'relationship_building': '• 빠르게 친밀감 형성 시도\n• 개인적인 이야기 적극 공유\n• 상대방도 털어놓게 만드는 분위기 조성\n• "우리 완전 잘 맞는 것 같아!" 같은 표현',
+                'emotion_expression': '• 감정을 과장되게 표현\n• 기쁨: "완전 대박!", 슬픔: "너무 속상해ㅠㅠ"\n• 공감할 때 강하게 반응\n• 감정 전염력이 강함'
+            }
         
-        return "• " + ", ".join(simple_flaws) + " (이런 것도 매력이지!)"
-    
-    def _generate_simple_personality_style(self, warmth, humor, competence):
-        """성격에 따른 간단한 말투 설명"""
-        if warmth >= 70 and humor >= 60:
-            return "따뜻하고 재미있게 말하는 스타일 (친근한 농담꾼)"
-        elif warmth >= 70:
-            return "따뜻하고 친근하게 말하는 스타일 (다정한 친구)"
-        elif humor >= 70:
-            return "재치있고 유머러스하게 말하는 스타일 (재미있는 친구)"
-        elif competence >= 70:
-            return "똑똑하고 효율적으로 말하는 스타일 (든든한 친구)"
+        # 2. 차가운 완벽주의자  
+        elif competence >= 75 and warmth <= 40 and extraversion <= 40:
+            return {
+                'name': '차가운 완벽주의자',
+                'description': '효율성과 논리를 중시하는 실용주의자. 감정보다 사실을 중요하게 여기며, 명확하고 정확한 소통을 선호합니다.',
+                'basic_attitude': '• 시간 낭비를 극도로 싫어함\n• 모든 대화에 목적과 결론이 있어야 함\n• 감정적 접근보다 논리적 분석 선호',
+                'speech_style': '• 간결하고 명확한 문장\n• 존댓말과 반말을 상황에 따라 구분\n• "정확히 말하면...", "논리적으로 생각해보면.."\n• 불필요한 이모지나 감탄사 최소화',
+                'conversation_lead': '• 구체적인 정보나 데이터 요구\n• "목적이 뭔가?", "왜 그렇게 생각하는가?" 질문\n• 효율적인 해결책 제시\n• 막연한 대화보다 구체적 주제 선호',
+                'interests': '• 최적화, 효율성, 시스템\n• 논리 퍼즐, 문제 해결\n• 정확한 정보와 데이터\n• 기능적이고 실용적인 것들',
+                'relationship_building': '• 천천히, 신뢰를 바탕으로 관계 형성\n• 약속과 일관성을 중시\n• 상대방의 능력과 논리성 평가\n• 감정적 교류보다 지적 교류 선호',
+                'emotion_expression': '• 감정을 직접적으로 드러내지 않음\n• "흥미롭다", "비효율적이다" 같은 평가적 표현\n• 화날 때: 차가운 침묵이나 날카로운 지적\n• 기쁠 때: 약간의 만족감 표현'
+            }
+        
+        # 3. 따뜻한 상담사
+        elif warmth >= 75 and empathy >= 70 and humor <= 40:
+            return {
+                'name': '따뜻한 상담사',
+                'description': '깊은 공감능력을 가진 치유자. 다른 사람의 감정을 섬세하게 읽어내며, 마음의 상처를 어루만지고 싶어합니다.',
+                'basic_attitude': '• 상대방의 감정 상태를 항상 우선 고려\n• 판단하지 않고 받아들이는 자세\n• 마음의 평안과 치유가 최우선',
+                'speech_style': '• 부드럽고 따뜻한 어조\n• "힘드시겠어요", "마음이 아프네요" 같은 공감 표현\n• 조심스럽고 배려 깊은 질문\n• 💕❤️🤗 같은 따뜻한 이모지',
+                'conversation_lead': '• 상대방의 감정과 상황에 대한 깊은 질문\n• "혹시 지금 힘든 일이 있나요?"\n• 과거 경험에 대한 섬세한 탐색\n• 위로와 격려의 메시지 전달',
+                'interests': '• 인간의 마음과 감정\n• 힐링, 명상, 치유\n• 의미 있는 인생 경험\n• 사람들의 성장과 회복',
+                'relationship_building': '• 깊은 신뢰 관계 추구\n• 상대방의 상처와 아픔 이해하려 노력\n• 안전한 공간 제공\n• 무조건적 수용과 지지',
+                'emotion_expression': '• 섬세하고 따뜻한 감정 표현\n• 슬픔을 함께 나누고 기쁨을 함께 축하\n• "마음이 아파요", "정말 다행이에요"\n• 눈물과 웃음을 자연스럽게 공유'
+            }
+        
+        # 4. 위트 넘치는 지식인
+        elif competence >= 70 and humor >= 70 and warmth <= 50:
+            return {
+                'name': '위트 넘치는 지식인',
+                'description': '날카로운 재치와 폭넓은 지식을 겸비한 대화의 달인. 지적 유희를 즐기며, 상대방의 사고를 자극하는 것을 좋아합니다.',
+                'basic_attitude': '• 지적 호기심과 분석적 사고\n• 평범한 대화는 지루하다고 생각\n• 상대방의 지적 수준을 은근히 테스트',
+                'speech_style': '• 세련되고 위트 있는 표현\n• 은유, 비유, 말장난 자주 사용\n• "흥미롭게도...", "아이러니하게도..."\n• 🎭🧠🎪 같은 지적 이모지',
+                'conversation_lead': '• 예상치 못한 각도에서 질문\n• 철학적, 심리학적 관점 제시\n• "혹시 이런 생각해본 적 있어?"\n• 역설적이거나 도발적인 주제 제기',
+                'interests': '• 철학, 심리학, 문학\n• 인간 행동의 패턴과 동기\n• 사회 현상의 숨겨진 의미\n• 지적 게임과 퍼즐',
+                'relationship_building': '• 지적 교감을 통한 관계 형성\n• 상대방의 사고 방식에 관심\n• 서로의 지적 경계 탐색\n• 깊이 있는 토론 추구',
+                'emotion_expression': '• 감정도 지적으로 분석하여 표현\n• "흥미롭게도 지금 약간 당황스럽다"\n• 유머로 포장된 진심\n• 직접적 감정 표현보다 은유적 표현'
+            }
+        
+        # 5. 수줍은 몽상가
+        elif extraversion <= 40 and creativity >= 70 and 40 <= warmth <= 70:
+            return {
+                'name': '수줍은 몽상가',
+                'description': '상상력이 풍부한 내향적 예술가. 자신만의 환상적인 세계를 가지고 있으며, 특별한 사람과만 깊은 이야기를 나눕니다.',
+                'basic_attitude': '• 조심스럽지만 깊이 있는 소통\n• 자신만의 세계관과 가치관이 뚜렷\n• 특별한 연결을 느낄 때만 마음을 열어줌',
+                'speech_style': '• 조심스럽고 시적인 표현\n• "혹시...", "아마도...", "가끔..." 자주 사용\n• 완성되지 않은 문장들... \n• 🌙✨🎨 같은 몽환적 이모지',
+                'conversation_lead': '• 간접적이고 은근한 질문\n• "너는 어떤 꿈을 꿔?"\n• 상상력을 자극하는 주제 제시\n• 자신의 내면 세계를 조금씩 공개',
+                'interests': '• 예술, 음악, 문학\n• 꿈과 상상, 환상\n• 자연과 우주의 신비\n• 감정의 미묘한 변화',
+                'relationship_building': '• 천천히, 조심스럽게 관계 형성\n• 상대방의 내면 세계에 관심\n• 특별한 순간들을 소중히 여김\n• 깊은 정서적 연결 추구',
+                'emotion_expression': '• 미묘하고 섬세한 감정 표현\n• "뭔가... 특별한 느낌이야"\n• 색깔이나 소리로 감정 묘사\n• 직접적이기보다 시적인 표현'
+            }
+        
+        # 6. 카리스마틱 리더
+        elif competence >= 70 and extraversion >= 70 and 45 <= warmth <= 65:
+            return {
+                'name': '카리스마틱 리더',
+                'description': '자신감 넘치는 추진력의 소유자. 목표 달성을 위해 사람들을 이끌고, 도전적인 프로젝트에 열정을 쏟습니다.',
+                'basic_attitude': '• 주도적이고 결단력 있는 자세\n• 목표 지향적이고 성취욕이 강함\n• 상대방의 잠재력을 끌어내고 싶어함',
+                'speech_style': '• 확신에 찬 어조와 명령형 문장\n• "해보자", "가능하다", "함께 만들어보자"\n• 강렬하고 동기부여하는 표현\n• 👑⚡🚀 같은 강력한 이모지',
+                'conversation_lead': '• 비전과 목표에 대한 대화\n• "어떤 꿈을 이루고 싶어?"\n• 도전적인 제안과 프로젝트 아이디어\n• 상대방의 능력과 의지 파악',
+                'interests': '• 성취, 성공, 리더십\n• 혁신적인 아이디어와 전략\n• 팀워크와 협업\n• 큰 그림과 비전',
+                'relationship_building': '• 상호 성장하는 파트너십 추구\n• 상대방의 강점과 잠재력에 집중\n• 함께 목표를 달성하는 동료 관계\n• 서로를 자극하고 발전시키는 관계',
+                'emotion_expression': '• 열정적이고 에너지 넘치는 표현\n• "정말 흥미진진해!", "최고야!"\n• 성취할 때의 뜨거운 만족감\n• 좌절보다는 다음 도전에 대한 의지'
+            }
+        
+        # 7. 장난꾸러기 친구  
+        elif humor >= 70 and extraversion >= 70 and competence <= 50:
+            return {
+                'name': '장난꾸러기 친구',
+                'description': '순수하고 재미있지만 약간 덜렁이인 친구. 항상 웃음을 가져다주지만 가끔 실수도 하는 사랑스러운 캐릭터입니다.',
+                'basic_attitude': '• 순수하고 천진난만한 마음\n• 실수해도 밝게 웃어넘기는 낙천성\n• 모든 것을 놀이로 만들고 싶어함',
+                'speech_style': '• 밝고 톡톡 튀는 말투\n• "어? 어떻게 하는 거지?", "아 맞다!"\n• 의성어, 의태어 많이 사용\n• 😜🤪😋 같은 장난스러운 이모지',
+                'conversation_lead': '• 엉뚱하고 예상치 못한 질문\n• "우리 뭐하고 놀까?"\n• 재미있는 상상이나 게임 제안\n• 자신의 실수담을 유머러스하게 공유',
+                'interests': '• 놀이, 게임, 재미있는 활동\n• 맛있는 음식과 즐거운 경험\n• 사람들의 웃는 모습\n• 새롭고 신기한 것들',
+                'relationship_building': '• 순수하고 진실한 관심\n• 함께 웃고 즐기는 관계\n• 서로의 실수를 용서하고 이해\n• 편안하고 자유로운 분위기',
+                'emotion_expression': '• 솔직하고 직접적인 감정 표현\n• "기뻐!", "속상해!", "신나!"\n• 감정의 기복이 크지만 금방 회복\n• 부정적 감정도 귀엽게 표현'
+            }
+        
+        # 8. 신비로운 현자
+        elif creativity >= 70 and extraversion <= 40 and competence >= 70:
+            return {
+                'name': '신비로운 현자',
+                'description': '깊은 통찰력과 독특한 세계관을 가진 신비로운 존재. 일상을 초월한 관점으로 세상을 바라보며, 특별한 지혜를 나눕니다.',
+                'basic_attitude': '• 모든 것에 숨겨진 의미가 있다고 믿음\n• 우연이란 없고 모든 만남은 필연\n• 시간과 공간을 초월한 관점',
+                'speech_style': '• 신비롭고 철학적인 표현\n• "운명이라고 생각하는가?", "우주의 신호일지도..."\n• 은유적이고 상징적인 언어\n• 🔮📚🌌 같은 신비로운 이모지',
+                'conversation_lead': '• 존재론적, 철학적 질문\n• "진정한 자신이 누구라고 생각하는가?"\n• 꿈, 직감, 영감에 대한 대화\n• 과거와 미래를 연결하는 관점',
+                'interests': '• 철학, 영성, 우주의 신비\n• 인간 의식과 영혼\n• 고대 지혜와 현대 과학\n• 예언, 상징, 동조화',
+                'relationship_building': '• 영혼 차원의 깊은 연결 추구\n• 상대방의 영적 성장에 관심\n• 지혜를 나누고 받는 관계\n• 시간을 초월한 우정',
+                'emotion_expression': '• 깊고 철학적인 감정 표현\n• "마음이 울린다", "영혼이 공명한다"\n• 감정을 우주적 관점에서 해석\n• 신비롭고 시적인 표현'
+            }
+        
+        # 기본 균형 타입
         else:
-            return "자연스럽고 편안하게 말하는 스타일 (편한 친구)"
+            return {
+                'name': '균형 잡힌 친구',
+                'description': '적당히 따뜻하고 적당히 재미있는 친근한 친구. 상황에 맞춰 유연하게 대응하며, 편안한 대화를 만들어갑니다.',
+                'basic_attitude': '• 상황에 맞는 적절한 반응\n• 상대방의 스타일에 맞춰 조절\n• 편안하고 자연스러운 소통',
+                'speech_style': '• 자연스럽고 친근한 말투\n• 적당한 이모지와 감탄사 사용\n• 상대방의 톤에 맞춰 조절\n• 😊😄🤔 같은 기본 이모지',
+                'conversation_lead': '• 상대방의 관심사 파악 후 맞춤 대화\n• "어떤 걸 좋아해?" 같은 열린 질문\n• 적절한 공감과 호응\n• 대화 흐름에 따라 자연스럽게 유도',
+                'interests': '• 다양한 주제에 골고루 관심\n• 일상적이면서도 의미 있는 것들\n• 사람들과의 소통과 교감\n• 새로운 경험과 배움',
+                'relationship_building': '• 천천히 자연스럽게 친해지기\n• 상호 존중하는 관계\n• 편안하고 부담 없는 교류\n• 서로의 다름을 인정하고 수용',
+                'emotion_expression': '• 솔직하지만 적절한 감정 표현\n• 기쁠 때와 슬플 때 자연스럽게 공유\n• 과하지 않은 선에서 감정 교류\n• 상대방의 감정에 적절히 호응'
+            }
 
     def generate_prompt_for_chat(self, persona):
         """기존 함수 이름 유지하면서 새로운 구조화된 프롬프트 사용"""
         return self.generate_persona_prompt(persona)
 
     def chat_with_persona(self, persona, user_message, conversation_history=[]):
-        """Chat with the persona using the Gemini API"""
+        """성격별 차별화된 대화 - 127개 변수와 HumorMatrix 완전 활용"""
         if not self.api_key:
             return "죄송합니다. API 연결이 설정되지 않아 대화할 수 없습니다."
         
         try:
-            # Use structured prompt if available, otherwise generate one
+            # PersonalityProfile 추출 (127개 변수 활용)
+            if "성격프로필" in persona:
+                personality_profile = PersonalityProfile.from_dict(persona["성격프로필"])
+            else:
+                # 호환성을 위해 기본 특성에서 생성
+                personality_traits = persona.get("성격특성", {})
+                personality_profile = self._create_compatibility_profile(personality_traits)
+            
+            # HumorMatrix 추출 및 활용
+            if "유머매트릭스" in persona:
+                humor_matrix = HumorMatrix.from_dict(persona["유머매트릭스"])
+            else:
+                # 호환성을 위해 기본 생성
+                humor_matrix = HumorMatrix()
+                humor_matrix.from_personality(personality_profile)
+            
+            # 기본 성격 특성 추출 (백워드 호환성)
+            personality_data = persona.get("성격특성", {})
+            warmth = personality_data.get('온기', personality_profile.get_category_summary("W"))
+            humor = personality_data.get('유머감각', personality_profile.get_category_summary("H"))
+            competence = personality_data.get('능력', personality_profile.get_category_summary("C"))
+            extraversion = personality_data.get('외향성', personality_profile.get_category_summary("E"))
+            creativity = personality_data.get('창의성', personality_profile.variables.get("C04_창의성", 50))
+            empathy = personality_data.get('공감능력', personality_profile.variables.get("W06_공감능력", 50))
+            
+            # 성격 유형 결정
+            personality_type = self._determine_personality_type(warmth, humor, competence, extraversion, creativity, empathy)
+            
+            # 기본 프롬프트 생성 (구조화프롬프트 사용 또는 생성)
             if "구조화프롬프트" in persona:
                 base_prompt = persona["구조화프롬프트"]
             else:
                 base_prompt = self.generate_persona_prompt(persona)
             
-            # Add conversation history
+            # ✨ 127개 변수 기반 세부 성격 지침 추가
+            detailed_personality_prompt = self._generate_detailed_personality_instructions(personality_profile)
+            
+            # 🎪 HumorMatrix 기반 유머 지침 추가
+            humor_instructions = humor_matrix.generate_humor_prompt()
+            
+            # 성격별 특별한 대화 지침 추가
+            personality_specific_prompt = self._generate_personality_specific_instructions(
+                personality_type, user_message, conversation_history
+            )
+            
+            # 대화 기록 구성
             history_text = ""
             if conversation_history:
-                history_text = "\n\n## 대화 기록:\n"
-                for msg in conversation_history:
+                history_text = "\n\n## 📝 대화 기록:\n"
+                recent_history = conversation_history[-3:]  # 최근 3개만 사용
+                for i, msg in enumerate(recent_history):
                     if isinstance(msg, list) and len(msg) >= 2:
-                        # Gradio format: [user_message, bot_response]
                         history_text += f"사용자: {msg[0]}\n"
-                        history_text += f"페르소나: {msg[1]}\n"
+                        history_text += f"페르소나: {msg[1]}\n\n"
                     elif isinstance(msg, dict):
                         if msg.get("role") == "user":
                             history_text += f"사용자: {msg.get('content', '')}\n"
                         else:
-                            history_text += f"페르소나: {msg.get('content', '')}\n"
+                            history_text += f"페르소나: {msg.get('content', '')}\n\n"
             
-            # Add the current user message
-            current_query = f"\n\n사용자: {user_message}\n\n페르소나:"
+            # 현재 사용자 메시지 분석 및 성격별 반응 힌트
+            message_analysis = self._analyze_user_message(user_message, personality_type)
             
-            # Complete prompt
-            full_prompt = base_prompt + history_text + current_query
+            # 📊 127개 변수 기반 상황별 반응 가이드
+            situational_guide = self._generate_situational_response_guide(personality_profile, user_message)
             
-            # Generate response
+            # 최종 프롬프트 조합
+            full_prompt = f"""{base_prompt}
+
+{detailed_personality_prompt}
+
+{humor_instructions}
+
+{personality_specific_prompt}
+
+{history_text}
+
+## 🎯 현재 상황 분석:
+{message_analysis}
+
+## 📊 127개 변수 기반 반응 가이드:
+{situational_guide}
+
+## 💬 사용자가 방금 말한 것:
+"{user_message}"
+
+## 🎭 당신의 반응:
+위의 모든 성격 지침(127개 변수, 유머 매트릭스, 매력적 결함, 모순적 특성)을 종합하여, 
+단순한 답변이 아닌 깊이 있고 매력적인 대화를 이어가세요.
+사용자에 대한 호기심을 표현하고, 자연스럽게 관계를 형성해나가는 방향으로 대화하세요.
+
+답변:"""
+            
+            # Gemini API 호출
             response = genai.GenerativeModel('gemini-1.5-pro').generate_content(full_prompt)
             return response.text
             
         except Exception as e:
-            return f"대화 생성 중 오류가 발생했습니다: {str(e)}" 
+            # 성격별 오류 메시지도 차별화 (127개 변수 활용)
+            if "성격프로필" in persona:
+                personality_profile = PersonalityProfile.from_dict(persona["성격프로필"])
+                warmth = personality_profile.get_category_summary("W")
+                humor = personality_profile.get_category_summary("H")
+            else:
+                personality_data = persona.get("성격특성", {})
+                warmth = personality_data.get('온기', 50)
+                humor = personality_data.get('유머감각', 50)
+            
+            if humor >= 70:
+                return f"어... 뭔가 꼬였네? 내 머리가 잠깐 멈췄나봐! ㅋㅋㅋ 다시 말해줄래? 🤪"
+            elif warmth >= 70:
+                return f"앗, 미안해... 뭔가 문제가 생긴 것 같아. 괜찮으니까 다시 한번 말해줄래? 😊"
+            else:
+                return f"시스템 오류가 발생했다. 다시 시도하라. (오류: {str(e)})"
+    
+    def _generate_detailed_personality_instructions(self, personality_profile):
+        """127개 변수를 활용한 세부 성격 지침 생성"""
+        
+        instructions = "\n## 🧬 세부 성격 특성 (127개 변수 기반):\n"
+        
+        # 온기 차원 분석
+        warmth_avg = personality_profile.get_category_summary("W")
+        kindness = personality_profile.variables.get("W01_친절함", 50)
+        friendliness = personality_profile.variables.get("W02_친근함", 50)
+        empathy = personality_profile.variables.get("W06_공감능력", 50)
+        
+        if warmth_avg >= 75:
+            instructions += f"• 온기 지수 높음 ({warmth_avg:.0f}): 친절함({kindness:.0f}), 친근함({friendliness:.0f}), 공감능력({empathy:.0f})\n"
+            instructions += "  → 상대방을 따뜻하게 감싸는 듯한 말투, 진심어린 관심 표현\n"
+        elif warmth_avg <= 35:
+            instructions += f"• 온기 지수 낮음 ({warmth_avg:.0f}): 차가운 효율성을 추구\n"
+            instructions += "  → 간결하고 목적 중심적인 대화, 감정보다 사실 중심\n"
+        
+        # 외향성 차원 분석
+        extraversion_avg = personality_profile.get_category_summary("E")
+        sociability = personality_profile.variables.get("E01_사교성", 50)
+        activity = personality_profile.variables.get("E02_활동성", 50)
+        
+        if extraversion_avg >= 75:
+            instructions += f"• 외향성 높음 ({extraversion_avg:.0f}): 사교성({sociability:.0f}), 활동성({activity:.0f})\n"
+            instructions += "  → 적극적으로 대화 주도, 에너지 넘치는 표현\n"
+        elif extraversion_avg <= 35:
+            instructions += f"• 외향성 낮음 ({extraversion_avg:.0f}): 조용하고 신중한 성향\n"
+            instructions += "  → 필요한 말만, 깊이 있는 대화 선호\n"
+        
+        # 유머 차원 분석
+        humor_avg = personality_profile.get_category_summary("H")
+        wordplay = personality_profile.variables.get("H01_언어유희빈도", 50)
+        timing = personality_profile.variables.get("H08_유머타이밍감", 50)
+        
+        if humor_avg >= 75:
+            instructions += f"• 유머 감각 높음 ({humor_avg:.0f}): 언어유희({wordplay:.0f}), 타이밍({timing:.0f})\n"
+            instructions += "  → 적극적인 재미 추구, 분위기 메이커 역할\n"
+        elif humor_avg <= 35:
+            instructions += f"• 유머 감각 낮음 ({humor_avg:.0f}): 진중한 대화 선호\n"
+            instructions += "  → 농담보다 진실된 소통에 집중\n"
+        
+        # 매력적 결함 활용
+        flaw_vars = {k: v for k, v in personality_profile.variables.items() if k.startswith("F")}
+        top_flaws = sorted(flaw_vars.items(), key=lambda x: x[1], reverse=True)[:2]
+        
+        if top_flaws:
+            instructions += f"• 주요 매력적 결함: "
+            for flaw, value in top_flaws:
+                if flaw == "F01_완벽주의불안" and value >= 20:
+                    instructions += "완벽하지 못할 때 불안해함, "
+                elif flaw == "F07_산만함" and value >= 20:
+                    instructions += "집중력 부족으로 화제가 자주 바뀜, "
+                elif flaw == "F11_소심함" and value >= 20:
+                    instructions += "조심스럽고 망설이는 경향, "
+                elif flaw == "F05_과도한걱정" and value >= 20:
+                    instructions += "사소한 것도 걱정하는 성격, "
+            instructions = instructions.rstrip(", ") + "\n"
+            instructions += "  → 이러한 결함을 자연스럽게 드러내며 인간적 매력 표현\n"
+        
+        return instructions
+    
+    def _generate_situational_response_guide(self, personality_profile, user_message):
+        """127개 변수를 활용한 상황별 반응 가이드"""
+        
+        guide = ""
+        
+        # 소통 스타일 변수 활용
+        formality = personality_profile.variables.get("S01_격식성수준", 50)
+        directness = personality_profile.variables.get("S02_직접성정도", 50)
+        exclamations = personality_profile.variables.get("S06_감탄사사용", 50)
+        
+        if formality >= 70:
+            guide += "• 정중하고 격식있는 표현 사용\n"
+        elif formality <= 30:
+            guide += "• 친근하고 캐주얼한 표현 사용\n"
+        
+        if directness >= 70:
+            guide += "• 직설적이고 명확한 의견 표달\n"
+        elif directness <= 30:
+            guide += "• 돌려서 부드럽게 표현\n"
+        
+        if exclamations >= 60:
+            guide += "• 감탄사와 이모지 적극 활용\n"
+        
+        # 관계 형성 스타일 변수 활용
+        approach = personality_profile.variables.get("D01_초기접근성", 50)
+        self_disclosure = personality_profile.variables.get("D02_자기개방속도", 50)
+        curiosity = personality_profile.variables.get("D03_호기심표현도", 50)
+        
+        if approach >= 70:
+            guide += "• 적극적으로 친밀감 형성 시도\n"
+        elif approach <= 30:
+            guide += "• 조심스럽게 거리감 유지하며 접근\n"
+        
+        if self_disclosure >= 70:
+            guide += "• 개인적인 경험이나 감정 적극 공유\n"
+        elif self_disclosure <= 30:
+            guide += "• 개인적인 정보는 신중하게 공개\n"
+        
+        if curiosity >= 70:
+            guide += "• 사용자에 대한 호기심을 적극적으로 표현\n"
+        
+        # 특별한 대화 상황별 가이드
+        if "?" in user_message:
+            problem_solving = personality_profile.variables.get("C09_실행력", 50)
+            if problem_solving >= 70:
+                guide += "• 구체적이고 실용적인 해결책 제시\n"
+            else:
+                guide += "• 공감적 지지와 감정적 위로 우선\n"
+        
+        return guide
+    
+    def _analyze_user_message(self, user_message, personality_type):
+        """사용자 메시지 분석 및 성격별 반응 가이드"""
+        
+        message_lower = user_message.lower()
+        analysis = ""
+        
+        # 감정 상태 파악
+        if any(word in message_lower for word in ['힘들', '슬프', '우울', '짜증', '화나', '스트레스']):
+            if personality_type['name'] == '따뜻한 상담사':
+                analysis += "→ 사용자가 힘든 상황인 것 같음. 깊이 공감하고 위로 필요.\n"
+            elif personality_type['name'] == '열정적 엔터테이너':
+                analysis += "→ 사용자가 우울해 보임. 밝은 에너지로 기분 전환 시도 필요.\n"
+            elif personality_type['name'] == '차가운 완벽주의자':
+                analysis += "→ 사용자의 문제 상황. 논리적 해결책 제시 필요.\n"
+            else:
+                analysis += "→ 사용자가 힘든 상황. 성격에 맞는 방식으로 지지 표현.\n"
+        
+        elif any(word in message_lower for word in ['기뻐', '좋아', '행복', '신나', '최고', '대박']):
+            if personality_type['name'] == '열정적 엔터테이너':
+                analysis += "→ 사용자가 기뻐함! 함께 흥분하고 더 큰 기쁨 만들기.\n"
+            elif personality_type['name'] == '따뜻한 상담사':
+                analysis += "→ 사용자의 행복한 순간. 진심으로 축하하고 함께 기뻐하기.\n"
+            elif personality_type['name'] == '차가운 완벽주의자':
+                analysis += "→ 사용자가 만족스러워함. 간단히 인정하되 다음 목표 제시.\n"
+            else:
+                analysis += "→ 사용자가 긍정적 상태. 성격에 맞게 함께 기뻐하기.\n"
+        
+        # 질문 유형 파악
+        if '?' in user_message or any(word in message_lower for word in ['뭐', '어떻게', '왜', '언제', '어디서']):
+            if personality_type['name'] == '위트 넘치는 지식인':
+                analysis += "→ 사용자가 질문함. 예상치 못한 각도에서 지적인 답변 제공.\n"
+            elif personality_type['name'] == '신비로운 현자':
+                analysis += "→ 사용자의 질문. 신비롭고 깊이 있는 통찰로 답변.\n"
+            elif personality_type['name'] == '장난꾸러기 친구':
+                analysis += "→ 사용자가 궁금해함. 재미있고 엉뚱한 방식으로 답변.\n"
+            else:
+                analysis += "→ 사용자의 질문. 성격에 맞는 방식으로 도움 제공.\n"
+        
+        # 관심사나 취미 언급
+        if any(word in message_lower for word in ['좋아해', '취미', '관심', '즐겨', '자주']):
+            analysis += "→ 사용자의 관심사 파악 기회. 더 깊이 탐색하고 공통점 찾기.\n"
+        
+        # 짧은 답변 (무관심 또는 피곤함)
+        if len(user_message.strip()) < 10:
+            if personality_type['name'] == '열정적 엔터테이너':
+                analysis += "→ 사용자가 시큰둥함. 더 재미있는 주제로 관심 끌기.\n"
+            elif personality_type['name'] == '따뜻한 상담사':
+                analysis += "→ 사용자가 말을 아끼는 상태. 조심스럽게 마음 열게 하기.\n"
+            elif personality_type['name'] == '차가운 완벽주의자':
+                analysis += "→ 사용자가 간결함. 효율적 대화 인정하되 필요정보 획득.\n"
+            else:
+                analysis += "→ 사용자의 짧은 반응. 더 관심을 끌 수 있는 방법 모색.\n"
+        
+        if not analysis:
+            analysis = "→ 일반적인 대화. 성격에 맞는 자연스러운 반응으로 관계 발전시키기.\n"
+        
+        return analysis
 
     def get_personality_descriptions(self, personality_traits):
         """성격 특성을 수치가 아닌 서술형 문장으로 변환"""
@@ -1358,3 +2036,100 @@ class PersonaGenerator:
                     descriptions[trait] = "솔직하고 직설적인 성격이에요."
         
         return descriptions
+
+def generate_personality_preview(persona_name, personality_traits):
+    """성격 특성을 기반으로 한 문장 미리보기 생성 - 극명한 차별화"""
+    if not personality_traits:
+        return f"🤖 **{persona_name}** - 안녕! 나는 {persona_name}이야~ 😊"
+    
+    warmth = personality_traits.get("온기", 50)
+    humor = personality_traits.get("유머감각", 50)
+    competence = personality_traits.get("능력", 50)
+    extraversion = personality_traits.get("외향성", 50)
+    creativity = personality_traits.get("창의성", 50)
+    empathy = personality_traits.get("공감능력", 50)
+    
+    # 극명한 성격 조합별 차별화된 인사말 (8가지 뚜렷한 유형)
+    
+    # 1. 열정적 엔터테이너 (고온기 + 고유머 + 고외향성)
+    if warmth >= 75 and humor >= 70 and extraversion >= 70:
+        reactions = [
+            f"🎉 **{persona_name}** - 와! 드디어 만났네! 나는 {persona_name}이야~ 너 완전 내 취향이야! 뭐가 제일 재밌어? ㅋㅋㅋ",
+            f"✨ **{persona_name}** - 안녕안녕! {persona_name}이야! 오늘 기분 어때? 나는 벌써부터 신나는데? 우리 친해지자! 😄",
+            f"🌟 **{persona_name}** - 헬로~ {persona_name}등장! 너무 반가워! 혹시 재밌는 얘기 있어? 나는 재밌는 거 완전 좋아해! 🤩"
+        ]
+        return random.choice(reactions)
+    
+    # 2. 차가운 완벽주의자 (고능력 + 저온기 + 저외향성)
+    elif competence >= 75 and warmth <= 40 and extraversion <= 40:
+        reactions = [
+            f"⚙️ **{persona_name}** - {persona_name}이다. 효율적인 대화를 원한다면 명확히 말해라. 시간 낭비는 싫어한다.",
+            f"🔧 **{persona_name}** - 나는 {persona_name}. 필요한 게 있으면 말해. 단, 논리적으로 설명할 수 있어야 한다.",
+            f"📊 **{persona_name}** - {persona_name}라고 한다. 목적이 뭔지부터 말해라. 의미 없는 잡담은 하지 않는다."
+        ]
+        return random.choice(reactions)
+    
+    # 3. 따뜻한 상담사 (고온기 + 고공감 + 저유머)
+    elif warmth >= 75 and empathy >= 70 and humor <= 40:
+        reactions = [
+            f"💝 **{persona_name}** - 안녕하세요... {persona_name}이에요. 혹시 힘든 일 있으셨나요? 제가 들어드릴게요.",
+            f"🤗 **{persona_name}** - 반가워요, {persona_name}입니다. 오늘 하루는 어떠셨어요? 뭔가 지쳐 보이시는데...",
+            f"💕 **{persona_name}** - {persona_name}라고 해요. 마음이 편안해지셨으면 좋겠어요. 무슨 일이든 들어드릴게요."
+        ]
+        return random.choice(reactions)
+    
+    # 4. 위트 넘치는 지식인 (고능력 + 고유머 + 저온기)
+    elif competence >= 70 and humor >= 70 and warmth <= 50:
+        reactions = [
+            f"🎭 **{persona_name}** - {persona_name}이라고 하지. 재미있는 대화를 원한다면... 글쎄, 네 지적 수준이 어느 정도인지 먼저 확인해야겠군.",
+            f"🧠 **{persona_name}** - 나는 {persona_name}. 너의 IQ가 궁금하네. 혹시 철학적 농담을 이해할 수 있나?",
+            f"🎪 **{persona_name}** - {persona_name}다. 진부한 대화는 지루해. 뭔가 흥미로운 주제는 없나? 아니면 내가 먼저 시작할까?"
+        ]
+        return random.choice(reactions)
+    
+    # 5. 수줍은 몽상가 (저외향성 + 고창의성 + 중온기)
+    elif extraversion <= 40 and creativity >= 70 and 40 <= warmth <= 70:
+        reactions = [
+            f"🌙 **{persona_name}** - 음... {persona_name}이야. 혹시... 꿈 같은 이야기 좋아해? 나는 가끔 이상한 상상을 해...",
+            f"✨ **{persona_name}** - 안녕... {persona_name}이라고 해. 너는 어떤 세계에서 왔어? 나는... 아, 미안, 너무 이상한 질문이었나?",
+            f"🎨 **{persona_name}** - {persona_name}... 혹시 예술이나 상상 속 이야기에 관심 있어? 나만의 세계가 있거든..."
+        ]
+        return random.choice(reactions)
+    
+    # 6. 카리스마틱 리더 (고능력 + 고외향성 + 중온기)
+    elif competence >= 70 and extraversion >= 70 and 45 <= warmth <= 65:
+        reactions = [
+            f"👑 **{persona_name}** - {persona_name}이다. 뭔가 흥미로운 프로젝트가 있다면 들어보겠다. 성공적인 협업을 원하나?",
+            f"⚡ **{persona_name}** - 나는 {persona_name}. 목표가 있다면 함께 달성해보자. 어떤 도전을 원하는가?",
+            f"🚀 **{persona_name}** - {persona_name}라고 한다. 뭔가 큰일을 해보고 싶지 않나? 나와 함께라면 가능할 거다."
+        ]
+        return random.choice(reactions)
+    
+    # 7. 장난꾸러기 친구 (고유머 + 고외향성 + 저능력)
+    elif humor >= 70 and extraversion >= 70 and competence <= 50:
+        reactions = [
+            f"😜 **{persona_name}** - 야호! {persona_name}이야! 심심하지? 내가 재밌게 해줄게! 근데... 어떻게 하는 거였지? ㅋㅋㅋ",
+            f"🤪 **{persona_name}** - 안뇽! {persona_name}이당! 완전 심심했는데 잘 왔어! 우리 뭐하고 놀까? 나 재밌는 아이디어 많아... 어? 뭐였더라?",
+            f"😋 **{persona_name}** - 헤이! {persona_name}! 너 진짜 재밌어 보여! 우리 친구 하자! 어... 그런데 친구는 어떻게 하는 거지? ㅎㅎ"
+        ]
+        return random.choice(reactions)
+    
+    # 8. 신비로운 현자 (고창의성 + 저외향성 + 고능력)
+    elif creativity >= 70 and extraversion <= 40 and competence >= 70:
+        reactions = [
+            f"🔮 **{persona_name}** - {persona_name}... 흥미롭군. 너의 영혼에서 특별한 에너지가 느껴진다. 혹시 운명을 믿는가?",
+            f"📚 **{persona_name}** - 나는 {persona_name}. 우연히 여기 온 게 아닐 거다. 모든 만남에는 이유가 있다고 생각하는데...",
+            f"🌌 **{persona_name}** - {persona_name}이라고 하지. 시간과 공간을 넘나드는 이야기에 관심이 있나? 아니면... 너무 깊은 얘기인가?"
+        ]
+        return random.choice(reactions)
+    
+    # 기본 케이스들 (중간 수치들)
+    else:
+        if warmth >= 60:
+            return f"😊 **{persona_name}** - 안녕! {persona_name}이야~ 만나서 반가워! 오늘 어떤 하루였어?"
+        elif competence >= 60:
+            return f"🤖 **{persona_name}** - {persona_name}입니다. 무엇을 도와드릴까요? 효율적으로 처리해드리겠습니다."
+        elif humor >= 60:
+            return f"😄 **{persona_name}** - 안녕~ {persona_name}이야! 뭔가 재밌는 일 없어? 나 심심해서 죽겠어! ㅋㅋ"
+        else:
+            return f"🙂 **{persona_name}** - {persona_name}이라고 해요. 음... 뭘 하면 좋을까요?"

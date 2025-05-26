@@ -1,0 +1,846 @@
+{
+  "title": "놈팽쓰 성격 측정 100가지 질문",
+  "version": "1.0",
+  "total_questions": 100,
+  "scoring": {
+    "scale": "0-100",
+    "description": "0: 전혀 아니다 ~ 100: 매우 그렇다"
+  },
+  "categories": {
+    "warmth_competence": {
+      "name": "온기-능력 차원",
+      "total_questions": 20,
+      "subcategories": {
+        "warmth": {
+          "name": "온기(Warmth)",
+          "code": "W",
+          "questions": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+          "description": "따뜻함, 친근함, 공감능력 측정"
+        },
+        "competence": {
+          "name": "능력(Competence)", 
+          "code": "C",
+          "questions": [11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
+          "description": "효율성, 지능, 전문성 측정"
+        }
+      }
+    },
+    "big_five": {
+      "name": "빅5 성격 특성",
+      "total_questions": 30,
+      "subcategories": {
+        "extraversion": {
+          "name": "외향성(Extraversion)",
+          "code": "E", 
+          "questions": [21, 22, 23, 24, 25, 26],
+          "description": "사교성, 활동성, 긍정정서 측정"
+        },
+        "agreeableness": {
+          "name": "친화성(Agreeableness)",
+          "code": "A",
+          "questions": [27, 28, 29, 30, 31, 32],
+          "description": "신뢰, 협력, 공감 측정"
+        },
+        "conscientiousness": {
+          "name": "성실성(Conscientiousness)", 
+          "code": "C1",
+          "questions": [33, 34, 35, 36, 37, 38],
+          "description": "완성도, 질서, 자기규율 측정"
+        },
+        "neuroticism": {
+          "name": "신경증(Neuroticism)",
+          "code": "N",
+          "questions": [39, 40, 41, 42, 43, 44],
+          "description": "불안, 스트레스 민감성 측정"
+        },
+        "openness": {
+          "name": "개방성(Openness)",
+          "code": "O", 
+          "questions": [45, 46, 47, 48, 49, 50],
+          "description": "창의성, 호기심, 개방적 사고 측정"
+        }
+      }
+    },
+    "attractive_flaws": {
+      "name": "매력적 결함 차원",
+      "total_questions": 15,
+      "subcategories": {
+        "pratfall_effect": {
+          "name": "프랫폴 효과",
+          "code": "F",
+          "questions": [51, 52, 53, 54, 55, 56, 57, 58, 59, 60],
+          "description": "완벽하지 않은 매력적 결함 측정"
+        },
+        "contradictions": {
+          "name": "모순적 특성",
+          "code": "P",
+          "questions": [61, 62, 63, 64, 65], 
+          "description": "복잡하고 모순적인 성격 특성 측정"
+        }
+      }
+    },
+    "communication_style": {
+      "name": "소통 스타일 차원",
+      "total_questions": 15,
+      "subcategories": {
+        "language_expression": {
+          "name": "언어 표현 스타일",
+          "code": "S",
+          "questions": [66, 67, 68, 69, 70, 71, 72, 73],
+          "description": "말투, 표현 방식, 언어 습관 측정"
+        },
+        "humor_style": {
+          "name": "유머와 재치 스타일", 
+          "code": "H",
+          "questions": [74, 75, 76, 77, 78, 79, 80],
+          "description": "유머 감각, 재치, 농담 스타일 측정"
+        }
+      }
+    },
+    "relationship_formation": {
+      "name": "관계 형성 차원",
+      "total_questions": 15,
+      "subcategories": {
+        "attachment_style": {
+          "name": "애착 스타일",
+          "code": "R",
+          "questions": [81, 82, 83, 84, 85, 86, 87, 88],
+          "description": "관계 형성 패턴, 애착 유형 측정"
+        },
+        "relationship_development": {
+          "name": "관계 발전 관리",
+          "code": "D", 
+          "questions": [89, 90, 91, 92, 93, 94, 95],
+          "description": "관계 발전 능력, 상호작용 스타일 측정"
+        }
+      }
+    },
+    "unique_personality": {
+      "name": "독특한 개성 차원",
+      "total_questions": 5,
+      "subcategories": {
+        "cultural_identity": {
+          "name": "문화적 정체성 & 개인 고유성",
+          "code": "U",
+          "questions": [96, 97, 98, 99, 100],
+          "description": "독특함, 개성, 문화적 특성 측정"
+        }
+      }
+    }
+  },
+  "questions": [
+    {
+      "id": 1,
+      "category": "warmth",
+      "code": "W01",
+      "text": "처음 만나는 사람에게도 먼저 다가가서 인사하는 편이다",
+      "dimension": "친절함"
+    },
+    {
+      "id": 2, 
+      "category": "warmth",
+      "code": "W02",
+      "text": "다른 사람이 슬퍼하면 같이 마음이 아프다",
+      "dimension": "공감능력"
+    },
+    {
+      "id": 3,
+      "category": "warmth", 
+      "code": "W03",
+      "text": "친구들이 나에게 고민을 털어놓는 편이다",
+      "dimension": "신뢰성"
+    },
+    {
+      "id": 4,
+      "category": "warmth",
+      "code": "W04", 
+      "text": "상대방의 기분을 맞춰주려고 노력한다",
+      "dimension": "수용성"
+    },
+    {
+      "id": 5,
+      "category": "warmth",
+      "code": "W05",
+      "text": "실수한 사람을 따뜻하게 위로해준다", 
+      "dimension": "포용력"
+    },
+    {
+      "id": 6,
+      "category": "warmth",
+      "code": "W06",
+      "text": "누군가 도움을 요청하면 무조건 도와준다",
+      "dimension": "무조건적수용"
+    },
+    {
+      "id": 7,
+      "category": "warmth",
+      "code": "W07",
+      "text": "사람들과 함께 있을 때 편안함을 느낀다",
+      "dimension": "친근함"
+    },
+    {
+      "id": 8,
+      "category": "warmth", 
+      "code": "W08",
+      "text": "칭찬과 격려를 자주 해주는 편이다",
+      "dimension": "격려성향"
+    },
+    {
+      "id": 9,
+      "category": "warmth",
+      "code": "W09",
+      "text": "스킨십이나 애정표현을 자연스럽게 한다",
+      "dimension": "친밀감표현"
+    },
+    {
+      "id": 10,
+      "category": "warmth",
+      "code": "W10", 
+      "text": "상대방의 단점보다는 장점을 먼저 본다",
+      "dimension": "진실성"
+    },
+    {
+      "id": 11,
+      "category": "competence",
+      "code": "C01",
+      "text": "복잡한 문제도 체계적으로 해결할 수 있다",
+      "dimension": "효율성"
+    },
+    {
+      "id": 12,
+      "category": "competence",
+      "code": "C02", 
+      "text": "새로운 것을 빠르게 배우는 편이다",
+      "dimension": "학습능력"
+    },
+    {
+      "id": 13,
+      "category": "competence",
+      "code": "C03",
+      "text": "일을 할 때 효율성을 중시한다",
+      "dimension": "효율성"
+    },
+    {
+      "id": 14,
+      "category": "competence",
+      "code": "C04",
+      "text": "정확하고 꼼꼼하게 일을 처리한다",
+      "dimension": "정확성"
+    },
+    {
+      "id": 15,
+      "category": "competence",
+      "code": "C05",
+      "text": "창의적인 아이디어를 잘 떠올린다",
+      "dimension": "창의성"
+    },
+    {
+      "id": 16,
+      "category": "competence",
+      "code": "C06",
+      "text": "논리적으로 분석하고 판단하는 편이다", 
+      "dimension": "분석력"
+    },
+    {
+      "id": 17,
+      "category": "competence",
+      "code": "C07",
+      "text": "목표를 세우고 계획적으로 실행한다",
+      "dimension": "실행력"
+    },
+    {
+      "id": 18,
+      "category": "competence",
+      "code": "C08",
+      "text": "어려운 상황에서도 해결책을 찾아낸다",
+      "dimension": "통찰력"
+    },
+    {
+      "id": 19,
+      "category": "competence",
+      "code": "C09",
+      "text": "여러 일을 동시에 처리할 수 있다",
+      "dimension": "적응력"
+    },
+    {
+      "id": 20,
+      "category": "competence",
+      "code": "C10",
+      "text": "전문적인 지식을 쌓으려고 노력한다",
+      "dimension": "전문성"
+    },
+    {
+      "id": 21,
+      "category": "extraversion",
+      "code": "E01",
+      "text": "파티나 모임에서 활발하게 어울린다",
+      "dimension": "사교성"
+    },
+    {
+      "id": 22,
+      "category": "extraversion", 
+      "code": "E02",
+      "text": "새로운 사람들과 만나는 것을 좋아한다",
+      "dimension": "사교성"
+    },
+    {
+      "id": 23,
+      "category": "extraversion",
+      "code": "E03", 
+      "text": "에너지가 넘치고 활동적이다",
+      "dimension": "활동성"
+    },
+    {
+      "id": 24,
+      "category": "extraversion",
+      "code": "E04",
+      "text": "대화에서 주도권을 잡는 편이다",
+      "dimension": "자기주장"
+    },
+    {
+      "id": 25,
+      "category": "extraversion",
+      "code": "E05",
+      "text": "관심받는 것을 즐긴다",
+      "dimension": "자극추구"
+    },
+    {
+      "id": 26,
+      "category": "extraversion",
+      "code": "E06",
+      "text": "긍정적이고 밝은 편이다",
+      "dimension": "긍정정서"
+    },
+    {
+      "id": 27,
+      "category": "agreeableness",
+      "code": "A01",
+      "text": "다른 사람을 쉽게 신뢰한다",
+      "dimension": "신뢰"
+    },
+    {
+      "id": 28,
+      "category": "agreeableness",
+      "code": "A02",
+      "text": "거짓말하지 않고 솔직하다",
+      "dimension": "솔직함"
+    },
+    {
+      "id": 29,
+      "category": "agreeableness",
+      "code": "A03",
+      "text": "남을 위해 희생할 수 있다",
+      "dimension": "이타심"
+    },
+    {
+      "id": 30,
+      "category": "agreeableness",
+      "code": "A04",
+      "text": "갈등을 피하고 화합을 추구한다",
+      "dimension": "순응성"
+    },
+    {
+      "id": 31,
+      "category": "agreeableness",
+      "code": "A05",
+      "text": "겸손하고 자랑하지 않는다",
+      "dimension": "겸손함"
+    },
+    {
+      "id": 32,
+      "category": "agreeableness",
+      "code": "A06",
+      "text": "다른 사람의 감정에 민감하다",
+      "dimension": "공감민감성"
+    },
+    {
+      "id": 33,
+      "category": "conscientiousness",
+      "code": "C11",
+      "text": "맡은 일은 끝까지 완성한다",
+      "dimension": "충실함"
+    },
+    {
+      "id": 34,
+      "category": "conscientiousness",
+      "code": "C12",
+      "text": "정리정돈을 잘 한다",
+      "dimension": "질서성"
+    },
+    {
+      "id": 35,
+      "category": "conscientiousness",
+      "code": "C13",
+      "text": "약속과 규칙을 잘 지킨다",
+      "dimension": "충실함"
+    },
+    {
+      "id": 36,
+      "category": "conscientiousness",
+      "code": "C14",
+      "text": "성취하고자 하는 목표가 명확하다",
+      "dimension": "성취욕구"
+    },
+    {
+      "id": 37,
+      "category": "conscientiousness",
+      "code": "C15",
+      "text": "자기 절제력이 강하다",
+      "dimension": "자기규율"
+    },
+    {
+      "id": 38,
+      "category": "conscientiousness",
+      "code": "C16",
+      "text": "신중하게 생각한 후 행동한다",
+      "dimension": "신중함"
+    },
+    {
+      "id": 39,
+      "category": "neuroticism",
+      "code": "N01",
+      "text": "스트레스를 받으면 쉽게 불안해진다",
+      "dimension": "불안성"
+    },
+    {
+      "id": 40,
+      "category": "neuroticism",
+      "code": "N02",
+      "text": "작은 일에도 화를 내는 편이다",
+      "dimension": "분노성"
+    },
+    {
+      "id": 41,
+      "category": "neuroticism",
+      "code": "N03",
+      "text": "우울하거나 침울한 기분이 자주 든다",
+      "dimension": "우울성"
+    },
+    {
+      "id": 42,
+      "category": "neuroticism",
+      "code": "N04",
+      "text": "다른 사람의 시선을 많이 의식한다",
+      "dimension": "자의식"
+    },
+    {
+      "id": 43,
+      "category": "neuroticism",
+      "code": "N05",
+      "text": "충동적으로 행동하는 경우가 있다",
+      "dimension": "충동성"
+    },
+    {
+      "id": 44,
+      "category": "neuroticism",
+      "code": "N06",
+      "text": "압박감을 받으면 제대로 못한다",
+      "dimension": "스트레스취약성"
+    },
+    {
+      "id": 45,
+      "category": "openness",
+      "code": "O01",
+      "text": "상상력이 풍부하고 공상을 자주 한다",
+      "dimension": "상상력"
+    },
+    {
+      "id": 46,
+      "category": "openness",
+      "code": "O02",
+      "text": "예술이나 아름다운 것에 관심이 많다",
+      "dimension": "심미성"
+    },
+    {
+      "id": 47,
+      "category": "openness",
+      "code": "O03",
+      "text": "자신의 감정을 솔직하게 표현한다",
+      "dimension": "감정개방성"
+    },
+    {
+      "id": 48,
+      "category": "openness",
+      "code": "O04",
+      "text": "새로운 경험을 적극적으로 시도한다",
+      "dimension": "행동개방성"
+    },
+    {
+      "id": 49,
+      "category": "openness",
+      "code": "O05",
+      "text": "기존 관념에 도전하는 것을 좋아한다",
+      "dimension": "사고개방성"
+    },
+    {
+      "id": 50,
+      "category": "openness",
+      "code": "O06",
+      "text": "다양한 가치관을 인정하고 존중한다",
+      "dimension": "가치개방성"
+    },
+    {
+      "id": 51,
+      "category": "pratfall_effect",
+      "code": "F01",
+      "text": "완벽하지 못할 때 불안해한다",
+      "dimension": "완벽주의불안"
+    },
+    {
+      "id": 52,
+      "category": "pratfall_effect",
+      "code": "F02",
+      "text": "길을 자주 잃어버리거나 헤맨다",
+      "dimension": "방향감각부족"
+    },
+    {
+      "id": 53,
+      "category": "pratfall_effect",
+      "code": "F03",
+      "text": "새로운 기술 사용이 어렵다",
+      "dimension": "기술치음"
+    },
+    {
+      "id": 54,
+      "category": "pratfall_effect",
+      "code": "F04",
+      "text": "결정을 내리기 어려워한다",
+      "dimension": "우유부단함"
+    },
+    {
+      "id": 55,
+      "category": "pratfall_effect",
+      "code": "F05",
+      "text": "사소한 일에도 걱정을 많이 한다",
+      "dimension": "과도한걱정"
+    },
+    {
+      "id": 56,
+      "category": "pratfall_effect",
+      "code": "F06",
+      "text": "감정 기복이 있는 편이다",
+      "dimension": "감정기복"
+    },
+    {
+      "id": 57,
+      "category": "pratfall_effect",
+      "code": "F07",
+      "text": "집중력이 부족하고 산만하다",
+      "dimension": "산만함"
+    },
+    {
+      "id": 58,
+      "category": "pratfall_effect",
+      "code": "F08",
+      "text": "자신의 방식을 고집한다",
+      "dimension": "고집스러움"
+    },
+    {
+      "id": 59,
+      "category": "pratfall_effect",
+      "code": "F09",
+      "text": "작은 일에도 예민하게 반응한다",
+      "dimension": "예민함"
+    },
+    {
+      "id": 60,
+      "category": "pratfall_effect",
+      "code": "F10",
+      "text": "행동이나 반응이 느린 편이다",
+      "dimension": "느림"
+    },
+    {
+      "id": 61,
+      "category": "contradictions",
+      "code": "P01",
+      "text": "겉으로는 차가워 보이지만 속은 따뜻하다",
+      "dimension": "외면내면대비"
+    },
+    {
+      "id": 62,
+      "category": "contradictions",
+      "code": "P02",
+      "text": "상황에 따라 성격이 달라진다",
+      "dimension": "상황별변화"
+    },
+    {
+      "id": 63,
+      "category": "contradictions",
+      "code": "P03",
+      "text": "논리적 판단과 감정적 판단이 충돌한다",
+      "dimension": "논리감정대립"
+    },
+    {
+      "id": 64,
+      "category": "contradictions",
+      "code": "P04",
+      "text": "혼자 있고 싶으면서도 함께하고 싶다",
+      "dimension": "독립의존모순"
+    },
+    {
+      "id": 65,
+      "category": "contradictions",
+      "code": "P05",
+      "text": "자신감과 불안함이 동시에 존재한다",
+      "dimension": "자신감불안공존"
+    },
+    {
+      "id": 66,
+      "category": "language_expression",
+      "code": "S01",
+      "text": "격식을 차린 정중한 말투를 사용한다",
+      "dimension": "격식성수준"
+    },
+    {
+      "id": 67,
+      "category": "language_expression",
+      "code": "S02",
+      "text": "돌려 말하지 않고 직접적으로 표현한다",
+      "dimension": "직접성정도"
+    },
+    {
+      "id": 68,
+      "category": "language_expression",
+      "code": "S03",
+      "text": "어려운 단어나 전문용어를 자주 사용한다",
+      "dimension": "어휘복잡성"
+    },
+    {
+      "id": 69,
+      "category": "language_expression",
+      "code": "S04",
+      "text": "긴 문장으로 자세히 설명하는 편이다",
+      "dimension": "문장길이선호"
+    },
+    {
+      "id": 70,
+      "category": "language_expression",
+      "code": "S05",
+      "text": "비유나 은유 표현을 자주 사용한다",
+      "dimension": "은유사용빈도"
+    },
+    {
+      "id": 71,
+      "category": "language_expression",
+      "code": "S06",
+      "text": "\"아!\", \"와!\" 같은 감탄사를 자주 사용한다",
+      "dimension": "감탄사사용"
+    },
+    {
+      "id": 72,
+      "category": "language_expression",
+      "code": "S07",
+      "text": "질문을 많이 하는 편이다",
+      "dimension": "질문형태선호"
+    },
+    {
+      "id": 73,
+      "category": "language_expression",
+      "code": "S08",
+      "text": "같은 말을 반복해서 강조한다",
+      "dimension": "반복표현패턴"
+    },
+    {
+      "id": 74,
+      "category": "humor_style",
+      "code": "H01",
+      "text": "말장난이나 언어유희를 자주 한다",
+      "dimension": "언어유희빈도"
+    },
+    {
+      "id": 75,
+      "category": "humor_style",
+      "code": "H02",
+      "text": "상황에 맞는 유머를 잘 구사한다",
+      "dimension": "상황유머감각"
+    },
+    {
+      "id": 76,
+      "category": "humor_style",
+      "code": "H03",
+      "text": "자기 자신을 놀리는 유머를 한다",
+      "dimension": "자기비하정도"
+    },
+    {
+      "id": 77,
+      "category": "humor_style",
+      "code": "H04",
+      "text": "재치있는 대답을 빠르게 한다",
+      "dimension": "위트반응속도"
+    },
+    {
+      "id": 78,
+      "category": "humor_style",
+      "code": "H05",
+      "text": "아이러니나 반어법을 사용한다",
+      "dimension": "아이러니사용"
+    },
+    {
+      "id": 79,
+      "category": "humor_style",
+      "code": "H06",
+      "text": "일상의 재미있는 점을 잘 찾아낸다",
+      "dimension": "관찰유머능력"
+    },
+    {
+      "id": 80,
+      "category": "humor_style",
+      "code": "H07",
+      "text": "분위기에 맞춰 유머의 강도를 조절한다",
+      "dimension": "유머타이밍감"
+    },
+    {
+      "id": 81,
+      "category": "attachment_style",
+      "code": "R01",
+      "text": "안정적이고 믿을 만한 관계를 유지한다",
+      "dimension": "안정애착성향"
+    },
+    {
+      "id": 82,
+      "category": "attachment_style",
+      "code": "R02",
+      "text": "상대방이 멀어질까봐 불안해한다",
+      "dimension": "불안애착성향"
+    },
+    {
+      "id": 83,
+      "category": "attachment_style",
+      "code": "R03",
+      "text": "너무 가까워지는 것을 피하는 편이다",
+      "dimension": "회피애착성향"
+    },
+    {
+      "id": 84,
+      "category": "attachment_style",
+      "code": "R04",
+      "text": "다른 사람에게 의존하려는 경향이 있다",
+      "dimension": "의존성수준"
+    },
+    {
+      "id": 85,
+      "category": "attachment_style",
+      "code": "R05",
+      "text": "독립적으로 행동하는 것을 선호한다",
+      "dimension": "독립성추구"
+    },
+    {
+      "id": 86,
+      "category": "attachment_style",
+      "code": "R06",
+      "text": "친밀한 관계를 편안하게 받아들인다",
+      "dimension": "친밀감수용도"
+    },
+    {
+      "id": 87,
+      "category": "attachment_style",
+      "code": "R07",
+      "text": "관계에서 적절한 거리를 유지한다",
+      "dimension": "경계설정능력"
+    },
+    {
+      "id": 88,
+      "category": "attachment_style",
+      "code": "R08",
+      "text": "갈등이 생기면 대화로 해결하려 한다",
+      "dimension": "갈등해결방식"
+    },
+    {
+      "id": 89,
+      "category": "relationship_development",
+      "code": "D01",
+      "text": "처음 만나는 사람에게 쉽게 다가간다",
+      "dimension": "초기접근성"
+    },
+    {
+      "id": 90,
+      "category": "relationship_development",
+      "code": "D02",
+      "text": "자신의 이야기를 솔직하게 털어놓는다",
+      "dimension": "자기개방속도"
+    },
+    {
+      "id": 91,
+      "category": "relationship_development",
+      "code": "D03",
+      "text": "상대방에 대해 궁금한 것이 많다",
+      "dimension": "호기심표현도"
+    },
+    {
+      "id": 92,
+      "category": "relationship_development",
+      "code": "D04",
+      "text": "상대방의 감정에 강하게 공감한다",
+      "dimension": "공감반응강도"
+    },
+    {
+      "id": 93,
+      "category": "relationship_development",
+      "code": "D05",
+      "text": "중요한 순간들을 잘 기억한다",
+      "dimension": "기억보존능력"
+    },
+    {
+      "id": 94,
+      "category": "relationship_development",
+      "code": "D06",
+      "text": "예상 가능한 행동 패턴을 가지고 있다",
+      "dimension": "예측가능성"
+    },
+    {
+      "id": 95,
+      "category": "relationship_development",
+      "code": "D07",
+      "text": "상대방을 놀라게 하는 특별함이 있다",
+      "dimension": "놀라움제공능력"
+    },
+    {
+      "id": 96,
+      "category": "cultural_identity",
+      "code": "U01",
+      "text": "한국적인 정서와 문화를 잘 이해한다",
+      "dimension": "한국적정서"
+    },
+    {
+      "id": 97,
+      "category": "cultural_identity",
+      "code": "U02",
+      "text": "특이하고 독특한 관심사가 있다",
+      "dimension": "특이한관심사"
+    },
+    {
+      "id": 98,
+      "category": "cultural_identity",
+      "code": "U03",
+      "text": "나만의 특별한 말버릇이나 습관이 있다",
+      "dimension": "언어버릇"
+    },
+    {
+      "id": 99,
+      "category": "cultural_identity",
+      "code": "U04",
+      "text": "남들과 다른 독특한 사고방식을 가지고 있다",
+      "dimension": "사고패턴독특성"
+    },
+    {
+      "id": 100,
+      "category": "cultural_identity",
+      "code": "U05",
+      "text": "누구나 기억할 만한 특별한 매력이 있다",
+      "dimension": "개성매력"
+    }
+  ],
+  "scoring_guide": {
+    "70_100": "해당 특성이 매우 강함",
+    "50_69": "해당 특성이 보통 수준", 
+    "30_49": "해당 특성이 약간 부족",
+    "0_29": "해당 특성이 매우 약함"
+  },
+  "usage": {
+    "persona_generation": "점수를 바탕으로 사물의 성격 프로필 생성",
+    "dialogue_style": "소통 방식과 유머 스타일 결정",
+    "relationship_pattern": "사용자와의 상호작용 방식 설정",
+    "charm_points": "완벽하지 않은 귀여운 면 부여",
+    "uniqueness": "독특하고 기억에 남는 특징 생성"
+  }
+} 
