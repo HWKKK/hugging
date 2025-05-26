@@ -523,57 +523,74 @@ def plot_humor_matrix(humor_data):
         return None
 
 def generate_personality_chart(persona):
-    """성격 차트 생성 - 영어 레이블 사용"""
+    """성격 특성을 레이더 차트로 시각화 (영어 버전)"""
+    
     if not persona or "성격특성" not in persona:
         return None
+        
+    personality_traits = persona["성격특성"]
     
-    try:
-        traits = persona["성격특성"]
-        
-        # 영어 라벨 매핑 (폰트 문제 완전 해결)
-        trait_mapping = {
-            "온기": "Warmth",
-            "능력": "Competence", 
-            "창의성": "Creativity",
-            "외향성": "Extraversion",
-            "유머감각": "Humor",
-            "신뢰성": "Reliability",
-            "공감능력": "Empathy"
-        }
-        
-        categories = [trait_mapping.get(trait, trait) for trait in traits.keys()]
-        values = list(traits.values())
-        
-        # 극좌표 차트 생성
-        fig, ax = plt.subplots(figsize=(8, 8), subplot_kw=dict(polar=True))
-        
-        angles = np.linspace(0, 2*np.pi, len(categories), endpoint=False)
-        values_plot = values + [values[0]]  # Close the plot
-        angles_plot = np.concatenate([angles, [angles[0]]])
-        
-        # 더 예쁜 색상과 스타일
-        ax.plot(angles_plot, values_plot, 'o-', linewidth=3, color='#6366f1', markersize=8)
-        ax.fill(angles_plot, values_plot, alpha=0.25, color='#6366f1')
-        
-        # 격자와 축 설정
-        ax.set_xticks(angles)
-        ax.set_xticklabels(categories, fontsize=11)
-        ax.set_ylim(0, 100)
-        ax.set_yticks([20, 40, 60, 80, 100])
-        ax.set_yticklabels(['20', '40', '60', '80', '100'], fontsize=9)
-        ax.grid(True, alpha=0.3)
-        
-        # 각 점에 값 표시
-        for angle, value in zip(angles, values):
-            ax.text(angle, value + 5, f'{value}', ha='center', va='center', 
-                   fontsize=9, fontweight='bold', color='#2d3748')
-        
-        plt.title("Personality Traits Radar Chart", size=16, pad=20, fontweight='bold')
-        
-        return fig
-    except Exception as e:
-        print(f"성격 차트 생성 오류: {str(e)}")
+    # 영어 레이블 매핑
+    trait_labels_en = {
+        '온기': 'Warmth',
+        '능력': 'Competence', 
+        '창의성': 'Creativity',
+        '외향성': 'Extraversion',
+        '유머감각': 'Humor',
+        '신뢰성': 'Reliability',
+        '공감능력': 'Empathy'
+    }
+    
+    # 데이터 준비
+    categories = []
+    values = []
+    
+    for korean_trait, english_trait in trait_labels_en.items():
+        if korean_trait in personality_traits:
+            categories.append(english_trait)
+            values.append(personality_traits[korean_trait])
+    
+    if not categories:
         return None
+    
+    # 레이더 차트 생성
+    fig = go.Figure()
+    
+    fig.add_trace(go.Scatterpolar(
+        r=values,
+        theta=categories,
+        fill='toself',
+        fillcolor='rgba(74, 144, 226, 0.3)',
+        line=dict(color='rgba(74, 144, 226, 1)', width=2),
+        marker=dict(size=8, color='rgba(74, 144, 226, 1)'),
+        name='Personality Traits'
+    ))
+    
+    fig.update_layout(
+        polar=dict(
+            radialaxis=dict(
+                visible=True,
+                range=[0, 100],
+                tickfont=dict(size=10),
+                gridcolor="lightgray"
+            ),
+            angularaxis=dict(
+                tickfont=dict(size=12, family="Arial, sans-serif")
+            )
+        ),
+        showlegend=False,
+        title=dict(
+            text="Personality Profile",
+            x=0.5,
+            font=dict(size=16, family="Arial, sans-serif")
+        ),
+        width=400,
+        height=400,
+        margin=dict(l=40, r=40, t=60, b=40),
+        font=dict(family="Arial, sans-serif")
+    )
+    
+    return fig
 
 def save_persona_to_file(persona):
     """페르소나 저장"""
@@ -607,43 +624,49 @@ def save_persona_to_file(persona):
         return f"❌ 저장 중 오류 발생: {str(e)}"
 
 def export_persona_to_json(persona):
-    """페르소나를 JSON 파일로 내보내기"""
+    """페르소나를 JSON 파일로 내보내기 (Gradio 다운로드용)"""
     if not persona:
-        return None, "내보낼 페르소나가 없습니다."
+        return None
     
     try:
         # 깊은 복사로 원본 보호
         persona_copy = copy.deepcopy(persona)
         
         # JSON 직렬화 불가능한 객체들 제거
-        keys_to_remove = []
-        for key, value in persona_copy.items():
-            if callable(value) or hasattr(value, '__call__'):
-                keys_to_remove.append(key)
+        def clean_for_json(obj):
+            if isinstance(obj, dict):
+                cleaned = {}
+                for k, v in obj.items():
+                    if not callable(v) and not hasattr(v, '__call__'):
+                        cleaned[k] = clean_for_json(v)
+                return cleaned
+            elif isinstance(obj, (list, tuple)):
+                return [clean_for_json(item) for item in obj if not callable(item)]
+            else:
+                return obj
         
-        for key in keys_to_remove:
-            persona_copy.pop(key, None)
+        persona_clean = clean_for_json(persona_copy)
         
-        # JSON 파일 생성
-        persona_name = persona_copy.get("기본정보", {}).get("이름", "persona")
+        # JSON 문자열 생성
+        json_content = json.dumps(persona_clean, ensure_ascii=False, indent=2)
+        
+        # 파일명 생성
+        persona_name = persona_clean.get("기본정보", {}).get("이름", "persona")
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"{persona_name}_{timestamp}.json"
         
-        # 임시 파일 생성
-        temp_dir = "data/temp"
-        os.makedirs(temp_dir, exist_ok=True)
+        # 임시 파일 저장
+        temp_dir = "/tmp" if os.path.exists("/tmp") else "."
         filepath = os.path.join(temp_dir, filename)
         
         with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(persona_copy, f, ensure_ascii=False, indent=2)
+            f.write(json_content)
         
-        return filepath, f"✅ JSON 파일이 생성되었습니다: {filename}"
+        return filepath
         
     except Exception as e:
-        import traceback
-        error_msg = traceback.format_exc()
-        print(f"JSON 내보내기 오류: {error_msg}")
-        return None, f"❌ JSON 내보내기 중 오류 발생: {str(e)}"
+        print(f"JSON 내보내기 오류: {str(e)}")
+        return None
 
 # def get_saved_personas():
 #     """저장된 페르소나 목록 가져오기 - 더 이상 사용하지 않음"""
@@ -1130,8 +1153,8 @@ def create_main_interface():
                             gr.Markdown("### 📁 페르소나 내보내기")
                             with gr.Row():
                                 save_btn = gr.Button("💾 페르소나 저장", variant="secondary")
-                                export_btn = gr.Button("📥 JSON 파일로 내보내기", variant="outline")
-                            download_file = gr.File(label="다운로드", visible=False)
+                                persona_export_btn = gr.Button("📥 JSON 파일로 내보내기", variant="outline")
+                            persona_download_file = gr.File(label="다운로드", visible=False)
                             export_status = gr.Markdown("")
             
             # 상세 정보 탭
@@ -1208,8 +1231,8 @@ def create_main_interface():
                 with gr.Row():
                     with gr.Column():
                         gr.Markdown("#### 💾 대화 기록 저장/불러오기")
-                        export_btn = gr.Button("📥 대화 기록 JSON 다운로드", variant="secondary")
-                        download_file = gr.File(label="다운로드", visible=False)
+                        conversation_export_btn = gr.Button("📥 대화 기록 JSON 다운로드", variant="secondary")
+                        conversation_download_file = gr.File(label="다운로드", visible=False)
                         
                         import_file = gr.File(label="📤 대화 기록 JSON 업로드", file_types=[".json"])
                         import_result = gr.Textbox(label="가져오기 결과", lines=3, interactive=False)
@@ -1234,7 +1257,7 @@ def create_main_interface():
             outputs=[
                 current_persona, status_output, persona_summary_display, personality_traits_output,
                 humor_chart_output, attractive_flaws_output, contradictions_output, 
-                personality_variables_output, persona_awakening, download_file, adjustment_section
+                personality_variables_output, persona_awakening, persona_download_file, adjustment_section
             ]
         ).then(
             # 슬라이더 값을 현재 페르소나 값으로 업데이트
@@ -1262,7 +1285,7 @@ def create_main_interface():
             outputs=[
                 current_persona, status_output, persona_summary_display, personality_traits_output,
                 humor_chart_output, attractive_flaws_output, contradictions_output, 
-                personality_variables_output, persona_awakening, download_file
+                personality_variables_output, persona_awakening, persona_download_file
             ]
         )
         
@@ -1279,14 +1302,15 @@ def create_main_interface():
             outputs=[personality_chart_output]
         )
         
-        export_btn.click(
+        # 페르소나 내보내기 버튼
+        persona_export_btn.click(
             fn=export_persona_to_json,
             inputs=[current_persona],
-            outputs=[download_file, export_status]
+            outputs=[persona_download_file]
         ).then(
             fn=lambda x: gr.update(visible=True) if x else gr.update(visible=False),
-            inputs=[download_file],
-            outputs=[download_file]
+            inputs=[persona_download_file],
+            outputs=[persona_download_file]
         )
         
         import_btn.click(
@@ -1361,13 +1385,13 @@ def create_main_interface():
         )
         
         # 이벤트 연결
-        export_btn.click(
+        conversation_export_btn.click(
             export_conversation_history,
-            outputs=[download_file, download_file]
+            outputs=[conversation_download_file, conversation_download_file]
         ).then(
             lambda x: gr.update(visible=True) if x[0] else gr.update(visible=False),
-            inputs=[download_file],
-            outputs=[download_file]
+            inputs=[conversation_download_file],
+            outputs=[conversation_download_file]
         )
         
         import_file.upload(
