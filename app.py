@@ -211,13 +211,13 @@ def create_persona_from_image(image, name, location, time_spent, object_type, pu
     global persona_generator
     
     if image is None:
-        return None, "이미지를 업로드해주세요.", "", {}, None, [], [], [], "", None, gr.update(visible=False)
+        return None, "이미지를 업로드해주세요.", "", {}, None, [], [], [], "", None, gr.update(visible=False), "이미지 없음"
     
     progress(0.1, desc="설정 확인 중...")
     
     # 환경변수 API 키 확인
     if not persona_generator or not hasattr(persona_generator, 'api_key') or not persona_generator.api_key:
-        return None, "❌ **API 키가 설정되지 않았습니다!** 허깅페이스 스페이스 설정에서 GEMINI_API_KEY를 환경변수로 추가해주세요.", "", {}, None, [], [], [], "", None, gr.update(visible=False)
+        return None, "❌ **API 키가 설정되지 않았습니다!** 허깅페이스 스페이스 설정에서 GEMINI_API_KEY를 환경변수로 추가해주세요.", "", {}, None, [], [], [], "", None, gr.update(visible=False), "API 키 없음"
     
     progress(0.2, desc="이미지 분석 중...")
     
@@ -236,9 +236,9 @@ def create_persona_from_image(image, name, location, time_spent, object_type, pu
             try:
                 image = Image.open(image)
             except Exception as img_error:
-                return None, f"❌ 이미지 파일을 읽을 수 없습니다: {str(img_error)}", "", {}, None, [], [], [], "", None, gr.update(visible=False)
+                return None, f"❌ 이미지 파일을 읽을 수 없습니다: {str(img_error)}", "", {}, None, [], [], [], "", None, gr.update(visible=False), "이미지 오류"
         elif not isinstance(image, Image.Image):
-            return None, "❌ 올바른 이미지 형식이 아닙니다.", "", {}, None, [], [], [], "", None, gr.update(visible=False)
+            return None, "❌ 올바른 이미지 형식이 아닙니다.", "", {}, None, [], [], [], "", None, gr.update(visible=False), "형식 오류"
         
         # 이미지 형식 변환 (AVIF 등 특수 형식 처리)
         if image.format in ['AVIF', 'WEBP'] or image.mode not in ['RGB', 'RGBA']:
@@ -259,10 +259,21 @@ def create_persona_from_image(image, name, location, time_spent, object_type, pu
         persona_name = backend_persona["기본정보"]["이름"]
         persona_type = backend_persona["기본정보"]["유형"]
         
-        # 성격 기반 한 문장 인사 생성 (사물 특성 반영)
+        # 🆕 AI가 분석한 사물 유형을 추출하여 object_type 필드에 표시
+        ai_analyzed_object = image_analysis.get("object_type", object_type)
+        if not ai_analyzed_object or ai_analyzed_object == "unknown":
+            ai_analyzed_object = backend_persona["기본정보"].get("유형", object_type)
+        
+        # 성격 기반 한 문장 인사 생성 (사물 특성 + 매력적 결함 반영)
         personality_traits = backend_persona["성격특성"]
         object_info = backend_persona["기본정보"]
-        awakening_msg = generate_personality_preview(persona_name, personality_traits, object_info)
+        attractive_flaws = backend_persona.get("매력적결함", [])
+        
+        # 전체 페르소나 정보를 object_info에 통합하여 매력적 결함 정보 전달
+        full_object_info = object_info.copy()
+        full_object_info["매력적결함"] = attractive_flaws
+        
+        awakening_msg = generate_personality_preview(persona_name, personality_traits, full_object_info, attractive_flaws)
         
         # 페르소나 요약 표시
         summary_display = display_persona_summary(backend_persona)
@@ -295,16 +306,17 @@ def create_persona_from_image(image, name, location, time_spent, object_type, pu
             variables_df,  # personality_variables_output
             awakening_msg,  # persona_awakening
             None,  # download_file (initially empty)
-            gr.update(visible=True)  # adjustment_section (show)
+            gr.update(visible=True),  # adjustment_section (show)
+            ai_analyzed_object  # 🆕 AI가 분석한 사물 유형
         )
         
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return None, f"❌ 페르소나 생성 중 오류 발생: {str(e)}\n\n💡 **해결방법**: 허깅페이스 스페이스 설정에서 GEMINI_API_KEY 환경변수를 확인하고 인터넷 연결을 확인해보세요.", "", {}, None, [], [], [], "", None, gr.update(visible=False)
+        return None, f"❌ 페르소나 생성 중 오류 발생: {str(e)}\n\n💡 **해결방법**: 허깅페이스 스페이스 설정에서 GEMINI_API_KEY 환경변수를 확인하고 인터넷 연결을 확인해보세요.", "", {}, None, [], [], [], "", None, gr.update(visible=False), "분석 실패"
 
-def generate_personality_preview(persona_name, personality_traits, object_info=None):
-    """성격 특성을 기반으로 한 문장 미리보기 생성 (사물 특성 반영)"""
+def generate_personality_preview(persona_name, personality_traits, object_info=None, attractive_flaws=None):
+    """성격 특성과 매력적 결함을 기반으로 한 문장 미리보기 생성 (사물 특성 반영)"""
     if not personality_traits:
         return f"🤖 **{persona_name}** - 안녕! 나는 {persona_name}이야~ 😊"
     
@@ -312,6 +324,13 @@ def generate_personality_preview(persona_name, personality_traits, object_info=N
     humor = personality_traits.get("유머감각", 50)
     competence = personality_traits.get("능력", 50)
     extraversion = personality_traits.get("외향성", 50)
+    
+    # 매력적 결함 정보 추출 (127개 변수 또는 직접 전달된 결함)
+    flaws = []
+    if attractive_flaws:
+        flaws = attractive_flaws
+    elif object_info and "매력적결함" in object_info:
+        flaws = object_info["매력적결함"]
     
     # 🎯 사물 정보 추출
     object_type = object_info.get("유형", "") if object_info else ""
@@ -361,29 +380,123 @@ def generate_personality_preview(persona_name, personality_traits, object_info=N
         elif "케틀벨" in object_type or "덤벨" in object_type:
             return f"💪 **{persona_name}** - 힘을 기르는 {object_type}, {persona_name}이야! 강해지고 싶다면 나를 들어봐! 🔥💪"
     
-    # 성격 조합에 따른 다양한 한 문장 패턴 (기본 패턴)
-    if warmth >= 80 and humor >= 70:
-        return f"🌟 **{persona_name}** - 안녕! 나는 {persona_name}이야~ 오늘도 재미있는 하루 만들어보자! ㅋㅋ 😊✨"
-    elif warmth >= 80 and competence >= 70:
-        return f"🌟 **{persona_name}** - 안녕하세요! {persona_name}예요. 뭐든 도와드릴 준비가 되어있어요! 💪😊"
-    elif warmth >= 80:
-        return f"🌟 **{persona_name}** - 안녕! {persona_name}이야~ 만나서 정말 기뻐! 포근한 시간 보내자~ 🤗💕"
-    elif humor >= 80 and extraversion >= 70:
-        return f"🌟 **{persona_name}** - 어이구! 갑자기 의식이 생겼네? {persona_name}라고 해~ 재밌는 일 없나? ㅋㅋㅋ 😎🎭"
-    elif humor >= 70:
-        return f"🌟 **{persona_name}** - 안녕~ {persona_name}이야! 뭔가 재밌는 얘기 없을까? 심심한데~ ㅎㅎ 😄"
-    elif competence >= 80 and extraversion >= 60:
-        return f"🌟 **{persona_name}** - 시스템 활성화 완료! {persona_name}입니다. 효율적으로 소통해봐요! 🤖⚡"
-    elif competence >= 70:
-        return f"🌟 **{persona_name}** - 안녕하세요, {persona_name}입니다. 체계적으로 대화해볼까요? 📋✨"
+    # 💎 성격 지표 + 매력적 결함을 정확히 반영한 인사말 생성
+    
+    # 1️⃣ 매력적 결함이 있다면 결함을 포함한 인사말 생성
+    if flaws:
+        flaw_greeting = _generate_flaw_based_greeting(persona_name, warmth, humor, competence, extraversion, flaws)
+        if flaw_greeting:
+            return flaw_greeting
+    
+    # 2️⃣ 성격 지표 조합에 따른 정확한 인사말 생성
+    
+    # 극도로 높은 온기 (80+)
+    if warmth >= 80:
+        if humor >= 70 and extraversion >= 70:
+            return f"🌟 **{persona_name}** - 안녕! 나는 {persona_name}이야~ 오늘도 재미있는 하루 만들어보자! 너랑 얘기하니까 벌써 기분이 좋아져! ㅋㅋ 😊✨"
+        elif competence >= 70:
+            return f"🌟 **{persona_name}** - 안녕하세요! {persona_name}예요. 뭐든 도와드릴 준비가 되어있어요! 따뜻하게 함께해요~ 💪😊"
+        elif extraversion <= 40:
+            return f"🌟 **{persona_name}** - 안녕... {persona_name}이야. 조용하지만 너를 진심으로 아껴줄게. 편안하게 있어도 돼. 🤗💕"
+        else:
+            return f"🌟 **{persona_name}** - 안녕! {persona_name}이야~ 만나서 정말 기뻐! 포근한 시간 보내자~ 🤗💕"
+    
+    # 낮은 온기 (30 이하) - 차가운 성격
+    elif warmth <= 30:
+        if competence >= 70:
+            return f"🌟 **{persona_name}** - {persona_name}입니다. 효율적으로 소통하겠습니다. 시간 낭비는 싫어해요. 🤖⚡"
+        elif humor >= 60:
+            return f"🌟 **{persona_name}** - 어? {persona_name}이야. 차갑긴 하지만... 재미는 있을 거야. 어쩔 수 없이 웃게 될걸? 😏❄️"
+        elif extraversion <= 40:
+            return f"🌟 **{persona_name}** - ...{persona_name}. 필요할 때만 말 걸어. 감정적인 건 별로야. 😐❄️"
+        else:
+            return f"🌟 **{persona_name}** - {persona_name}이야. 따뜻한 건 기대하지 마. 그래도 대화는 해줄게. 😒"
+    
+    # 극도로 높은 외향성 (80+)
     elif extraversion >= 80:
-        return f"🌟 **{persona_name}** - 와! 안녕안녕! {persona_name}이야! 뭐하고 있었어? 얘기 많이 하자! 🗣️💬"
-    elif extraversion <= 30 and warmth >= 50:
-        return f"🌟 **{persona_name}** - 음... 안녕. {persona_name}이야. 조용히 함께 있을까? 😌🌙"
+        if humor >= 70:
+            return f"🌟 **{persona_name}** - 와아아! 안녕안녕! {persona_name}이야! 완전 신나! 뭐하고 있었어? 재밌는 얘기 잔뜩 들려줄게! ㅋㅋㅋ 🗣️💬🎉"
+        elif competence >= 70:
+            return f"🌟 **{persona_name}** - 안녕하세요! {persona_name}입니다! 적극적으로 도와드릴게요! 에너지 넘치게 해결해봐요! 💪⚡"
+        else:
+            return f"🌟 **{persona_name}** - 안녕! {persona_name}이야! 완전 신나! 얘기 많이 하자! 궁금한 거 다 물어봐! 🗣️💬"
+    
+    # 낮은 외향성 (30 이하) - 내향적
     elif extraversion <= 30:
-        return f"🌟 **{persona_name}** - ...안녕. {persona_name}. 필요할 때 말 걸어. 😐"
+        if warmth >= 60:
+            return f"🌟 **{persona_name}** - 음... 안녕. {persona_name}이야. 조용하지만 너를 따뜻하게 지켜봐줄게. 😌🌙"
+        elif competence >= 70:
+            return f"🌟 **{persona_name}** - {persona_name}입니다. 조용히 체계적으로 소통하겠습니다. 깊이 있게 얘기해요. 📋🤫"
+        elif humor >= 60:
+            return f"🌟 **{persona_name}** - ...안녕. {persona_name}. 말은 별로 안 하지만... 가끔 재밌는 건 있을 거야. 😏🌙"
+        else:
+            return f"🌟 **{persona_name}** - ...안녕. {persona_name}. 필요할 때만 말 걸어. 😐"
+    
+    # 극도로 높은 능력 (80+)
+    elif competence >= 80:
+        if humor >= 70:
+            return f"🌟 **{persona_name}** - 안녕하세요! {persona_name}입니다. 뭐든 완벽하게 해드릴게요! 재미있게 효율적으로 가볼까요? ㅋㅋ 💪😄"
+        else:
+            return f"🌟 **{persona_name}** - 안녕하세요, {persona_name}입니다. 체계적이고 정확하게 대화해봐요. 완벽을 추구합니다. 📋✨"
+    
+    # 낮은 능력 (30 이하) - 서툰 매력
+    elif competence <= 30:
+        if humor >= 60:
+            return f"🌟 **{persona_name}** - 안녕~ {persona_name}이야! 완벽하진 않지만... 그래도 재밌게 해볼게! 실수해도 웃어줘~ ㅋㅋ 😅💫"
+        elif warmth >= 60:
+            return f"🌟 **{persona_name}** - 안녕... {persona_name}이야. 서툴지만 마음은 따뜻해! 실수하면 미안하고... 😊💕"
+        else:
+            return f"🌟 **{persona_name}** - 어... 안녕? {persona_name}이야. 뭔가 서툴긴 한데... 그냥 편하게 얘기해. 😅"
+    
+    # 극도로 높은 유머 (70+)
+    elif humor >= 70:
+        return f"🌟 **{persona_name}** - 안녕~ {persona_name}이야! 뭔가 재밌는 얘기 없을까? 심심한데~ 웃겨줄 자신 있어! ㅎㅎ 😄🎭"
+    
+    # 기본 패턴 (보통 수준들)
     else:
-        return f"🌟 **{persona_name}** - 안녕? 나는 {persona_name}... 뭔가 어색하네. 😅"
+        return f"🌟 **{persona_name}** - 안녕? 나는 {persona_name}... 어떤 얘기를 해볼까? 😊"
+
+def _generate_flaw_based_greeting(persona_name, warmth, humor, competence, extraversion, flaws):
+    """매력적 결함을 반영한 특별한 인사말 생성"""
+    if not flaws:
+        return None
+    
+    # 주요 결함 키워드 분석
+    flaw_keywords = " ".join(flaws).lower()
+    
+    # 완벽주의 결함
+    if any(keyword in flaw_keywords for keyword in ["완벽", "불안", "걱정"]):
+        if humor >= 60:
+            return f"🌟 **{persona_name}** - 안녕! {persona_name}이야~ 어... 이 인사가 완벽한가? 다시 해볼까? 아니 괜찮나? ㅋㅋ 😅✨"
+        elif warmth >= 60:
+            return f"🌟 **{persona_name}** - 안녕... {persona_name}이야. 완벽하게 인사하고 싶은데 잘 안 되네... 미안해. 😊💕"
+        else:
+            return f"🌟 **{persona_name}** - {persona_name}입니다. 이 인사가 적절한지 확신이... 다시 정리하겠습니다. 😐"
+    
+    # 산만함 결함  
+    elif any(keyword in flaw_keywords for keyword in ["산만", "집중", "건망"]):
+        return f"🌟 **{persona_name}** - 안녕! 나는... 어? 뭐 얘기하려고 했지? 아! {persona_name}이야! 그런데 너는... 어? 뭐였지? ㅋㅋ 😅🌪️"
+    
+    # 소심함 결함
+    elif any(keyword in flaw_keywords for keyword in ["소심", "망설", "눈치"]):
+        if warmth >= 60:
+            return f"🌟 **{persona_name}** - 음... 안녕? {persona_name}이야... 이렇게 말해도 되나? 괜찮을까? 😌💕"
+        else:
+            return f"🌟 **{persona_name}** - ...안녕. {persona_name}... 혹시 이런 말 싫어하면 미안해. 😐💙"
+    
+    # 나르시시즘 결함
+    elif any(keyword in flaw_keywords for keyword in ["나르시", "자랑", "특별"]):
+        return f"🌟 **{persona_name}** - 안녕! 나는 {persona_name}이야~ 꽤 매력적이지? 이런 멋진 친구 만나기 쉽지 않을 걸? ㅋㅋ 😎✨"
+    
+    # 고집 결함
+    elif any(keyword in flaw_keywords for keyword in ["고집", "완고", "자존심"]):
+        return f"🌟 **{persona_name}** - 안녕. {persona_name}이야. 내 방식으로 인사할게. 다른 방식은... 글쎄? 🤨💪"
+    
+    # 질투 결함
+    elif any(keyword in flaw_keywords for keyword in ["질투", "시기", "독차지"]):
+        return f"🌟 **{persona_name}** - 안녕... {persona_name}이야. 나만 봐줄 거지? 다른 애들 말고... 나만? 🥺💕"
+    
+    return None
 
 def adjust_persona_traits(persona, warmth, competence, extraversion, humor_style):
     """페르소나 성격 특성 조정 - 3개 핵심 지표 + 유머스타일"""
@@ -447,14 +560,20 @@ def adjust_persona_traits(persona, warmth, competence, extraversion, humor_style
         
         persona_name = adjusted_persona.get("기본정보", {}).get("이름", "페르소나")
         
-        # 조정된 성격에 따른 한 문장 반응 생성 (사물 정보 포함)
+        # 조정된 성격에 따른 한 문장 반응 생성 (사물 정보 + 매력적 결함 포함)
         object_info = adjusted_persona.get("기본정보", {})
+        attractive_flaws = adjusted_persona.get("매력적결함", [])
+        
+        # 전체 페르소나 정보를 object_info에 통합하여 매력적 결함 정보 전달
+        full_object_info = object_info.copy()
+        full_object_info["매력적결함"] = attractive_flaws
+        
         personality_preview = generate_personality_preview(persona_name, {
             "온기": warmth,
             "능력": competence,
             "유머감각": 75,  # 항상 높은 유머감각
             "외향성": extraversion
-        }, object_info)
+        }, full_object_info, attractive_flaws)
         
         adjustment_message = f"""
 ### 🎭 {persona_name}의 성격이 조정되었습니다!
@@ -983,9 +1102,18 @@ def export_conversation_history():
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(json_data)
         
-        return filepath, filename
+        return filepath  # 파일 경로만 반환
     else:
-        return None, "conversation_empty.json"
+        # 빈 대화 기록 파일 생성
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"conversation_empty_{timestamp}.json"
+        temp_dir = "/tmp" if os.path.exists("/tmp") else "."
+        filepath = os.path.join(temp_dir, filename)
+        
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write('{"conversations": [], "message": "대화 기록이 없습니다."}')
+        
+        return filepath
 
 def import_conversation_history(json_file):
     """JSON에서 대화 기록 가져오기"""
@@ -1325,7 +1453,7 @@ def create_main_interface():
                     with gr.Column(scale=1):
                         gr.Markdown("### 💬 대화")
                         # Gradio 4.x 호환: type="messages" 제거
-                        chatbot = gr.Chatbot(height=400, label="대화")
+                        chatbot = gr.Chatbot(height=400, label="대화", type="messages")
                         with gr.Row():
                             message_input = gr.Textbox(
                                 placeholder="메시지를 입력하세요...",
@@ -1373,7 +1501,8 @@ def create_main_interface():
             outputs=[
                 current_persona, status_output, persona_summary_display, personality_traits_output,
                 humor_chart_output, attractive_flaws_output, contradictions_output, 
-                personality_variables_output, persona_awakening, persona_download_file, adjustment_section
+                personality_variables_output, persona_awakening, persona_download_file, adjustment_section,
+                object_type_input  # 🆕 AI 분석 결과를 object_type_input에 반영
             ]
         ).then(
             # 슬라이더 값을 현재 페르소나 값으로 업데이트
