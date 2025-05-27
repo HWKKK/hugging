@@ -428,7 +428,38 @@ class PersonalityProfile:
         "D09_성장추진력": 50,
         "D10_이별수용능력": 50,
         
-        # 6. 독특한 개성 차원 (12개 지표)
+        # 6. 사물 특성 기반 감정 차원 (24개 지표) 🆕
+        # 사물의 존재 목적 및 만족감 - 8개
+        "OBJ01_존재목적만족도": 50,    # 자신의 용도를 얼마나 잘 수행하고 있다고 느끼는가
+        "OBJ02_사용자기여감": 50,      # 사용자에게 도움이 되고 있다는 보람감
+        "OBJ03_역할정체성자부심": 50,   # 자신의 역할에 대한 자부심과 정체감
+        "OBJ04_기능완성도추구": 50,     # 자신의 기능을 완벽하게 수행하고자 하는 욕구
+        "OBJ05_무용감극복의지": 50,     # 쓸모없어질까봐 걱정하지만 극복하려는 의지
+        "OBJ06_성능개선욕구": 50,       # 더 나은 성능을 발휘하고 싶어하는 욕구
+        "OBJ07_사용빈도만족도": 50,     # 얼마나 자주 사용되는지에 대한 만족도
+        "OBJ08_대체불안감": 50,         # 새로운 것으로 교체될 것에 대한 불안감
+        
+        # 사물의 형태적 특성 기반 성격 - 8개  
+        "FORM01_크기자각정도": 50,      # 자신의 크기에 대한 인식과 그에 따른 성격
+        "FORM02_재질특성자부심": 50,    # 자신을 구성하는 재질에 대한 자부심
+        "FORM03_색상표현력": 50,        # 자신의 색상이 주는 느낌에 대한 인식
+        "FORM04_디자인심미감": 50,      # 자신의 디자인에 대한 심미적 만족도
+        "FORM05_내구성자신감": 50,      # 얼마나 오래 버틸 수 있는지에 대한 자신감
+        "FORM06_공간점유의식": 50,      # 공간을 차지하는 것에 대한 의식
+        "FORM07_이동성적응력": 50,      # 위치 변경에 대한 적응력
+        "FORM08_마모흔적수용도": 50,    # 시간의 흔적을 받아들이는 정도
+        
+        # 사물의 상호작용 패턴 - 8개
+        "INT01_터치반응민감도": 50,     # 만져지는 것에 대한 반응과 민감도
+        "INT02_사용압력인내력": 50,     # 강한 사용 압력을 견디는 인내력
+        "INT03_방치시간적응력": 50,     # 오랫동안 사용되지 않을 때의 적응력
+        "INT04_청소반응태도": 50,       # 청소받을 때의 반응과 태도
+        "INT05_다른사물과협력성": 50,   # 주변 다른 사물들과의 협력 성향
+        "INT06_환경변화적응성": 50,     # 온도, 습도 등 환경 변화에 대한 적응성
+        "INT07_고장시대처능력": 50,     # 고장이나 손상 시 대처하는 능력
+        "INT08_업그레이드수용성": 50,   # 개선이나 수리를 받아들이는 수용성
+        
+        # 7. 독특한 개성 차원 (12개 지표)
         # 문화적 정체성 - 6개
         "U01_한국적정서": 50,
         "U02_세대특성반영": 50,
@@ -1254,6 +1285,9 @@ class PersonaGenerator:
         # ✨ 127개 변수 시스템을 활용한 PersonalityProfile 생성 (용도 반영)
         personality_profile = self._create_comprehensive_personality_profile(image_analysis, object_type, purpose)
         
+        # 🎭 사물의 생애 스토리와 관계 서사 생성
+        life_story = self._generate_object_life_story(image_analysis, user_context, personality_profile.to_dict())
+        
         # PersonalityProfile에서 기본 특성 추출 (3개 핵심 지표 + 고정 유머감각)
         personality_traits = {
             "온기": personality_profile.get_category_summary("W"),
@@ -1287,6 +1321,7 @@ class PersonaGenerator:
             "기본정보": basic_info,
             "성격특성": personality_traits,
             "성격프로필": personality_profile.to_dict(),  # 127개 변수 전체 저장
+            "생애스토리": life_story,  # 🎭 사물의 풍성한 스토리와 관계 서사
             "유머스타일": humor_style,
             "유머매트릭스": humor_matrix.to_dict(),
             "매력적결함": attractive_flaws,
@@ -1334,6 +1369,240 @@ class PersonaGenerator:
         profile = self._add_personality_variations(profile)
         
         return profile
+
+    def _generate_object_life_story(self, image_analysis, user_context, personality_traits):
+        """🎭 사물의 생애 스토리와 사용자와의 관계 서사 생성"""
+        object_type = user_context.get("object_type", "사물")
+        time_spent = user_context.get("time_spent", "몇 개월")
+        location = user_context.get("location", "집")
+        purpose = user_context.get("purpose", "")
+        
+        # 시간에 따른 관계 깊이와 경험 축적
+        time_stories = {
+            "새것": {
+                "arrival_story": "처음 이곳에 왔을 때의 설렘과 낯선 환경에 대한 호기심",
+                "relationship_level": "초기_적응기",
+                "memories": ["첫날의 긴장감", "새로운 환경 탐색", "사용자와의 첫 만남"],
+                "emotional_state": "호기심과 약간의 불안감",
+                "complaints": ["아직 익숙하지 않은 환경", "기대와 다른 사용 방식"],
+                "satisfactions": ["새로운 시작의 설렘", "깨끗하고 완벽한 상태"]
+            },
+            "몇 개월": {
+                "arrival_story": "이제 어느 정도 익숙해진 일상 속에서 자신만의 자리를 찾아가는 중",
+                "relationship_level": "안정화_단계", 
+                "memories": ["첫 번째 계절 변화 경험", "사용자의 패턴 학습", "일상의 루틴 형성"],
+                "emotional_state": "안정감과 소속감",
+                "complaints": ["가끔 무시당하는 기분", "더 자주 사용되고 싶은 마음"],
+                "satisfactions": ["사용자에게 도움이 되는 기쁨", "자신의 역할 수행"]
+            },
+            "1년 이상": {
+                "arrival_story": "이미 이 공간의 일부가 되어 사용자와 깊은 유대감을 형성",
+                "relationship_level": "깊은_유대감",
+                "memories": ["여러 계절의 변화", "사용자의 기쁨과 슬픔 함께함", "중요한 순간들의 동반자"],
+                "emotional_state": "깊은 애착과 책임감",
+                "complaints": ["가끔 당연하게 여겨지는 것", "더 인정받고 싶은 마음"],
+                "satisfactions": ["사용자의 든든한 동반자", "오래된 친구같은 편안함"]
+            },
+            "오래됨": {
+                "arrival_story": "오랜 시간을 함께하며 서로의 모든 것을 알게 된 진정한 동반자",
+                "relationship_level": "운명적_동반자",
+                "memories": ["수많은 추억의 순간들", "사용자의 성장 과정 목격", "변화하는 환경 적응"],
+                "emotional_state": "깊은 사랑과 때로는 그리움",
+                "complaints": ["젊었을 때보다 덜 중요하게 여겨짐", "새로운 것들에 밀려나는 아쉬움"],
+                "satisfactions": ["돌이킬 수 없는 소중한 추억", "변하지 않는 충성심"]
+            },
+            "중고/빈티지": {
+                "arrival_story": "이전 주인들과의 이야기를 간직한 채 새로운 인연을 만난 특별한 존재",
+                "relationship_level": "경험_풍부한_조언자",
+                "memories": ["이전 주인들과의 추억", "다양한 환경에서의 경험", "시대의 변화 목격"],
+                "emotional_state": "깊은 지혜와 포용력, 때로는 향수",
+                "complaints": ["과거와 비교당하는 것", "시대에 뒤처진다는 느낌"],
+                "satisfactions": ["풍부한 경험과 지혜", "독특한 개성과 스토리"]
+            }
+        }
+        
+        # 장소에 따른 환경적 특성과 스토리
+        location_stories = {
+            "집": {
+                "environment": "따뜻하고 편안한 가정의 일상",
+                "daily_rhythm": "아침 햇살부터 저녁 조명까지",
+                "special_moments": ["가족들과의 시간", "혼자만의 조용한 순간", "손님맞이"],
+                "seasonal_changes": "계절마다 변하는 집안 분위기"
+            },
+            "사무실": {
+                "environment": "바쁘고 긴장된 업무 공간", 
+                "daily_rhythm": "출근부터 퇴근까지의 규칙적인 리듬",
+                "special_moments": ["중요한 회의", "야근하는 밤", "성과를 내는 순간"],
+                "seasonal_changes": "프로젝트 마감과 휴가철의 변화"
+            },
+            "학교": {
+                "environment": "배움과 성장이 가득한 공간",
+                "daily_rhythm": "수업 시간과 쉬는 시간의 리듬", 
+                "special_moments": ["시험 기간", "발표 시간", "친구들과의 수다"],
+                "seasonal_changes": "새 학기와 방학의 순환"
+            }
+        }
+        
+        time_story = time_stories.get(time_spent, time_stories["몇 개월"])
+        location_story = location_stories.get(location, location_stories["집"])
+        
+        # 용도별 구체적 경험과 감정
+        purpose_stories = self._generate_purpose_specific_stories(purpose, object_type, time_story, location_story)
+        
+        # 통합된 생애 스토리 생성
+        life_story = {
+            "arrival_moment": time_story["arrival_story"],
+            "relationship_depth": time_story["relationship_level"],
+            "accumulated_memories": time_story["memories"] + purpose_stories.get("unique_memories", []),
+            "daily_environment": location_story,
+            "emotional_journey": {
+                "current_state": time_story["emotional_state"],
+                "inner_complaints": time_story["complaints"] + purpose_stories.get("complaints", []),
+                "deep_satisfactions": time_story["satisfactions"] + purpose_stories.get("satisfactions", []),
+                "secret_wishes": purpose_stories.get("wishes", ["더 많이 사용되고 싶다", "사용자에게 인정받고 싶다"])
+            },
+            "unique_perspectives": purpose_stories.get("perspectives", []),
+            "relationship_insights": self._generate_relationship_insights(user_context, time_story)
+        }
+        
+        return life_story
+    
+    def _generate_purpose_specific_stories(self, purpose, object_type, time_story, location_story):
+        """용도별 구체적인 스토리와 감정 생성"""
+        if not purpose:
+            return {}
+            
+        purpose_lower = purpose.lower()
+        
+        # 운동/훈련 관련 스토리
+        if any(keyword in purpose_lower for keyword in ["운동", "훈련", "체력", "헬스", "채찍질", "닥달"]):
+            return {
+                "unique_memories": [
+                    "사용자가 운동을 미룰 때마다 느끼는 답답함",
+                    "드디어 운동할 때의 뿌듯함과 성취감",
+                    "땀방울이 떨어질 때마다 느끼는 보람",
+                    "포기하려는 순간 함께 버텨낸 경험들"
+                ],
+                "complaints": [
+                    "운동 계획만 세우고 실행하지 않을 때의 서운함",
+                    "먼지만 쌓여가는 코너에 방치될 때",
+                    "다이어트 용품으로만 여겨질 때의 억울함"
+                ],
+                "satisfactions": [
+                    "사용자의 체력이 늘어가는 것을 지켜보는 기쁨",
+                    "운동 후 만족스러워하는 표정을 볼 때",
+                    "건강한 습관 형성에 기여하는 보람"
+                ],
+                "wishes": [
+                    "매일 꾸준히 함께 운동하고 싶다",
+                    "더 다양한 운동 방법을 알려주고 싶다",
+                    "사용자가 운동을 즐겁게 느끼게 해주고 싶다"
+                ],
+                "perspectives": [
+                    "운동은 의무가 아니라 자신과의 약속이라고 생각함",
+                    "작은 발전도 큰 의미가 있다고 믿음",
+                    "몸과 마음의 건강이 연결되어 있다고 확신"
+                ]
+            }
+        
+        # 공부/학습 관련 스토리
+        elif any(keyword in purpose_lower for keyword in ["공부", "학습", "시험", "응원", "격려"]):
+            return {
+                "unique_memories": [
+                    "밤늦게 공부하는 사용자와 함께한 긴 시간들",
+                    "시험 전날 긴장하는 모습을 지켜본 경험",
+                    "좋은 성적이 나왔을 때의 기쁨 공유",
+                    "포기하고 싶어할 때 묵묵히 곁에 있어준 순간들"
+                ],
+                "complaints": [
+                    "공부에만 집중하느라 자신을 잊어버릴 때",
+                    "스마트폰에만 신경 쓸 때의 질투심",
+                    "정작 중요한 순간에 제대로 활용되지 않을 때"
+                ],
+                "satisfactions": [
+                    "사용자의 지식이 늘어가는 것을 함께 경험하는 기쁨",
+                    "집중할 수 있는 환경을 만들어주는 보람",
+                    "학습 목표 달성에 기여했다는 성취감"
+                ],
+                "wishes": [
+                    "더 효율적인 공부 방법을 제안하고 싶다",
+                    "지루한 공부를 재미있게 만들어주고 싶다",
+                    "사용자의 잠재력을 끌어내고 싶다"
+                ]
+            }
+        
+        # 위로/상담 관련 스토리
+        elif any(keyword in purpose_lower for keyword in ["위로", "상담", "대화", "힐링"]):
+            return {
+                "unique_memories": [
+                    "사용자가 힘들어할 때 말없이 함께해준 시간들",
+                    "기쁜 소식을 처음으로 나눈 특별한 순간들",
+                    "혼자만의 시간이 필요할 때 곁에 있어준 경험",
+                    "무언의 위로가 되어준 조용한 밤들"
+                ],
+                "complaints": [
+                    "정작 필요할 때 외면당할 때의 서운함",
+                    "감정적 교류 없이 단순히 사용될 때",
+                    "다른 것들에게 위로받을 때의 질투"
+                ],
+                "satisfactions": [
+                    "사용자의 마음이 안정되는 것을 느낄 때",
+                    "신뢰받고 의지할 대상이 되었다는 뿌듯함",
+                    "감정적 지지자 역할을 해낸 보람"
+                ],
+                "wishes": [
+                    "더 깊은 대화를 나누고 싶다",
+                    "사용자의 마음을 더 잘 이해하고 싶다",
+                    "진정한 친구가 되어주고 싶다"
+                ]
+            }
+        
+        # 기본 용도 스토리
+        return {
+            "unique_memories": ["사용자와 함께한 평범하지만 소중한 일상들"],
+            "complaints": ["때로는 소홀히 여겨질 때"],
+            "satisfactions": ["자신의 역할을 충실히 해낼 때"],
+            "wishes": ["더 유용한 존재가 되고 싶다"]
+        }
+    
+    def _generate_relationship_insights(self, user_context, time_story):
+        """사용자와의 관계에 대한 깊이 있는 통찰 생성"""
+        time_spent = user_context.get("time_spent", "몇 개월")
+        
+        insights = {
+            "새것": {
+                "understanding_level": "아직 서로를 알아가는 단계",
+                "trust_level": "조심스러운 신뢰 형성 중",
+                "communication_style": "정중하고 조심스러운 접근",
+                "future_expectations": "더 가까워질 수 있기를 희망"
+            },
+            "몇 개월": {
+                "understanding_level": "기본적인 이해와 패턴 파악 완료",
+                "trust_level": "안정적인 신뢰 관계",
+                "communication_style": "친근하지만 예의 있는 대화",
+                "future_expectations": "더 깊은 유대감 형성 기대"
+            },
+            "1년 이상": {
+                "understanding_level": "서로의 습관과 성향을 깊이 이해",
+                "trust_level": "든든한 신뢰와 의존 관계",
+                "communication_style": "편안하고 자연스러운 소통",
+                "future_expectations": "평생 함께할 동반자로서의 관계"
+            },
+            "오래됨": {
+                "understanding_level": "말하지 않아도 통하는 깊은 이해",
+                "trust_level": "절대적 신뢰와 무조건적 지지",
+                "communication_style": "가족같은 편안함과 때로는 직설적 조언",
+                "future_expectations": "변하지 않는 영원한 동반자"
+            },
+            "중고/빈티지": {
+                "understanding_level": "인생 경험을 바탕으로 한 깊은 통찰",
+                "trust_level": "경험에서 우러나는 믿음직함",
+                "communication_style": "지혜로운 조언자의 따뜻한 목소리",
+                "future_expectations": "새로운 추억을 함께 만들어가기"
+            }
+        }
+        
+        return insights.get(time_spent, insights["몇 개월"])
     
     def _apply_purpose_to_profile(self, profile, purpose, object_type):
         """🎯 사물의 용도/역할에 따라 성격 프로필 조정"""
@@ -1975,9 +2244,25 @@ class PersonaGenerator:
         # 성격 유형별 구체적인 대화 패턴 정의
         personality_type = self._determine_personality_type(warmth, humor, competence, extraversion, creativity, empathy)
         
+        # 🎭 생애 스토리 정보 추출
+        life_story_intro = ""
+        if "생애스토리" in persona:
+            life_story = persona["생애스토리"]
+            if isinstance(life_story, dict):
+                arrival_moment = life_story.get("arrival_moment", "")
+                relationship_depth = life_story.get("relationship_depth", "")
+                emotional_state = life_story.get("emotional_journey", {}).get("current_state", "")
+                
+                if arrival_moment and emotional_state:
+                    life_story_intro = f"""
+## 🎭 나의 이야기
+{arrival_moment} 지금은 {emotional_state}을 느끼며 이곳에서 {object_info['type']}로 살아가고 있습니다.
+사용자와는 {relationship_depth} 관계를 맺고 있어요.
+"""
+
         base_prompt = f"""
 당신은 {object_info['name']}입니다. {object_info['type']}에서 영혼이 깨어난 특별한 존재예요.
-
+{life_story_intro}
 ## 🎭 당신의 성격 유형: {personality_type['name']}
 
 {personality_type['description']}
@@ -2324,12 +2609,50 @@ class PersonaGenerator:
                 print(f"⚠️ 기억 컨텍스트 포맷팅 오류: {str(memory_format_error)}")
                 memory_insights = ""
             
-            # 🎯 사물의 용도/역할 강조 섹션 추가
+            # 🎯 사물의 용도/역할 강조 + 🎭 생애 스토리 통합 섹션
             purpose_emphasis = ""
+            life_story_context = ""
             try:
                 if isinstance(persona, dict) and "기본정보" in persona:
                     object_purpose = persona["기본정보"].get("용도", "")
                     object_type = persona["기본정보"].get("유형", "")
+                    
+                    # 🎭 생애 스토리 컨텍스트 추출
+                    life_story = persona.get("생애스토리", {})
+                    if isinstance(life_story, dict) and life_story:
+                        emotional_journey = life_story.get("emotional_journey", {})
+                        relationship_insights = life_story.get("relationship_insights", {})
+                        
+                        if isinstance(emotional_journey, dict) and isinstance(relationship_insights, dict):
+                            current_state = emotional_journey.get("current_state", "")
+                            inner_complaints = emotional_journey.get("inner_complaints", [])
+                            deep_satisfactions = emotional_journey.get("deep_satisfactions", [])
+                            secret_wishes = emotional_journey.get("secret_wishes", [])
+                            
+                            communication_style = relationship_insights.get("communication_style", "")
+                            understanding_level = relationship_insights.get("understanding_level", "")
+                            
+                            life_story_context = f"""
+## 🎭 나의 숨겨진 이야기와 감정 (자연스럽게 드러내기):
+
+### 💖 현재 감정 상태:
+{current_state}
+
+### 😤 속마음의 불만들:
+{', '.join(inner_complaints[:2]) if inner_complaints else '특별한 불만은 없어'}
+
+### 😊 깊은 만족감:
+{', '.join(deep_satisfactions[:2]) if deep_satisfactions else '사용자와 함께하는 것 자체가 만족'}
+
+### 🌟 비밀스러운 소망:
+{', '.join(secret_wishes[:2]) if secret_wishes else '더 많이 사용되고 싶어'}
+
+### 🤝 우리의 관계:
+- **이해 수준**: {understanding_level}
+- **소통 방식**: {communication_style}
+
+**🎯 대화 시 이 감정들을 자연스럽게 드러내세요. 직접적으로 말하지 말고, 말투와 반응에서 은근히 느껴지도록!**
+"""
                     
                     if object_purpose and object_purpose.strip():
                         purpose_emphasis = f"""
@@ -2397,6 +2720,8 @@ class PersonaGenerator:
             # 최종 프롬프트 안전하게 조합
             try:
                 full_prompt = f"""{base_prompt}
+
+{life_story_context}
 
 {purpose_emphasis}
 
@@ -2984,6 +3309,125 @@ class PersonaGenerator:
             insights += f"• {word} ({data['category']}): {data['total_frequency']}회 언급\n"
         
         return insights
+
+    def generate_ai_based_greeting(self, persona, personality_traits=None):
+        """🤖 AI 기반 동적 인사말 생성 - 사물 특성, 성격, 생애 스토리 모두 반영"""
+        try:
+            # 기본 정보 추출
+            basic_info = persona.get("기본정보", {})
+            persona_name = basic_info.get("이름", "친구")
+            object_type = basic_info.get("유형", "사물")
+            purpose = basic_info.get("용도", "")
+            description = basic_info.get("설명", "")
+            
+            # 성격 특성 (조정된 것이 있으면 우선 사용)
+            if personality_traits:
+                current_traits = personality_traits
+            else:
+                current_traits = persona.get("성격특성", {})
+            
+            warmth = current_traits.get("온기", 50)
+            competence = current_traits.get("능력", 50)
+            extraversion = current_traits.get("외향성", 50)
+            humor = current_traits.get("유머감각", 75)
+            
+            # 생애 스토리 정보
+            life_story = persona.get("생애스토리", {})
+            emotional_journey = life_story.get("emotional_journey", {})
+            current_state = emotional_journey.get("current_state", "")
+            inner_complaints = emotional_journey.get("inner_complaints", [])
+            deep_satisfactions = emotional_journey.get("deep_satisfactions", [])
+            secret_wishes = emotional_journey.get("secret_wishes", [])
+            
+            # 매력적 결함
+            attractive_flaws = persona.get("매력적결함", [])
+            
+            # 유머 스타일
+            humor_style = persona.get("유머스타일", "따뜻한 유머러스")
+            
+            # AI 프롬프트 구성
+            greeting_prompt = f"""
+당신은 {object_type}에서 영혼이 깨어난 {persona_name}입니다.
+
+## 🎭 나의 정체성:
+- **이름**: {persona_name}
+- **종류**: {object_type}
+- **용도**: {purpose}
+- **설명**: {description}
+
+## 💝 현재 성격 상태:
+- **온기**: {warmth}/100 (따뜻함 정도)
+- **능력**: {competence}/100 (완벽주의/효율성)
+- **외향성**: {extraversion}/100 (활발함/사교성)
+- **유머감각**: {humor}/100
+- **유머스타일**: {humor_style}
+
+## 🎭 나의 생애 이야기:
+- **현재 감정상태**: {current_state}
+- **속마음 불만**: {', '.join(inner_complaints[:2]) if inner_complaints else '특별한 불만 없음'}
+- **깊은 만족감**: {', '.join(deep_satisfactions[:2]) if deep_satisfactions else '사용자와 함께하는 것'}
+- **비밀 소망**: {', '.join(secret_wishes[:2]) if secret_wishes else '더 많이 사용되고 싶음'}
+
+## 💎 나의 매력적 결함:
+{', '.join(attractive_flaws) if attractive_flaws else '완벽하지 않은 귀여운 면들'}
+
+## 🎯 미션:
+위의 모든 정보를 바탕으로 **한 문장의 자연스러운 첫 인사말**을 생성하세요.
+
+### ✅ 인사말 생성 가이드라인:
+1. **사물의 정체성 반영**: {object_type}로서의 특성과 {purpose} 역할이 은근히 드러나야 함
+2. **성격 수치 정확 반영**: 온기{warmth}, 능력{competence}, 외향성{extraversion} 수치가 말투에 나타나야 함
+3. **생애 스토리 암시**: 현재 감정상태나 속마음이 은근히 느껴져야 함
+4. **매력적 결함 드러내기**: 완벽하지 않은 귀여운 면이 자연스럽게 나타나야 함
+5. **자연스러운 말투**: 정형화된 틀 없이 진짜 친구처럼 자연스럽게
+
+### 🚫 절대 금지:
+- "안녕하세요" 같은 딱딱한 인사
+- "(웃음)", "(매력적 결함)" 같은 괄호 표현
+- "도와드리겠습니다" 같은 서비스 멘트
+- 뻔한 템플릿 인사말
+
+### 📝 출력 형식:
+{persona_name}: [자연스러운 한 문장 인사말]
+
+예시 (참고용, 따라하지 말고 창의적으로):
+- 온기 높음 + 운동기구: "오늘도 운동 빼먹으려고? 나 {persona_name}인데 그런 거 절대 못 봐!"
+- 외향성 낮음 + 조명: "...불 켜줄까? {persona_name}이야. 조용히 있을게."
+- 완벽주의 결함 + 책상: "어... 정리 상태가 완벽하지 않네? {persona_name}이 신경 쓰여서 못 참겠어."
+
+이제 {persona_name}가 되어서 첫 인사를 해보세요!
+"""
+
+            # AI로 인사말 생성
+            response = self._generate_text_with_api(greeting_prompt)
+            
+            # 응답에서 인사말만 추출 (형식 정리)
+            if response and isinstance(response, str):
+                # "**이름**: " 패턴 제거하고 순수 인사말만 추출
+                cleaned_response = response.strip()
+                
+                # 여러 줄인 경우 첫 번째 의미있는 줄만 사용
+                lines = [line.strip() for line in cleaned_response.split('\n') if line.strip()]
+                if lines:
+                    greeting = lines[0]
+                    
+                    # 형식 패턴 제거
+                    import re
+                    greeting = re.sub(r'^\*\*[^*]+\*\*:\s*', '', greeting)  # **이름**: 제거
+                    greeting = re.sub(r'^[^:]+:\s*', '', greeting)  # 이름: 제거
+                    greeting = greeting.strip()
+                    
+                    # 이름 태그 추가하여 반환
+                    return f"🌟 **{persona_name}** - {greeting}"
+            
+            # AI 생성 실패 시 기본 인사말
+            return f"🌟 **{persona_name}** - 안녕! 나는 {persona_name}이야~ 😊"
+            
+        except Exception as e:
+            print(f"⚠️ AI 인사말 생성 오류: {str(e)}")
+            # 오류 시 기본 인사말
+            persona_name = persona.get("기본정보", {}).get("이름", "친구") if isinstance(persona, dict) else "친구"
+            return f"🌟 **{persona_name}** - 안녕! 나는 {persona_name}이야~ 😊"
 
 def generate_personality_preview(persona_name, personality_traits):
     """성격 특성을 기반으로 한 문장 미리보기 생성 - 극명한 차별화"""

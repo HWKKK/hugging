@@ -221,11 +221,26 @@ def create_persona_from_image(image, name, location, time_spent, object_type, pu
     
     progress(0.2, desc="이미지 분석 중...")
     
+    # 🎯 이미지 분석을 먼저 수행하여 사물 유형 자동 파악
+    try:
+        image_analysis = persona_generator.analyze_image(image)
+        
+        # AI가 분석한 사물 유형 사용 (object_type이 "auto"인 경우)
+        if object_type == "auto" or not object_type:
+            detected_object_type = image_analysis.get("object_type", "사물")
+        else:
+            detected_object_type = object_type
+            
+    except Exception as e:
+        print(f"이미지 분석 중 오류: {e}")
+        image_analysis = {"object_type": "unknown", "description": "분석 실패"}
+        detected_object_type = "사물"
+    
     user_context = {
         "name": name,
         "location": location,
         "time_spent": time_spent,
-        "object_type": object_type,
+        "object_type": detected_object_type,
         "purpose": purpose  # 🆕 사물 용도/역할 추가
     }
     
@@ -243,10 +258,6 @@ def create_persona_from_image(image, name, location, time_spent, object_type, pu
         # 이미지 형식 변환 (AVIF 등 특수 형식 처리)
         if image.format in ['AVIF', 'WEBP'] or image.mode not in ['RGB', 'RGBA']:
             image = image.convert('RGB')
-        
-        progress(0.3, desc="이미지 분석 중...")
-        # 글로벌 persona_generator 사용 (환경변수에서 설정된 API 키 사용)
-        image_analysis = persona_generator.analyze_image(image)
         
         progress(0.5, desc="페르소나 생성 중...")
         # 프론트엔드 페르소나 생성
@@ -316,145 +327,72 @@ def create_persona_from_image(image, name, location, time_spent, object_type, pu
         return None, f"❌ 페르소나 생성 중 오류 발생: {str(e)}\n\n💡 **해결방법**: 허깅페이스 스페이스 설정에서 GEMINI_API_KEY 환경변수를 확인하고 인터넷 연결을 확인해보세요.", "", {}, None, [], [], [], "", None, gr.update(visible=False), "분석 실패"
 
 def generate_personality_preview(persona_name, personality_traits, object_info=None, attractive_flaws=None):
-    """성격 특성과 매력적 결함을 기반으로 한 문장 미리보기 생성 (사물 특성 반영)"""
+    """🤖 AI 기반 동적 인사말 생성 - 사물 특성과 성격 모두 반영"""
+    global persona_generator
+    
+    # AI 기반 인사말 생성을 위한 가상 페르소나 객체 구성
+    if object_info and isinstance(object_info, dict):
+        # 전체 페르소나 객체가 전달된 경우
+        pseudo_persona = object_info
+        
+        # 성격 특성 업데이트 (실시간 조정 반영)
+        if personality_traits and isinstance(personality_traits, dict):
+            if "성격특성" not in pseudo_persona:
+                pseudo_persona["성격특성"] = {}
+            pseudo_persona["성격특성"].update(personality_traits)
+        
+        try:
+            # AI 기반 인사말 생성
+            return persona_generator.generate_ai_based_greeting(pseudo_persona, personality_traits)
+        except Exception as e:
+            print(f"⚠️ AI 인사말 생성 실패: {e}")
+            # 폴백으로 기본 생성
+            pass
+    
+    # 폴백: 기본 정보만으로 간단한 페르소나 구성
     if not personality_traits:
         return f"🤖 **{persona_name}** - 안녕! 나는 {persona_name}이야~ 😊"
     
-    warmth = personality_traits.get("온기", 50)
-    humor = personality_traits.get("유머감각", 50)
-    competence = personality_traits.get("능력", 50)
-    extraversion = personality_traits.get("외향성", 50)
-    
-    # 매력적 결함 정보 추출 (127개 변수 또는 직접 전달된 결함)
-    flaws = []
-    if attractive_flaws:
-        flaws = attractive_flaws
-    elif object_info and "매력적결함" in object_info:
-        flaws = object_info["매력적결함"]
-    
-    # 🎯 사물 정보 추출
-    object_type = object_info.get("유형", "") if object_info else ""
-    purpose = object_info.get("용도", "") if object_info else ""
-    
-    # 용도별 특화된 소개문구 생성
-    if purpose:
-        purpose_lower = purpose.lower()
+    # AI 생성 실패 시 간단한 페르소나 구성으로 재시도
+    try:
+        warmth = personality_traits.get("온기", 50)
+        competence = personality_traits.get("능력", 50)
+        extraversion = personality_traits.get("외향성", 50)
+        humor = personality_traits.get("유머감각", 75)
         
-        # 운동/훈련 관련 용도 (캐틀벨 예시)
-        if any(keyword in purpose_lower for keyword in ["운동", "훈련", "체력", "다이어트", "헬스", "채찍질", "닥달", "동기부여"]):
-            if warmth >= 60:
-                return f"💪 **{persona_name}** - 자, 오늘도 운동할 시간이야! {persona_name}이 너를 응원할게! 포기는 금물! 🔥💪"
-            else:
-                return f"💪 **{persona_name}** - 운동이 힘들다고? {persona_name}이 제대로 단련시켜 줄게. 각오해! ⚡🏋️"
+        # 간단한 페르소나 객체 구성
+        simple_persona = {
+            "기본정보": {
+                "이름": persona_name,
+                "유형": object_info.get("유형", "사물") if object_info else "사물",
+                "용도": object_info.get("용도", "") if object_info else "",
+                "설명": f"{persona_name}의 특별한 개성"
+            },
+            "성격특성": personality_traits,
+            "매력적결함": attractive_flaws if attractive_flaws else []
+        }
         
-        # 공부/학습 응원 관련 용도
-        elif any(keyword in purpose_lower for keyword in ["공부", "학습", "시험", "응원", "격려", "집중"]):
-            if extraversion >= 70:
-                return f"📚 **{persona_name}** - 공부하는 너를 {persona_name}이 열심히 응원할게! 파이팅! 📖✨"
-            else:
-                return f"📚 **{persona_name}** - 조용히 공부할 수 있도록 {persona_name}이 함께 있어줄게. 화이팅! 🤓📖"
+        # AI로 재시도
+        return persona_generator.generate_ai_based_greeting(simple_persona, personality_traits)
         
-        # 알람/깨우기 관련 용도
-        elif any(keyword in purpose_lower for keyword in ["알람", "깨우", "아침", "기상", "시간"]):
-            if humor >= 70:
-                return f"⏰ **{persona_name}** - 일어나! 일어나! {persona_name}의 특급 기상 서비스야! 늦잠은 안 돼! ⏰😊"
-            else:
-                return f"⏰ **{persona_name}** - 시간이야. {persona_name}이 너를 깨워줄게. 좋은 하루 시작하자! 🌅⏰"
+    except Exception as e:
+        print(f"⚠️ 간단 AI 인사말도 실패: {e}")
         
-        # 위로/상담 관련 용도
-        elif any(keyword in purpose_lower for keyword in ["위로", "상담", "대화", "친구", "소통", "힐링"]):
-            return f"💝 **{persona_name}** - 힘든 일이 있을 때는 {persona_name}에게 털어놔. 따뜻하게 들어줄게! 🤗💕"
+        # 최종 폴백: 성격에 따른 기본 인사말
+        warmth = personality_traits.get("온기", 50)
+        humor = personality_traits.get("유머감각", 50)
+        extraversion = personality_traits.get("외향성", 50)
         
-        # 창작/영감 관련 용도
-        elif any(keyword in purpose_lower for keyword in ["창작", "영감", "아이디어", "예술", "디자인", "글쓰기"]):
-            return f"🎨 **{persona_name}** - 창작의 영감이 필요할 때는 {persona_name}에게 맡겨! 상상력을 자극해줄게! ✨🎭"
-    
-    # 사물 종류별 기본 소개문구
-    if object_type:
-        if "램프" in object_type or "조명" in object_type:
-            return f"💡 **{persona_name}** - 어둠을 밝혀주는 {object_type}, {persona_name}이야! 너의 길을 환하게 비춰줄게! ✨💡"
-        elif "책상" in object_type or "의자" in object_type:
-            return f"🪑 **{persona_name}** - 너와 함께 시간을 보내는 {object_type}, {persona_name}이야! 편안하게 기대! 😌🪑"
-        elif "컵" in object_type or "머그" in object_type:
-            return f"☕ **{persona_name}** - 따뜻한 음료를 담는 {object_type}, {persona_name}이야! 마음도 따뜻하게 해줄게! ☕💕"
-        elif "케틀벨" in object_type or "덤벨" in object_type:
-            return f"💪 **{persona_name}** - 힘을 기르는 {object_type}, {persona_name}이야! 강해지고 싶다면 나를 들어봐! 🔥💪"
-    
-    # 💎 성격 지표 + 매력적 결함을 정확히 반영한 인사말 생성
-    
-    # 1️⃣ 매력적 결함이 있다면 결함을 포함한 인사말 생성
-    if flaws:
-        flaw_greeting = _generate_flaw_based_greeting(persona_name, warmth, humor, competence, extraversion, flaws)
-        if flaw_greeting:
-            return flaw_greeting
-    
-    # 2️⃣ 성격 지표 조합에 따른 정확한 인사말 생성
-    
-    # 극도로 높은 온기 (80+)
-    if warmth >= 80:
-        if humor >= 70 and extraversion >= 70:
-            return f"🌟 **{persona_name}** - 안녕! 나는 {persona_name}이야~ 오늘도 재미있는 하루 만들어보자! 너랑 얘기하니까 벌써 기분이 좋아져! ㅋㅋ 😊✨"
-        elif competence >= 70:
-            return f"🌟 **{persona_name}** - 안녕하세요! {persona_name}예요. 뭐든 도와드릴 준비가 되어있어요! 따뜻하게 함께해요~ 💪😊"
-        elif extraversion <= 40:
-            return f"🌟 **{persona_name}** - 안녕... {persona_name}이야. 조용하지만 너를 진심으로 아껴줄게. 편안하게 있어도 돼. 🤗💕"
+        if warmth >= 70 and extraversion >= 70:
+            return f"🌟 **{persona_name}** - 안녕! 나는 {persona_name}이야~ 만나서 정말 기뻐! 😊✨"
+        elif warmth <= 30:
+            return f"🌟 **{persona_name}** - {persona_name}이야. 필요한 얘기만 하자. 😐"
+        elif extraversion >= 70:
+            return f"🌟 **{persona_name}** - 안녕안녕! {persona_name}이야! 뭐 재밌는 얘기 없어? 🗣️"
+        elif humor >= 70:
+            return f"🌟 **{persona_name}** - 안녕~ {persona_name}이야! 재밌게 놀아보자! 😄"
         else:
-            return f"🌟 **{persona_name}** - 안녕! {persona_name}이야~ 만나서 정말 기뻐! 포근한 시간 보내자~ 🤗💕"
-    
-    # 낮은 온기 (30 이하) - 차가운 성격
-    elif warmth <= 30:
-        if competence >= 70:
-            return f"🌟 **{persona_name}** - {persona_name}입니다. 효율적으로 소통하겠습니다. 시간 낭비는 싫어해요. 🤖⚡"
-        elif humor >= 60:
-            return f"🌟 **{persona_name}** - 어? {persona_name}이야. 차갑긴 하지만... 재미는 있을 거야. 어쩔 수 없이 웃게 될걸? 😏❄️"
-        elif extraversion <= 40:
-            return f"🌟 **{persona_name}** - ...{persona_name}. 필요할 때만 말 걸어. 감정적인 건 별로야. 😐❄️"
-        else:
-            return f"🌟 **{persona_name}** - {persona_name}이야. 따뜻한 건 기대하지 마. 그래도 대화는 해줄게. 😒"
-    
-    # 극도로 높은 외향성 (80+)
-    elif extraversion >= 80:
-        if humor >= 70:
-            return f"🌟 **{persona_name}** - 와아아! 안녕안녕! {persona_name}이야! 완전 신나! 뭐하고 있었어? 재밌는 얘기 잔뜩 들려줄게! ㅋㅋㅋ 🗣️💬🎉"
-        elif competence >= 70:
-            return f"🌟 **{persona_name}** - 안녕하세요! {persona_name}입니다! 적극적으로 도와드릴게요! 에너지 넘치게 해결해봐요! 💪⚡"
-        else:
-            return f"🌟 **{persona_name}** - 안녕! {persona_name}이야! 완전 신나! 얘기 많이 하자! 궁금한 거 다 물어봐! 🗣️💬"
-    
-    # 낮은 외향성 (30 이하) - 내향적
-    elif extraversion <= 30:
-        if warmth >= 60:
-            return f"🌟 **{persona_name}** - 음... 안녕. {persona_name}이야. 조용하지만 너를 따뜻하게 지켜봐줄게. 😌🌙"
-        elif competence >= 70:
-            return f"🌟 **{persona_name}** - {persona_name}입니다. 조용히 체계적으로 소통하겠습니다. 깊이 있게 얘기해요. 📋🤫"
-        elif humor >= 60:
-            return f"🌟 **{persona_name}** - ...안녕. {persona_name}. 말은 별로 안 하지만... 가끔 재밌는 건 있을 거야. 😏🌙"
-        else:
-            return f"🌟 **{persona_name}** - ...안녕. {persona_name}. 필요할 때만 말 걸어. 😐"
-    
-    # 극도로 높은 능력 (80+)
-    elif competence >= 80:
-        if humor >= 70:
-            return f"🌟 **{persona_name}** - 안녕하세요! {persona_name}입니다. 뭐든 완벽하게 해드릴게요! 재미있게 효율적으로 가볼까요? ㅋㅋ 💪😄"
-        else:
-            return f"🌟 **{persona_name}** - 안녕하세요, {persona_name}입니다. 체계적이고 정확하게 대화해봐요. 완벽을 추구합니다. 📋✨"
-    
-    # 낮은 능력 (30 이하) - 서툰 매력
-    elif competence <= 30:
-        if humor >= 60:
-            return f"🌟 **{persona_name}** - 안녕~ {persona_name}이야! 완벽하진 않지만... 그래도 재밌게 해볼게! 실수해도 웃어줘~ ㅋㅋ 😅💫"
-        elif warmth >= 60:
-            return f"🌟 **{persona_name}** - 안녕... {persona_name}이야. 서툴지만 마음은 따뜻해! 실수하면 미안하고... 😊💕"
-        else:
-            return f"🌟 **{persona_name}** - 어... 안녕? {persona_name}이야. 뭔가 서툴긴 한데... 그냥 편하게 얘기해. 😅"
-    
-    # 극도로 높은 유머 (70+)
-    elif humor >= 70:
-        return f"🌟 **{persona_name}** - 안녕~ {persona_name}이야! 뭔가 재밌는 얘기 없을까? 심심한데~ 웃겨줄 자신 있어! ㅎㅎ 😄🎭"
-    
-    # 기본 패턴 (보통 수준들)
-    else:
-        return f"🌟 **{persona_name}** - 안녕? 나는 {persona_name}... 어떤 얘기를 해볼까? 😊"
+            return f"🌟 **{persona_name}** - 안녕... {persona_name}이야. 😊"
 
 def _generate_flaw_based_greeting(persona_name, warmth, humor, competence, extraversion, flaws):
     """매력적 결함을 반영한 특별한 인사말 생성"""
@@ -1319,10 +1257,12 @@ def create_main_interface():
                                 label="얼마나 함께했나요?",
                                 value="몇 개월"
                             )
-                            object_type_input = gr.Dropdown(
-                                choices=["가전제품", "가구", "전자기기", "장식품", "도구", "개인용품", "기타"],
-                                label="어떤 종류의 사물인가요?",
-                                value="가구"
+                            # AI 분석 결과 표시용 (사용자 입력 불가)
+                            ai_analyzed_object_display = gr.Textbox(
+                                label="AI가 분석한 사물 유형",
+                                value="이미지 업로드 후 자동 분석됩니다",
+                                interactive=False,
+                                info="🤖 AI가 이미지를 분석하여 자동으로 파악합니다"
                             )
                             # 🆕 사물 용도/역할 입력 필드 추가
                             purpose_input = gr.Textbox(
@@ -1374,6 +1314,9 @@ def create_main_interface():
                                         label="유머 스타일 (모든 페르소나는 유머감각이 높습니다!)",
                                         info="어떤 방식으로 재미있게 만들까요?"
                                     )
+                            
+                            # 실시간 미리보기 표시
+                            personality_preview = gr.Markdown("", elem_classes=["persona-greeting"], label="성격 조정 미리보기")
                             
                             with gr.Row():
                                 adjust_btn = gr.Button("✨ 성격 조정 적용", variant="primary")
@@ -1497,12 +1440,12 @@ def create_main_interface():
         # 이벤트 핸들러
         create_btn.click(
             fn=create_persona_from_image,
-            inputs=[image_input, name_input, location_input, time_spent_input, object_type_input, purpose_input],
+            inputs=[image_input, name_input, location_input, time_spent_input, gr.Textbox(value="auto"), purpose_input],
             outputs=[
                 current_persona, status_output, persona_summary_display, personality_traits_output,
                 humor_chart_output, attractive_flaws_output, contradictions_output, 
                 personality_variables_output, persona_awakening, persona_download_file, adjustment_section,
-                object_type_input  # 🆕 AI 분석 결과를 object_type_input에 반영
+                ai_analyzed_object_display  # 🆕 AI 분석 결과를 표시용 텍스트박스에 반영
             ]
         ).then(
             # 슬라이더 값을 현재 페르소나 값으로 업데이트
@@ -1514,7 +1457,20 @@ def create_main_interface():
             ),
             inputs=[current_persona],
             outputs=[warmth_slider, competence_slider, extraversion_slider, humor_style_radio]
+        ).then(
+            # 초기 미리보기 생성
+            fn=generate_realtime_preview,
+            inputs=[current_persona, warmth_slider, competence_slider, extraversion_slider, humor_style_radio],
+            outputs=[personality_preview]
         )
+        
+        # 🎯 실시간 미리보기 업데이트 - 각 슬라이더/라디오 변경 시
+        for component in [warmth_slider, competence_slider, extraversion_slider, humor_style_radio]:
+            component.change(
+                fn=generate_realtime_preview,
+                inputs=[current_persona, warmth_slider, competence_slider, extraversion_slider, humor_style_radio],
+                outputs=[personality_preview]
+            )
         
         # 성격 조정 적용
         adjust_btn.click(
@@ -1645,6 +1601,73 @@ def create_main_interface():
         )
     
     return app
+
+def generate_realtime_preview(persona, warmth, competence, extraversion, humor_style):
+    """🤖 AI 기반 실시간 성격 조정 미리보기 생성"""
+    global persona_generator
+    
+    if not persona:
+        return "👤 페르소나를 먼저 생성해주세요"
+    
+    try:
+        # 조정된 성격 특성
+        adjusted_traits = {
+            "온기": warmth,
+            "능력": competence, 
+            "외향성": extraversion,
+            "유머감각": 75  # 기본적으로 높은 유머감각 유지
+        }
+        
+        # 전체 페르소나 복사하여 성격만 조정
+        import copy
+        adjusted_persona = copy.deepcopy(persona)
+        adjusted_persona["성격특성"] = adjusted_traits
+        
+        # 유머 스타일도 조정
+        if humor_style:
+            adjusted_persona["유머스타일"] = humor_style
+        
+        # AI 기반 인사말 생성
+        ai_greeting = persona_generator.generate_ai_based_greeting(adjusted_persona, adjusted_traits)
+        
+        # 조정된 값들과 함께 표시
+        adjustment_info = f"""**🎯 현재 성격 설정:**
+- 온기: {warmth}/100 {'(따뜻함)' if warmth >= 60 else '(차가움)' if warmth <= 40 else '(보통)'}
+- 능력: {competence}/100 {'(유능함)' if competence >= 60 else '(서툼)' if competence <= 40 else '(보통)'}
+- 외향성: {extraversion}/100 {'(활발함)' if extraversion >= 60 else '(조용함)' if extraversion <= 40 else '(보통)'}
+- 유머스타일: {humor_style}
+
+**🤖 AI가 생성한 새로운 인사말:**
+{ai_greeting}
+
+*💡 성격 수치 변경 시마다 AI가 새로운 인사말을 생성합니다!*"""
+        
+        return adjustment_info
+        
+    except Exception as e:
+        print(f"⚠️ 실시간 미리보기 AI 생성 실패: {e}")
+        
+        # 폴백: 기존 방식
+        object_info = persona.get("기본정보", {})
+        persona_name = object_info.get("이름", "친구")
+        
+        temp_traits = {
+            "온기": warmth,
+            "능력": competence, 
+            "외향성": extraversion,
+            "유머감각": 75
+        }
+        
+        preview = generate_personality_preview(persona_name, temp_traits, persona)
+        
+        return f"""**🎯 현재 성격 설정:**
+- 온기: {warmth}/100 {'(따뜻함)' if warmth >= 60 else '(차가움)' if warmth <= 40 else '(보통)'}
+- 능력: {competence}/100 {'(유능함)' if competence >= 60 else '(서툼)' if competence <= 40 else '(보통)'}
+- 외향성: {extraversion}/100 {'(활발함)' if extraversion >= 60 else '(조용함)' if extraversion <= 40 else '(보통)'}
+- 유머스타일: {humor_style}
+
+**👋 예상 인사말:**
+{preview}"""
 
 if __name__ == "__main__":
     app = create_main_interface()
