@@ -690,7 +690,7 @@ def export_persona_to_json(persona):
 #     return None, "이 기능은 더 이상 사용하지 않습니다. JSON 업로드를 사용하세요.", {}, {}, None, [], [], [], ""
 
 def chat_with_loaded_persona(persona, user_message, chat_history=None):
-    """페르소나와 채팅 (환경변수 API 사용)"""
+    """페르소나와 채팅 (환경변수 API 사용) - Gradio 4.x 호환"""
     
     if chat_history is None:
         chat_history = []
@@ -698,26 +698,33 @@ def chat_with_loaded_persona(persona, user_message, chat_history=None):
     # 페르소나 체크
     if not persona:
         error_msg = "❌ 먼저 페르소나를 불러와주세요! 대화하기 탭에서 JSON 파일을 업로드하세요."
-        chat_history.append({"role": "user", "content": user_message})
-        chat_history.append({"role": "assistant", "content": error_msg})
+        # Gradio 4.x 형식: [user_message, bot_response] 튜플의 리스트
+        chat_history.append([user_message, error_msg])
         return chat_history, ""
     
     # 환경변수 API 키 체크
     if not persona_generator or not hasattr(persona_generator, 'api_key') or not persona_generator.api_key:
         error_msg = "❌ API 키가 설정되지 않았습니다. 허깅페이스 스페이스 설정에서 GEMINI_API_KEY 환경변수를 추가해주세요!"
-        chat_history.append({"role": "user", "content": user_message})
-        chat_history.append({"role": "assistant", "content": error_msg})
+        chat_history.append([user_message, error_msg])
         return chat_history, ""
     
     try:
         # 글로벌 persona_generator 사용 (환경변수에서 설정된 API 키 사용)
         generator = persona_generator
         
-        # Gradio messages 형식에서 대화 기록 변환
+        # Gradio 4.x 형식에서 대화 기록 변환: [[user, bot], [user, bot]] -> [{"role": "user", "content": "..."}, ...]
         conversation_history = []
-        for message in chat_history:
-            if isinstance(message, dict) and 'role' in message and 'content' in message:
-                conversation_history.append(message)
+        for chat_turn in chat_history:
+            if isinstance(chat_turn, (list, tuple)) and len(chat_turn) >= 2:
+                # [user_message, bot_response] 형태
+                user_msg, bot_msg = chat_turn[0], chat_turn[1]
+                if user_msg:
+                    conversation_history.append({"role": "user", "content": str(user_msg)})
+                if bot_msg:
+                    conversation_history.append({"role": "assistant", "content": str(bot_msg)})
+            elif isinstance(chat_turn, dict) and 'role' in chat_turn and 'content' in chat_turn:
+                # 혹시 messages 형식이 들어온 경우
+                conversation_history.append(chat_turn)
         
         # 🧠 세션 ID 생성 (페르소나 이름 기반)
         persona_name = persona.get("기본정보", {}).get("이름", "알 수 없는 페르소나")
@@ -726,9 +733,8 @@ def chat_with_loaded_persona(persona, user_message, chat_history=None):
         # 페르소나와 채팅 (3단계 기억 시스템 활용)
         response = generator.chat_with_persona(persona, user_message, conversation_history, session_id)
         
-        # Gradio messages 형식으로 채팅 기록 업데이트
-        chat_history.append({"role": "user", "content": user_message})
-        chat_history.append({"role": "assistant", "content": response})
+        # Gradio 4.x 형식으로 채팅 기록 업데이트: [user_message, bot_response]
+        chat_history.append([user_message, response])
         
         return chat_history, ""
         
@@ -746,8 +752,8 @@ def chat_with_loaded_persona(persona, user_message, chat_history=None):
         else:
             friendly_error = f"앗, 미안해... 뭔가 문제가 생긴 것 같아... 😅\n\n🔍 **기술적 정보**: {str(e)}"
         
-        chat_history.append({"role": "user", "content": user_message})
-        chat_history.append({"role": "assistant", "content": friendly_error})
+        # Gradio 4.x 형식으로 오류 메시지 추가
+        chat_history.append([user_message, friendly_error])
         return chat_history, ""
 
 def import_persona_from_json(json_file):
@@ -1211,8 +1217,8 @@ def create_main_interface():
                     
                     with gr.Column(scale=1):
                         gr.Markdown("### 💬 대화")
-                        # Gradio 4.44.1에서 권장하는 messages 형식 사용
-                        chatbot = gr.Chatbot(height=400, label="대화", type="messages")
+                        # Gradio 4.x 호환: type="messages" 제거
+                        chatbot = gr.Chatbot(height=400, label="대화")
                         with gr.Row():
                             message_input = gr.Textbox(
                                 placeholder="메시지를 입력하세요...",
