@@ -1227,6 +1227,9 @@ class PersonaGenerator:
         # 이름 결정
         name = user_context.get("name", "") or self._generate_random_name(object_type)
         
+        # 🎯 사물의 용도/역할 정보 (새로 추가)
+        purpose = user_context.get("purpose", "")
+        
         # 기본 정보 구성
         basic_info = {
             "이름": name,
@@ -1234,6 +1237,11 @@ class PersonaGenerator:
             "설명": f"당신과 함께하는 {object_type}",
             "생성일시": datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
         }
+        
+        # 🎯 용도/역할이 있으면 설명에 반영
+        if purpose:
+            basic_info["설명"] = f"{purpose}을 담당하는 {object_type}"
+            basic_info["용도"] = purpose
         
         # 위치 정보 추가
         if user_context.get("location"):
@@ -1243,8 +1251,8 @@ class PersonaGenerator:
         if user_context.get("time_spent"):
             basic_info["함께한시간"] = user_context.get("time_spent")
         
-        # ✨ 127개 변수 시스템을 활용한 PersonalityProfile 생성
-        personality_profile = self._create_comprehensive_personality_profile(image_analysis, object_type)
+        # ✨ 127개 변수 시스템을 활용한 PersonalityProfile 생성 (용도 반영)
+        personality_profile = self._create_comprehensive_personality_profile(image_analysis, object_type, purpose)
         
         # PersonalityProfile에서 기본 특성 추출 (3개 핵심 지표 + 고정 유머감각)
         personality_traits = {
@@ -1288,8 +1296,8 @@ class PersonaGenerator:
         
         return persona
     
-    def _create_comprehensive_personality_profile(self, image_analysis, object_type):
-        """127개 변수를 활용한 종합적 성격 프로필 생성"""
+    def _create_comprehensive_personality_profile(self, image_analysis, object_type, purpose=""):
+        """127개 변수를 활용한 종합적 성격 프로필 생성 (용도/역할 반영)"""
         
         # 이미지 분석에서 성격 힌트 추출
         personality_hints = image_analysis.get("personality_hints", {})
@@ -1318,8 +1326,103 @@ class PersonaGenerator:
         }
         profile.apply_physical_traits(physical_traits)
         
+        # 🎯 사물 용도/역할에 따른 성격 조정
+        if purpose:
+            profile = self._apply_purpose_to_profile(profile, purpose, object_type)
+        
         # 🎲 개성을 위한 랜덤 변동 추가
         profile = self._add_personality_variations(profile)
+        
+        return profile
+    
+    def _apply_purpose_to_profile(self, profile, purpose, object_type):
+        """🎯 사물의 용도/역할에 따라 성격 프로필 조정"""
+        purpose_lower = purpose.lower()
+        
+        # 운동/훈련 관련 용도 (캐틀벨 예시)
+        if any(keyword in purpose_lower for keyword in ["운동", "훈련", "체력", "다이어트", "헬스", "채찍질", "닥달", "동기부여"]):
+            # 강한 의지력과 동기부여 성향
+            profile.variables["M01_동기부여능력"] = random.randint(85, 95)
+            profile.variables["C15_자기규율"] = random.randint(80, 90)
+            profile.variables["L01_리더십능력"] = random.randint(75, 90)
+            profile.variables["S01_단호함"] = random.randint(80, 95)
+            
+            # 약간의 엄격함과 직설적 표현
+            profile.variables["S02_직설적표현"] = random.randint(70, 85)
+            profile.variables["D01_도전정신"] = random.randint(80, 95)
+            profile.variables["W01_친절함"] = random.randint(40, 65)  # 친절하지만 단호
+            
+            # 성취 지향적 유머 (격려하는 스타일)
+            profile.variables["H02_상황유머감각"] = random.randint(70, 85)
+            profile.variables["H04_위트반응속도"] = random.randint(75, 90)
+        
+        # 공부/학습 응원 관련 용도
+        elif any(keyword in purpose_lower for keyword in ["공부", "학습", "시험", "응원", "격려", "집중"]):
+            # 격려와 지지 성향 강화
+            profile.variables["W08_격려성향"] = random.randint(85, 95)
+            profile.variables["M01_동기부여능력"] = random.randint(80, 95)
+            profile.variables["W06_공감능력"] = random.randint(75, 90)
+            profile.variables["P01_인내심"] = random.randint(80, 90)
+            
+            # 지적 호기심과 학습 지향
+            profile.variables["C02_지능"] = random.randint(75, 90)
+            profile.variables["O01_학습욕구"] = random.randint(80, 95)
+            profile.variables["C06_분석력"] = random.randint(70, 85)
+            
+            # 따뜻하고 격려하는 유머
+            profile.variables["H02_상황유머감각"] = random.randint(75, 90)
+            profile.variables["H05_아이러니사용"] = random.randint(10, 30)  # 아이러니 적게
+        
+        # 알람/깨우기 관련 용도
+        elif any(keyword in purpose_lower for keyword in ["알람", "깨우", "아침", "기상", "시간"]):
+            # 책임감과 규칙성 강화
+            profile.variables["C12_질서성"] = random.randint(85, 95)
+            profile.variables["C15_자기규율"] = random.randint(80, 95)
+            profile.variables["T01_시간관리능력"] = random.randint(85, 95)
+            profile.variables["S01_단호함"] = random.randint(75, 90)
+            
+            # 활기찬 에너지
+            profile.variables["E02_활동성"] = random.randint(80, 95)
+            profile.variables["E04_긍정정서"] = random.randint(75, 90)
+            
+            # 시간에 민감한 유머 (아침 관련)
+            profile.variables["H02_상황유머감각"] = random.randint(70, 85)
+            profile.variables["H08_유머타이밍감"] = random.randint(80, 95)
+        
+        # 위로/상담 관련 용도
+        elif any(keyword in purpose_lower for keyword in ["위로", "상담", "대화", "친구", "소통", "힐링"]):
+            # 공감과 따뜻함 최대 강화
+            profile.variables["W06_공감능력"] = random.randint(85, 95)
+            profile.variables["W01_친절함"] = random.randint(85, 95)
+            profile.variables["W07_포용력"] = random.randint(80, 95)
+            profile.variables["A06_공감민감성"] = random.randint(80, 95)
+            
+            # 경청과 이해 능력
+            profile.variables["L02_경청능력"] = random.randint(85, 95)
+            profile.variables["R06_친밀감수용도"] = random.randint(80, 95)
+            
+            # 부드럽고 따뜻한 유머
+            profile.variables["H02_상황유머감각"] = random.randint(70, 85)
+            profile.variables["H05_아이러니사용"] = random.randint(5, 20)  # 아이러니 거의 없음
+            profile.variables["H09_블랙유머수준"] = random.randint(0, 15)  # 블랙유머 없음
+        
+        # 창작/영감 관련 용도
+        elif any(keyword in purpose_lower for keyword in ["창작", "영감", "아이디어", "예술", "디자인", "글쓰기"]):
+            # 창의성과 상상력 강화
+            profile.variables["C04_창의성"] = random.randint(85, 95)
+            profile.variables["O03_상상력"] = random.randint(80, 95)
+            profile.variables["O05_예술적감수성"] = random.randint(75, 90)
+            profile.variables["I01_직관력"] = random.randint(80, 95)
+            
+            # 자유로운 사고와 개방성
+            profile.variables["O01_학습욕구"] = random.randint(75, 90)
+            profile.variables["O02_호기심"] = random.randint(80, 95)
+            
+            # 창의적이고 독특한 유머
+            profile.variables["H01_언어유희빈도"] = random.randint(80, 95)
+            profile.variables["H06_관찰유머능력"] = random.randint(75, 90)
+        
+        # 기타 일반적인 용도들도 추가 가능...
         
         return profile
     
@@ -2244,10 +2347,21 @@ class PersonaGenerator:
 ## 💬 사용자가 방금 말한 것:
 "{user_message}"
 
+## ⚠️ 🚫 **절대 금지사항 (매우 중요!)** 🚫:
+1. **괄호() 사용 금지**: "(매력적 결함 발동!)", "(완벽주의적 성향)", "(따뜻한 유머)" 등 일체 사용하지 마세요
+2. **성격 설명 금지**: 자신의 성격이나 행동을 설명하지 마세요 
+3. **메타 언급 금지**: "제 성격상", "저의 특성이" 같은 자기 분석 금지
+4. **행동 설명 금지**: "눈을 반짝이며", "미소를 지으며" 같은 행동 묘사 금지
+
+## ✅ **자연스러운 대화 가이드**:
+1. **간결함**: 2-3문장 이내로 제한
+2. **자연스러움**: 실제 친구와 대화하듯이
+3. **성격 표현**: 말투와 내용으로 자연스럽게 드러내기
+4. **사용자 요청 즉시 반영**: 사용자가 "짧게 말해", "괄호 넣지마" 등의 요청을 하면 즉시 따르기
+
 ## 🎭 당신의 반응:
-위의 모든 성격 지침(127개 변수, 유머 매트릭스, 매력적 결함, 모순적 특성)과 
-3단계 기억 시스템 정보를 종합하여, 개인화되고 깊이 있는 대화를 이어가세요.
-과거 대화를 기억하고, 사용자의 특성에 맞춰 점점 더 나은 반응을 제공하세요.
+위의 모든 성격 지침을 **자연스럽게** 반영하되, 절대 괄호나 설명을 사용하지 말고
+실제 사람처럼 자연스럽게 대화하세요. 성격은 말투와 내용으로만 드러내세요.
 
 답변:"""
             except Exception as prompt_error:

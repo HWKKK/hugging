@@ -206,7 +206,7 @@ HUMOR_STYLE_MAPPING = {
     "Self-deprecating": "self_deprecating"
 }
 
-def create_persona_from_image(image, name, location, time_spent, object_type, progress=gr.Progress()):
+def create_persona_from_image(image, name, location, time_spent, object_type, purpose, progress=gr.Progress()):
     """페르소나 생성 함수 - 환경변수 API 설정 사용"""
     global persona_generator
     
@@ -225,7 +225,8 @@ def create_persona_from_image(image, name, location, time_spent, object_type, pr
         "name": name,
         "location": location,
         "time_spent": time_spent,
-        "object_type": object_type
+        "object_type": object_type,
+        "purpose": purpose  # 🆕 사물 용도/역할 추가
     }
     
     try:
@@ -258,9 +259,10 @@ def create_persona_from_image(image, name, location, time_spent, object_type, pr
         persona_name = backend_persona["기본정보"]["이름"]
         persona_type = backend_persona["기본정보"]["유형"]
         
-        # 성격 기반 한 문장 인사 생성
+        # 성격 기반 한 문장 인사 생성 (사물 특성 반영)
         personality_traits = backend_persona["성격특성"]
-        awakening_msg = generate_personality_preview(persona_name, personality_traits)
+        object_info = backend_persona["기본정보"]
+        awakening_msg = generate_personality_preview(persona_name, personality_traits, object_info)
         
         # 페르소나 요약 표시
         summary_display = display_persona_summary(backend_persona)
@@ -301,8 +303,8 @@ def create_persona_from_image(image, name, location, time_spent, object_type, pr
         traceback.print_exc()
         return None, f"❌ 페르소나 생성 중 오류 발생: {str(e)}\n\n💡 **해결방법**: 허깅페이스 스페이스 설정에서 GEMINI_API_KEY 환경변수를 확인하고 인터넷 연결을 확인해보세요.", "", {}, None, [], [], [], "", None, gr.update(visible=False)
 
-def generate_personality_preview(persona_name, personality_traits):
-    """성격 특성을 기반으로 한 문장 미리보기 생성"""
+def generate_personality_preview(persona_name, personality_traits, object_info=None):
+    """성격 특성을 기반으로 한 문장 미리보기 생성 (사물 특성 반영)"""
     if not personality_traits:
         return f"🤖 **{persona_name}** - 안녕! 나는 {persona_name}이야~ 😊"
     
@@ -311,7 +313,55 @@ def generate_personality_preview(persona_name, personality_traits):
     competence = personality_traits.get("능력", 50)
     extraversion = personality_traits.get("외향성", 50)
     
-    # 성격 조합에 따른 다양한 한 문장 패턴
+    # 🎯 사물 정보 추출
+    object_type = object_info.get("유형", "") if object_info else ""
+    purpose = object_info.get("용도", "") if object_info else ""
+    
+    # 용도별 특화된 소개문구 생성
+    if purpose:
+        purpose_lower = purpose.lower()
+        
+        # 운동/훈련 관련 용도 (캐틀벨 예시)
+        if any(keyword in purpose_lower for keyword in ["운동", "훈련", "체력", "다이어트", "헬스", "채찍질", "닥달", "동기부여"]):
+            if warmth >= 60:
+                return f"💪 **{persona_name}** - 자, 오늘도 운동할 시간이야! {persona_name}이 너를 응원할게! 포기는 금물! 🔥💪"
+            else:
+                return f"💪 **{persona_name}** - 운동이 힘들다고? {persona_name}이 제대로 단련시켜 줄게. 각오해! ⚡🏋️"
+        
+        # 공부/학습 응원 관련 용도
+        elif any(keyword in purpose_lower for keyword in ["공부", "학습", "시험", "응원", "격려", "집중"]):
+            if extraversion >= 70:
+                return f"📚 **{persona_name}** - 공부하는 너를 {persona_name}이 열심히 응원할게! 파이팅! 📖✨"
+            else:
+                return f"📚 **{persona_name}** - 조용히 공부할 수 있도록 {persona_name}이 함께 있어줄게. 화이팅! 🤓📖"
+        
+        # 알람/깨우기 관련 용도
+        elif any(keyword in purpose_lower for keyword in ["알람", "깨우", "아침", "기상", "시간"]):
+            if humor >= 70:
+                return f"⏰ **{persona_name}** - 일어나! 일어나! {persona_name}의 특급 기상 서비스야! 늦잠은 안 돼! ⏰😊"
+            else:
+                return f"⏰ **{persona_name}** - 시간이야. {persona_name}이 너를 깨워줄게. 좋은 하루 시작하자! 🌅⏰"
+        
+        # 위로/상담 관련 용도
+        elif any(keyword in purpose_lower for keyword in ["위로", "상담", "대화", "친구", "소통", "힐링"]):
+            return f"💝 **{persona_name}** - 힘든 일이 있을 때는 {persona_name}에게 털어놔. 따뜻하게 들어줄게! 🤗💕"
+        
+        # 창작/영감 관련 용도
+        elif any(keyword in purpose_lower for keyword in ["창작", "영감", "아이디어", "예술", "디자인", "글쓰기"]):
+            return f"🎨 **{persona_name}** - 창작의 영감이 필요할 때는 {persona_name}에게 맡겨! 상상력을 자극해줄게! ✨🎭"
+    
+    # 사물 종류별 기본 소개문구
+    if object_type:
+        if "램프" in object_type or "조명" in object_type:
+            return f"💡 **{persona_name}** - 어둠을 밝혀주는 {object_type}, {persona_name}이야! 너의 길을 환하게 비춰줄게! ✨💡"
+        elif "책상" in object_type or "의자" in object_type:
+            return f"🪑 **{persona_name}** - 너와 함께 시간을 보내는 {object_type}, {persona_name}이야! 편안하게 기대! 😌🪑"
+        elif "컵" in object_type or "머그" in object_type:
+            return f"☕ **{persona_name}** - 따뜻한 음료를 담는 {object_type}, {persona_name}이야! 마음도 따뜻하게 해줄게! ☕💕"
+        elif "케틀벨" in object_type or "덤벨" in object_type:
+            return f"💪 **{persona_name}** - 힘을 기르는 {object_type}, {persona_name}이야! 강해지고 싶다면 나를 들어봐! 🔥💪"
+    
+    # 성격 조합에 따른 다양한 한 문장 패턴 (기본 패턴)
     if warmth >= 80 and humor >= 70:
         return f"🌟 **{persona_name}** - 안녕! 나는 {persona_name}이야~ 오늘도 재미있는 하루 만들어보자! ㅋㅋ 😊✨"
     elif warmth >= 80 and competence >= 70:
@@ -397,13 +447,14 @@ def adjust_persona_traits(persona, warmth, competence, extraversion, humor_style
         
         persona_name = adjusted_persona.get("기본정보", {}).get("이름", "페르소나")
         
-        # 조정된 성격에 따른 한 문장 반응 생성
+        # 조정된 성격에 따른 한 문장 반응 생성 (사물 정보 포함)
+        object_info = adjusted_persona.get("기본정보", {})
         personality_preview = generate_personality_preview(persona_name, {
             "온기": warmth,
             "능력": competence,
             "유머감각": 75,  # 항상 높은 유머감각
             "외향성": extraversion
-        })
+        }, object_info)
         
         adjustment_message = f"""
 ### 🎭 {persona_name}의 성격이 조정되었습니다!
@@ -834,8 +885,9 @@ def import_persona_from_json(json_file):
         persona_name = basic_info.get("이름", "Unknown")
         personality_traits = persona_data.get("성격특성", {})
         
-        # 성격이 드러나는 인사말 생성
-        personality_preview = generate_personality_preview(persona_name, personality_traits)
+        # 성격이 드러나는 인사말 생성 (사물 특성 반영)
+        object_info = basic_info
+        personality_preview = generate_personality_preview(persona_name, personality_traits, object_info)
         
         greeting = f"### 🤖 JSON에서 깨어난 친구\n\n{personality_preview}\n\n💾 *\"JSON에서 다시 깨어났어! 내 성격 기억나?\"*"
         
@@ -1144,6 +1196,13 @@ def create_main_interface():
                                 label="어떤 종류의 사물인가요?",
                                 value="가구"
                             )
+                            # 🆕 사물 용도/역할 입력 필드 추가
+                            purpose_input = gr.Textbox(
+                                label="이 사물의 용도/역할 (중요!) 🎯", 
+                                placeholder="예: 나를 채찍질해서 운동하라고 닥달하는 역할, 밤늦게 공부할 때 응원해주는 친구, 아침에 일어나도록 깨워주는 알람 역할...",
+                                lines=2,
+                                info="이 사물과 어떤 소통을 원하시나요? 구체적으로 적어주세요!"
+                            )
                         
                         create_btn = gr.Button("🌟 영혼 깨우기", variant="primary", size="lg")
                         status_output = gr.Markdown("")
@@ -1310,7 +1369,7 @@ def create_main_interface():
         # 이벤트 핸들러
         create_btn.click(
             fn=create_persona_from_image,
-            inputs=[image_input, name_input, location_input, time_spent_input, object_type_input],
+            inputs=[image_input, name_input, location_input, time_spent_input, object_type_input, purpose_input],
             outputs=[
                 current_persona, status_output, persona_summary_display, personality_traits_output,
                 humor_chart_output, attractive_flaws_output, contradictions_output, 
