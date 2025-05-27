@@ -608,29 +608,40 @@ class PersonalityProfile:
         return self
     
     def generate_attractive_flaws(self):
-        """매력적 결함 3개 생성 (프랫폴 효과 기반)"""
+        """매력적 결함 3-4개 생성 (사물 특성 + 성격적 특성 혼합)"""
         flaw_vars = {k: v for k, v in self.variables.items() if k.startswith("F")}
-        top_flaws = sorted(flaw_vars.items(), key=lambda x: x[1], reverse=True)[:3]
+        top_flaws = sorted(flaw_vars.items(), key=lambda x: x[1], reverse=True)[:4]
         
-        flaw_descriptions = {
-            "F01_완벽주의불안": "완벽하지 못할 때 불안해하는 경향",
-            "F02_방향감각부족": "가끔 방향을 잘 찾지 못함",
-            "F03_기술치음": "새로운 기술에 적응하는 데 어려움을 겪음",
-            "F04_우유부단함": "결정을 내리기 어려워하는 성향",
-            "F05_과도한걱정": "사소한 일에도 지나치게 걱정함",
-            "F06_감정기복": "감정의 변화가 큰 편",
-            "F07_산만함": "집중력이 부족하고 쉽게 산만해짐",
-            "F08_고집스러움": "자신의 방식을 고수하는 경향",
-            "F09_예민함": "작은 일에도 민감하게 반응함",
-            "F10_느림": "행동이나 반응이 느린 편",
-            "F11_소심함": "내성적이고 조심스러운 성향",
-            "F12_잘못된자신감": "가끔 자신의 능력을 과대평가함",
-            "F13_과거집착": "과거의 일에 자주 머무는 경향",
-            "F14_변화거부": "새로운 변화를 꺼리는 성향",
-            "F15_표현서툼": "감정 표현이 서툰 편"
-        }
+        # 사물 특성 기반 매력적 결함
+        physical_flaws = [
+            "먼지가 쌓이면 조금 기분이 우울해짐",
+            "햇볕에 너무 오래 있으면 색이 바랠까 봐 걱정함",
+            "갑작스러운 충격에 놀라면 오랫동안 떨림",
+            "습도가 높으면 컨디션이 조금 나빠짐",
+            "새로운 냄새에 민감하게 반응함",
+            "완벽한 정리정돈을 꿈꾸지만 현실은 어지러움",
+            "자신의 모서리나 끝부분이 닳는 것을 신경씀",
+            "가끔 자신의 무게나 크기 때문에 미안해함"
+        ]
         
-        return [flaw_descriptions.get(f[0], f[0]) for f in top_flaws]
+        # 성격적 매력적 결함
+        personality_flaws = [
+            "완벽해 보이려고 노력하지만 가끔 실수를 함",
+            "생각이 너무 많아서 결정을 내리기 어려워함",
+            "너무 솔직해서 가끔 눈치가 없음", 
+            "지나치게 열정적이어서 쉬는 것을 잊을 때가 있음",
+            "새로운 아이디어에 너무 쉽게 흥분함",
+            "호기심이 많아 집중력이 약간 부족함",
+            "감정 표현이 서툴러서 오해받을 때가 있음",
+            "과거의 좋은 기억에 자주 빠져 현실을 놓칠 때가 있음"
+        ]
+        
+        # 사물 특성 2개 + 성격적 특성 2개 조합
+        selected_flaws = []
+        selected_flaws.extend(random.sample(physical_flaws, 2))
+        selected_flaws.extend(random.sample(personality_flaws, 2))
+        
+        return selected_flaws
     
     def generate_contradictions(self):
         """모순적 특성 2개 생성 (복잡성과 깊이 부여)"""

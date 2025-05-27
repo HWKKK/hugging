@@ -516,12 +516,10 @@ def adjust_persona_traits(persona, warmth, competence, extraversion, humor_style
         adjustment_message = f"""
 ### 🎭 {persona_name}의 성격이 조정되었습니다!
 
-{personality_preview}
-
 ✨ **조정된 성격 (3가지 핵심 지표):**
-• 온기: {warmth}/100 
-• 능력: {competence}/100
-• 외향성: {extraversion}/100
+• 온기: {warmth}/100 {'(따뜻함)' if warmth >= 60 else '(차가움)' if warmth <= 40 else '(보통)'}
+• 능력: {competence}/100 {'(유능함)' if competence >= 60 else '(서툼)' if competence <= 40 else '(보통)'}
+• 외향성: {extraversion}/100 {'(활발함)' if extraversion >= 60 else '(조용함)' if extraversion <= 40 else '(보통)'}
 • 유머감각: 75/100 (고정 - 모든 페르소나가 유머러스!)
 • 유머스타일: {humor_style}
 
@@ -567,13 +565,28 @@ def finalize_persona(persona):
         # 유머 매트릭스 차트 생성
         humor_chart = plot_humor_matrix(persona.get("유머매트릭스", {}))
         
-        # 매력적 결함을 DataFrame 형태로 변환
+        # 매력적 결함을 더 상세한 DataFrame으로 변환
         flaws = persona.get("매력적결함", [])
-        flaws_df = [[flaw, "매력적인 개성"] for flaw in flaws]
+        flaws_df = []
+        for i, flaw in enumerate(flaws, 1):
+            # 사물 특성 vs 성격적 특성 구분
+            if any(keyword in flaw for keyword in ["먼지", "햇볕", "색이", "충격", "습도", "냄새", "모서리", "무게", "크기"]):
+                flaw_type = "사물 특성 기반"
+            else:
+                flaw_type = "성격적 특성"
+            flaws_df.append([f"{i}. {flaw}", flaw_type])
         
-        # 모순적 특성을 DataFrame 형태로 변환
+        # 모순적 특성을 더 상세한 DataFrame으로 변환
         contradictions = persona.get("모순적특성", [])
-        contradictions_df = [[contradiction, "복합적 매력"] for contradiction in contradictions]
+        contradictions_df = []
+        for i, contradiction in enumerate(contradictions, 1):
+            contradictions_df.append([f"{i}. {contradiction}", "복합적 매력"])
+            
+        # 사물 고유 특성도 추가
+        object_type = persona.get("기본정보", {}).get("유형", "")
+        purpose = persona.get("기본정보", {}).get("용도", "")
+        if purpose:
+            contradictions_df.append([f"🎯 {purpose}을 담당하는 {object_type}의 독특한 개성", "사물 역할 특성"])
         
         # 127개 성격 변수를 DataFrame 형태로 변환
         variables = persona.get("성격변수127", {})
@@ -832,8 +845,15 @@ def chat_with_loaded_persona(persona, user_message, chat_history=None):
                     # 타입별 안전한 처리
                     if chat_turn is None:
                         continue
+                    elif isinstance(chat_turn, dict):
+                        # Messages format: {"role": "user/assistant", "content": "message"}
+                        role = chat_turn.get("role")
+                        content = chat_turn.get("content")
+                        
+                        if role and content and role in ["user", "assistant"]:
+                            conversation_history.append({"role": str(role), "content": str(content)})
                     elif isinstance(chat_turn, (list, tuple)) and len(chat_turn) >= 2:
-                        # Gradio 4.x 형식: [user_message, bot_response]
+                        # 구 Gradio 형식: [user_message, bot_response] (호환성)
                         user_msg = chat_turn[0]
                         bot_msg = chat_turn[1]
                         
@@ -841,14 +861,6 @@ def chat_with_loaded_persona(persona, user_message, chat_history=None):
                             conversation_history.append({"role": "user", "content": str(user_msg)})
                         if bot_msg is not None and str(bot_msg).strip():
                             conversation_history.append({"role": "assistant", "content": str(bot_msg)})
-                            
-                    elif isinstance(chat_turn, dict):
-                        # 혹시 dict 형식이 들어온 경우 안전하게 처리
-                        role = chat_turn.get("role") if hasattr(chat_turn, 'get') else None
-                        content = chat_turn.get("content") if hasattr(chat_turn, 'get') else None
-                        
-                        if role and content:
-                            conversation_history.append({"role": str(role), "content": str(content)})
                     else:
                         # 예상치 못한 형식은 무시
                         print(f"⚠️ 예상치 못한 채팅 형식 무시: {type(chat_turn)}")
@@ -880,8 +892,13 @@ def chat_with_loaded_persona(persona, user_message, chat_history=None):
         if not isinstance(response, str):
             response = str(response) if response else "죄송합니다. 응답을 생성할 수 없었습니다."
         
-        # Gradio 4.x 형식으로 안전하게 추가
-        chat_history.append([user_message, response])
+        # Gradio 4.x messages format으로 안전하게 추가
+        if not isinstance(chat_history, list):
+            chat_history = []
+        
+        # Messages format: {"role": "user", "content": "message"}
+        chat_history.append({"role": "user", "content": user_message})
+        chat_history.append({"role": "assistant", "content": response})
         
         return chat_history, ""
         
@@ -904,11 +921,17 @@ def chat_with_loaded_persona(persona, user_message, chat_history=None):
         else:
             friendly_error = f"죄송합니다. 일시적인 문제가 발생했어요. 😅\n\n🔍 기술 정보: {str(e)}"
         
-        # 안전하게 오류 메시지 추가
+        # 안전하게 오류 메시지 추가 (messages format)
         try:
-            chat_history.append([user_message, friendly_error])
+            if not isinstance(chat_history, list):
+                chat_history = []
+            chat_history.append({"role": "user", "content": user_message})
+            chat_history.append({"role": "assistant", "content": friendly_error})
         except Exception:
-            chat_history = [[user_message, friendly_error]]
+            chat_history = [
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": friendly_error}
+            ]
             
         return chat_history, ""
 
@@ -942,11 +965,21 @@ def import_persona_from_json(json_file):
         persona_name = basic_info.get("이름", "Unknown")
         personality_traits = persona_data.get("성격특성", {})
         
-        # 성격이 드러나는 인사말 생성 (사물 특성 반영)
-        object_info = basic_info
-        personality_preview = generate_personality_preview(persona_name, personality_traits, object_info)
-        
-        greeting = f"### 🤖 JSON에서 깨어난 친구\n\n{personality_preview}\n\n💾 *\"JSON에서 다시 깨어났어! 내 성격 기억나?\"*"
+        # AI 기반 인사말 생성 (로드 시에도 조정된 성격 반영)
+        global persona_generator
+        try:
+            if persona_generator:
+                ai_greeting = persona_generator.generate_ai_based_greeting(persona_data, personality_traits)
+                greeting = f"### 🤖 JSON에서 깨어난 친구\n\n{ai_greeting}\n\n💾 *\"JSON에서 다시 깨어났어! 내 성격 기억나?\"*"
+            else:
+                # 폴백: 기존 방식
+                personality_preview = generate_personality_preview(persona_name, personality_traits, basic_info)
+                greeting = f"### 🤖 JSON에서 깨어난 친구\n\n{personality_preview}\n\n💾 *\"JSON에서 다시 깨어났어! 내 성격 기억나?\"*"
+        except Exception as e:
+            print(f"⚠️ JSON 로드 시 AI 인사말 생성 실패: {e}")
+            # 폴백: 기존 방식
+            personality_preview = generate_personality_preview(persona_name, personality_traits, basic_info)
+            greeting = f"### 🤖 JSON에서 깨어난 친구\n\n{personality_preview}\n\n💾 *\"JSON에서 다시 깨어났어! 내 성격 기억나?\"*"
         
         return (persona_data, f"✅ {persona_name} 페르소나를 JSON에서 불러왔습니다!", 
                 greeting, basic_info)
@@ -1609,16 +1642,17 @@ def create_main_interface():
             outputs=[chatbot, message_input]
         )
         
-        # 대화 초기화
+        # 대화 초기화 (messages format)
         clear_btn.click(
             fn=lambda: [],
             outputs=[chatbot]
         )
         
-        # 예시 메시지 버튼들 - API 설정 정보 포함
+        # 예시 메시지 버튼들 - messages format 호환
         def handle_example_message(persona, message):
             if not persona:
                 return [], ""
+            # 빈 messages format 배열로 시작
             chat_result, _ = chat_with_loaded_persona(persona, message, [])
             return chat_result, ""
         
