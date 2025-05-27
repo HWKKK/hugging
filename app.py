@@ -1160,8 +1160,23 @@ def import_conversation_history(json_file):
         if json_file is None:
             return "파일을 선택해주세요."
         
-        # 파일 내용 읽기
-        content = json_file.read().decode('utf-8')
+        # 파일 타입 확인 및 내용 읽기
+        if hasattr(json_file, 'read'):
+            # 파일 객체인 경우
+            content = json_file.read()
+            if isinstance(content, bytes):
+                content = content.decode('utf-8')
+        elif isinstance(json_file, str):
+            # 파일 경로인 경우
+            with open(json_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+        else:
+            # Gradio 파일 객체인 경우 (NamedString 등)
+            if hasattr(json_file, 'name'):
+                with open(json_file.name, 'r', encoding='utf-8') as f:
+                    content = f.read()
+            else:
+                return "❌ 지원하지 않는 파일 형식입니다."
         
         # persona_generator 초기화 확인
         if persona_generator is None:
@@ -1310,31 +1325,9 @@ def create_main_interface():
         personas_list = gr.State(value=[])
         
         gr.Markdown("""
-        # 놈팽쓰(MemoryTag): 당신 곁의 사물, 이제 친구가 되다
+        # 🎭 놈팽쓰(MemoryTag): 당신 곁의 사물, 이제 친구가 되다
         일상 속 사물에 AI 페르소나를 부여하여 대화할 수 있게 해주는 서비스입니다.
-        
-        **🔧 API 설정**: 이 스페이스는 허깅페이스 환경변수 `GEMINI_API_KEY`를 사용합니다.
         """)
-        
-        # API 설정 안내 (환경변수 방식)
-        with gr.Accordion("🔧 API 설정 정보", open=False):
-            gr.Markdown("""
-            ### 환경변수 기반 API 설정
-            이 앱은 허깅페이스 스페이스의 환경변수를 사용합니다.
-            
-            **관리자용 설정 방법:**
-            1. 허깅페이스 스페이스 설정 페이지 이동
-            2. "Repository secrets" 섹션에서 추가:
-               - Name: `GEMINI_API_KEY`
-               - Value: `AIza...` (Gemini API 키)
-            3. 스페이스 재시작
-            
-            ✅ **현재 상태**: 환경변수에서 API 키 자동 로드
-            """)
-            
-            api_status_display = gr.Markdown(
-                f"**🔑 API 상태**: {'✅ 설정됨' if api_key else '❌ 미설정'}"
-            )
         
         with gr.Tabs() as tabs:
             # 페르소나 생성 탭
@@ -1439,7 +1432,6 @@ def create_main_interface():
                                 save_btn = gr.Button("💾 페르소나 저장", variant="secondary")
                                 persona_export_btn = gr.Button("📥 JSON 파일로 내보내기", variant="outline")
                             persona_download_file = gr.File(label="다운로드", visible=False)
-                            export_status = gr.Markdown("")
             
             # 상세 정보 탭
             with gr.Tab("상세 정보", id="details"):
@@ -1524,7 +1516,7 @@ def create_main_interface():
                         gr.Markdown("#### 📤 대화 기록 분석하기")
                         gr.Markdown("저장된 대화 기록 JSON 파일을 업로드하여 분석해보세요.")
                         
-                        import_file = gr.File(label="📤 대화 기록 JSON 업로드", file_types=[".json"])
+                        import_file = gr.File(label="📤 대화 기록 JSON 업로드", file_types=[".json"], type="filepath")
                         import_result = gr.Textbox(label="업로드 결과", lines=3, interactive=False)
                         
                     with gr.Column():
