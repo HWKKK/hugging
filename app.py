@@ -961,7 +961,7 @@ def import_persona_from_json(json_file):
         return None, f"❌ JSON 불러오기 중 오류 발생: {str(e)}", "", {}
 
 def format_personality_traits(persona):
-    """성격 특성을 사용자 친화적인 형태로 포맷 (수치 없이 서술형만) - API 설정 적용"""
+    """성격 특성을 특성 중심의 간단한 리스트 형태로 포맷 (캡쳐 스타일)"""
     global persona_generator
     
     if not persona or "성격특성" not in persona:
@@ -970,13 +970,80 @@ def format_personality_traits(persona):
     # 글로벌 persona_generator 사용 (API 설정이 적용된 상태)
     if persona_generator is None:
         persona_generator = PersonaGenerator()
+
+    # 기본 정보에서 사물의 특성 추출
+    basic_info = persona.get("기본정보", {})
+    object_type = basic_info.get("유형", "")
+    purpose = basic_info.get("용도", "")
     
+    # 생애 스토리에서 특성 추출
+    life_story = persona.get("생애스토리", {})
+    
+    # 매력적 결함
+    attractive_flaws = persona.get("매력적결함", [])
+    
+    # 성격 특성
     personality_traits = persona["성격특성"]
-    descriptions = persona_generator.get_personality_descriptions(personality_traits)
     
-    result = "### 🌟 성격 특성\n\n"
-    for trait, description in descriptions.items():
-        result += f"**{trait}**: {description}\n\n"
+    # 특성 리스트 생성
+    characteristics = []
+    
+    # 1. 온기 특성
+    warmth = personality_traits.get("온기", 50)
+    if warmth >= 70:
+        characteristics.append("따뜻하고 포근한 마음")
+    elif warmth >= 50:
+        characteristics.append("친근하고 다정한 성격")
+    else:
+        characteristics.append("차분하고 진중한 면")
+    
+    # 2. 사물의 고유 특성 (유형 기반)
+    if "곰" in object_type or "인형" in object_type:
+        characteristics.append("부드럽고 포근한 감촉")
+    elif "책" in object_type:
+        characteristics.append("지식과 이야기를 담고 있음")
+    elif "컵" in object_type or "머그" in object_type:
+        characteristics.append("따뜻한 음료와 함께하는 시간")
+    elif "시계" in object_type:
+        characteristics.append("시간의 소중함을 알려줌")
+    elif "연필" in object_type or "펜" in object_type:
+        characteristics.append("창작과 기록의 동반자")
+    else:
+        characteristics.append(f"{object_type}만의 독특한 매력")
+    
+    # 3. 활동 시간대나 환경 특성
+    extraversion = personality_traits.get("외향성", 50)
+    if extraversion >= 70:
+        characteristics.append("낮에 더 활발해짐")
+    elif extraversion <= 30:
+        characteristics.append("밤에 더 활발해짐")
+    else:
+        characteristics.append("하루 종일 일정한 에너지")
+    
+    # 4. 매력적 결함 중 하나를 특성으로 표현
+    if attractive_flaws:
+        flaw = attractive_flaws[0]
+        if "털" in flaw:
+            characteristics.append("가끔 털이 헝클어져서 걱정")
+        elif "먼지" in flaw:
+            characteristics.append("먼지가 쌓이는 걸 신경 씀")
+        elif "얼룩" in flaw:
+            characteristics.append("작은 얼룩도 눈에 띄어 고민")
+        elif "색" in flaw:
+            characteristics.append("색이 바래는 것을 조금 걱정")
+        else:
+            characteristics.append("완벽하지 않은 모습도 받아들임")
+    
+    # 5. 기억과 경험
+    if life_story:
+        characteristics.append("오래된 이야기들 기억")
+    else:
+        characteristics.append("새로운 추억 만들기를 기대")
+    
+    # ✨ 아이콘과 함께 리스트 형태로 반환
+    result = ""
+    for char in characteristics:
+        result += f"✨ {char}\n\n"
     
     return result
 
@@ -1315,11 +1382,14 @@ def create_main_interface():
                                         info="어떤 방식으로 재미있게 만들까요?"
                                     )
                             
-                            # 실시간 미리보기 표시
+                            # 미리보기 표시 (실시간 업데이트 없음)
                             personality_preview = gr.Markdown("", elem_classes=["persona-greeting"], label="성격 조정 미리보기")
                             
                             with gr.Row():
-                                adjust_btn = gr.Button("✨ 성격 조정 적용", variant="primary")
+                                preview_btn = gr.Button("👁️ 미리보기", variant="secondary")
+                                adjust_btn = gr.Button("✨ 성격 조정 반영", variant="primary")
+                            
+                            with gr.Row():
                                 finalize_btn = gr.Button("🎉 친구 확정하기!", variant="secondary")
                         
                         # 조정 결과 표시
@@ -1464,19 +1534,23 @@ def create_main_interface():
             outputs=[personality_preview]
         )
         
-        # 🎯 실시간 미리보기 업데이트 - 각 슬라이더/라디오 변경 시
-        for component in [warmth_slider, competence_slider, extraversion_slider, humor_style_radio]:
-            component.change(
-                fn=generate_realtime_preview,
-                inputs=[current_persona, warmth_slider, competence_slider, extraversion_slider, humor_style_radio],
-                outputs=[personality_preview]
-            )
+        # 🎯 미리보기 버튼 - 사용자가 수동으로 미리보기 요청
+        preview_btn.click(
+            fn=generate_realtime_preview,
+            inputs=[current_persona, warmth_slider, competence_slider, extraversion_slider, humor_style_radio],
+            outputs=[personality_preview]
+        )
         
-        # 성격 조정 적용
+        # 성격 조정 반영 - 실제 페르소나에 적용
         adjust_btn.click(
             fn=adjust_persona_traits,
             inputs=[current_persona, warmth_slider, competence_slider, extraversion_slider, humor_style_radio],
             outputs=[current_persona, adjustment_result, adjusted_info_output]
+        ).then(
+            # 반영 후 미리보기도 업데이트
+            fn=generate_realtime_preview,
+            inputs=[current_persona, warmth_slider, competence_slider, extraversion_slider, humor_style_radio],
+            outputs=[personality_preview]
         )
         
         # 페르소나 최종 확정

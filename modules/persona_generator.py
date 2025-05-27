@@ -1916,7 +1916,7 @@ class PersonaGenerator:
         return profile
     
     def _determine_humor_style_from_matrix(self, humor_matrix, personality_traits):
-        """HumorMatrix를 활용한 유머 스타일 결정"""
+        """HumorMatrix를 활용한 유머 스타일 결정 (기본 5가지 스타일로 반환)"""
         
         # HumorMatrix의 차원값들을 활용
         warmth_vs_wit = humor_matrix.dimensions["warmth_vs_wit"]
@@ -1927,17 +1927,17 @@ class PersonaGenerator:
         wordplay_freq = humor_matrix.derived_attributes["wordplay_frequency"]
         sarcasm_level = humor_matrix.derived_attributes["sarcasm_level"]
         
-        # 구체적인 유머 스타일 문장 생성
-        if warmth_vs_wit >= 70 and subtle_vs_exp >= 70:
-            return f"따뜻하고 표현력 풍부한 유머 (말장난 빈도: {wordplay_freq}%)"
-        elif warmth_vs_wit <= 30 and wordplay_freq >= 70:
-            return f"지적이고 언어유희가 많은 위트 (풍자 수준: {sarcasm_level}%)"
-        elif self_vs_obs >= 70:
-            return f"자기 비하적이고 친근한 유머 (자기참조 성향 높음)"
+        # 🎯 기본 5가지 유머 스타일 중 하나로 결정 (오류 방지)
+        if warmth_vs_wit >= 70:
+            return "따뜻한 유머러스"
+        elif wordplay_freq >= 70 or warmth_vs_wit <= 30:
+            return "위트있는 재치꾼"
         elif sarcasm_level >= 60:
-            return f"날카롭고 관찰력 있는 아이러니 유머 (풍자 {sarcasm_level}%)"
+            return "날카로운 관찰자"  
+        elif self_vs_obs >= 70:
+            return "자기 비하적"
         else:
-            return f"자연스럽고 상황에 맞는 균형잡힌 유머"
+            return "장난꾸러기"
     
     def _generate_communication_style_from_profile(self, personality_profile):
         """PersonalityProfile을 활용한 소통 방식 생성"""
