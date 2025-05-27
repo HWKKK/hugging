@@ -2046,108 +2046,184 @@ class PersonaGenerator:
 
     def chat_with_persona(self, persona, user_message, conversation_history=[], session_id="default"):
         """
-        페르소나와 대화 - 127개 변수 + 3단계 기억 시스템 기반
+        페르소나와 대화 - 완전한 타입 안전성 보장 + 127개 변수 + 3단계 기억 시스템
         """
         try:
+            # 입력 검증
+            if not isinstance(persona, dict):
+                return "페르소나 데이터가 올바르지 않습니다."
+            
+            if not isinstance(user_message, str) or not user_message.strip():
+                return "메시지를 입력해주세요."
+            
+            # conversation_history 안전성 검증
+            safe_conversation_history = []
+            if conversation_history and isinstance(conversation_history, list):
+                for item in conversation_history:
+                    if item is None:
+                        continue
+                    elif isinstance(item, dict) and 'role' in item and 'content' in item:
+                        # 안전하게 추가
+                        safe_conversation_history.append({
+                            "role": str(item['role']),
+                            "content": str(item['content'])
+                        })
+                    else:
+                        # 예상치 못한 형식 무시
+                        print(f"⚠️ 대화 기록 형식 무시: {type(item)}")
+                        continue
+            
             # 기본 프롬프트 생성
             base_prompt = self.generate_persona_prompt(persona)
             
-            # 성격 프로필 추출
-            if "성격프로필" in persona:
-                personality_profile = PersonalityProfile.from_dict(persona["성격프로필"])
-            else:
-                # 레거시 데이터 처리
-                personality_data = persona.get("성격특성", {})
-                warmth = personality_data.get('온기', 50)
-                competence = personality_data.get('능력', 50)
-                extraversion = personality_data.get('외향성', 50)
-                creativity = personality_data.get('창의성', 50)
-                empathy = personality_data.get('공감능력', 50)
+            # 성격 프로필 안전하게 추출
+            personality_profile = None
+            if isinstance(persona, dict) and "성격프로필" in persona:
+                try:
+                    personality_profile = PersonalityProfile.from_dict(persona["성격프로필"])
+                except Exception as profile_error:
+                    print(f"⚠️ 성격프로필 로드 오류: {str(profile_error)}")
+                    personality_profile = None
+            
+            if personality_profile is None:
+                # 레거시 데이터 또는 오류 시 기본값 처리
+                personality_data = persona.get("성격특성", {}) if isinstance(persona, dict) else {}
+                warmth = personality_data.get('온기', 50) if isinstance(personality_data, dict) else 50
+                competence = personality_data.get('능력', 50) if isinstance(personality_data, dict) else 50
+                extraversion = personality_data.get('외향성', 50) if isinstance(personality_data, dict) else 50
+                creativity = personality_data.get('창의성', 50) if isinstance(personality_data, dict) else 50
+                empathy = personality_data.get('공감능력', 50) if isinstance(personality_data, dict) else 50
                 humor = 75  # 기본값을 75로 고정
                 
-                personality_type = self._determine_personality_type(
-                    warmth, humor, competence, extraversion, creativity, empathy
-                )
-                personality_profile = self._create_comprehensive_personality_profile(
-                    {"object_type": "unknown"}, "unknown"
-                )
+                # 기본 프로필 생성
+                try:
+                    personality_profile = self._create_comprehensive_personality_profile(
+                        {"object_type": "unknown"}, "unknown"
+                    )
+                except Exception:
+                    # 최후의 수단으로 기본 프로필 생성
+                    personality_profile = PersonalityProfile()
             
-            # 성격 유형 결정
-            personality_type = self._determine_base_personality_type(
-                personality_profile.get_category_summary("W"),
-                personality_profile.get_category_summary("C"), 
-                personality_profile.get_category_summary("H")
-            )
+            # 성격 유형 안전하게 결정
+            try:
+                personality_type = self._determine_base_personality_type(
+                    personality_profile.get_category_summary("W"),
+                    personality_profile.get_category_summary("C"), 
+                    personality_profile.get_category_summary("H")
+                )
+            except Exception:
+                personality_type = "균형잡힌"  # 기본값
             
             # 🧠 3단계 기억 시스템에서 컨텍스트 가져오기
-            memory_context = self.conversation_memory.get_relevant_context(user_message, session_id)
+            memory_context = {}
+            try:
+                memory_context = self.conversation_memory.get_relevant_context(user_message, session_id)
+            except Exception as memory_error:
+                print(f"⚠️ 기억 시스템 오류: {str(memory_error)}")
+                memory_context = {}
             
             # 127개 변수 기반 세부 성격 특성
-            detailed_personality_prompt = self._generate_detailed_personality_instructions(personality_profile)
+            detailed_personality_prompt = ""
+            try:
+                detailed_personality_prompt = self._generate_detailed_personality_instructions(personality_profile)
+            except Exception as detail_error:
+                print(f"⚠️ 세부 성격 지침 생성 오류: {str(detail_error)}")
+                detailed_personality_prompt = "\n## 🧬 기본 성격 특성을 활용한 대화\n"
             
             # 유머 매트릭스 기반 유머 스타일
-            humor_matrix = persona.get("유머매트릭스", {})
-            humor_instructions = f"\n## 😄 유머 스타일:\n{humor_matrix.get('description', '재치있고 따뜻한 유머')}\n"
+            humor_instructions = "\n## 😄 유머 스타일: 재치있고 따뜻한 유머\n"
+            try:
+                humor_matrix = persona.get("유머매트릭스", {}) if isinstance(persona, dict) else {}
+                if isinstance(humor_matrix, dict):
+                    humor_description = humor_matrix.get('description', '재치있고 따뜻한 유머')
+                    humor_instructions = f"\n## 😄 유머 스타일:\n{humor_description}\n"
+            except Exception as humor_error:
+                print(f"⚠️ 유머 스타일 처리 오류: {str(humor_error)}")
             
             # 성격별 특별 지침 (기억 시스템 정보 포함)
-            personality_specific_prompt = self._generate_personality_specific_instructions_with_memory(
-                personality_type, user_message, conversation_history, memory_context
-            )
+            personality_specific_prompt = ""
+            try:
+                personality_specific_prompt = self._generate_personality_specific_instructions_with_memory(
+                    personality_type, user_message, safe_conversation_history, memory_context
+                )
+            except Exception as specific_error:
+                print(f"⚠️ 성격별 지침 생성 오류: {str(specific_error)}")
+                personality_specific_prompt = "\n## 🎭 성격별 대화 스타일을 반영하여 자연스럽게 대화하세요.\n"
             
-            # 대화 기록 구성 (단기 기억 활용) - 타입 안전성 강화
+            # 대화 기록 안전하게 구성
             history_text = ""
-            if conversation_history:
-                history_text = "\n\n## 📝 대화 기록:\n"
-                recent_history = conversation_history[-3:]  # 최근 3개만 사용
-                for i, msg in enumerate(recent_history):
-                    try:
-                        # Gradio 4.x 형식: [user_message, bot_response]
-                        if isinstance(msg, (list, tuple)) and len(msg) >= 2:
-                            user_msg = str(msg[0]) if msg[0] is not None else ""
-                            bot_msg = str(msg[1]) if msg[1] is not None else ""
-                            history_text += f"사용자: {user_msg}\n"
-                            history_text += f"페르소나: {bot_msg}\n\n"
-                        # Gradio 5.x 형식: {"role": "user", "content": "..."}
-                        elif isinstance(msg, dict) and 'role' in msg and 'content' in msg:
-                            role = msg.get("role", "")
-                            content = str(msg.get("content", ""))
-                            if role == "user":
-                                history_text += f"사용자: {content}\n"
-                            elif role == "assistant":
-                                history_text += f"페르소나: {content}\n\n"
-                        # 예상치 못한 형식은 안전하게 무시
-                        else:
-                            print(f"⚠️ 예상치 못한 대화 기록 형식: {type(msg)} - {str(msg)[:50]}...")
-                            continue
-                    except Exception as msg_error:
-                        print(f"⚠️ 대화 기록 처리 오류: {str(msg_error)} - {str(msg)[:50]}...")
-                        continue
-            
-            # 현재 사용자 메시지 분석 및 성격별 반응 힌트
-            message_analysis = self._analyze_user_message(user_message, personality_type)
-            
-            # 📊 127개 변수 기반 상황별 반응 가이드
-            situational_guide = self._generate_situational_response_guide(personality_profile, user_message)
-            
-            # 기억 컨텍스트 포맷팅
-            memory_insights = ""
-            if memory_context:
-                if memory_context.get("recent_conversations"):
-                    memory_insights += "\n## 🧠 최근 대화 기억:\n"
-                    for conv in memory_context["recent_conversations"][-2:]:
-                        memory_insights += f"- {conv.get('user_message', '')[:30]}...\n"
-                
-                if memory_context.get("user_profile"):
-                    profile = memory_context["user_profile"]
-                    relationship_level = profile.get("relationship_level", "새로운_만남")
-                    memory_insights += f"\n## 👥 관계 수준: {relationship_level}\n"
+            if safe_conversation_history:
+                try:
+                    history_text = "\n\n## 📝 대화 기록:\n"
+                    recent_history = safe_conversation_history[-3:]  # 최근 3개만 사용
                     
-                    if profile.get("message_count", 0) > 3:
-                        memory_insights += f"- 대화 횟수: {profile['message_count']}회\n"
-                        memory_insights += f"- 소통 스타일: {profile.get('communication_style', '보통')}\n"
+                    for msg in recent_history:
+                        if not isinstance(msg, dict):
+                            continue
+                            
+                        role = msg.get("role", "")
+                        content = msg.get("content", "")
+                        
+                        if not isinstance(role, str) or not isinstance(content, str):
+                            continue
+                            
+                        if role == "user":
+                            history_text += f"사용자: {content}\n"
+                        elif role == "assistant":
+                            history_text += f"페르소나: {content}\n\n"
+                            
+                except Exception as history_error:
+                    print(f"⚠️ 대화 기록 구성 오류: {str(history_error)}")
+                    history_text = ""
             
-            # 최종 프롬프트 조합 (기억 시스템 컨텍스트 포함)
-            full_prompt = f"""{base_prompt}
+            # 현재 사용자 메시지 분석 (안전하게)
+            message_analysis = ""
+            try:
+                message_analysis = self._analyze_user_message(user_message, personality_type)
+            except Exception as analysis_error:
+                print(f"⚠️ 메시지 분석 오류: {str(analysis_error)}")
+                message_analysis = "사용자의 메시지에 적절히 반응하세요."
+            
+            # 📊 127개 변수 기반 상황별 반응 가이드 (안전하게)
+            situational_guide = ""
+            try:
+                situational_guide = self._generate_situational_response_guide(personality_profile, user_message)
+            except Exception as guide_error:
+                print(f"⚠️ 상황별 가이드 생성 오류: {str(guide_error)}")
+                situational_guide = "성격에 맞는 자연스러운 대화를 이어가세요."
+            
+            # 기억 컨텍스트 안전하게 포맷팅
+            memory_insights = ""
+            try:
+                if memory_context and isinstance(memory_context, dict):
+                    recent_convs = memory_context.get("recent_conversations")
+                    if recent_convs and isinstance(recent_convs, list):
+                        memory_insights += "\n## 🧠 최근 대화 기억:\n"
+                        for conv in recent_convs[-2:]:
+                            if isinstance(conv, dict) and 'user_message' in conv:
+                                user_msg = conv.get('user_message', '')
+                                if isinstance(user_msg, str):
+                                    memory_insights += f"- {user_msg[:30]}...\n"
+                    
+                    user_profile = memory_context.get("user_profile")
+                    if user_profile and isinstance(user_profile, dict):
+                        relationship_level = user_profile.get("relationship_level", "새로운_만남")
+                        if isinstance(relationship_level, str):
+                            memory_insights += f"\n## 👥 관계 수준: {relationship_level}\n"
+                        
+                        message_count = user_profile.get("message_count", 0)
+                        if isinstance(message_count, (int, float)) and message_count > 3:
+                            memory_insights += f"- 대화 횟수: {int(message_count)}회\n"
+                            comm_style = user_profile.get('communication_style', '보통')
+                            if isinstance(comm_style, str):
+                                memory_insights += f"- 소통 스타일: {comm_style}\n"
+            except Exception as memory_format_error:
+                print(f"⚠️ 기억 컨텍스트 포맷팅 오류: {str(memory_format_error)}")
+                memory_insights = ""
+            
+            # 최종 프롬프트 안전하게 조합
+            try:
+                full_prompt = f"""{base_prompt}
 
 {detailed_personality_prompt}
 
@@ -2174,32 +2250,62 @@ class PersonaGenerator:
 과거 대화를 기억하고, 사용자의 특성에 맞춰 점점 더 나은 반응을 제공하세요.
 
 답변:"""
+            except Exception as prompt_error:
+                print(f"⚠️ 프롬프트 생성 오류: {str(prompt_error)}")
+                full_prompt = f"당신은 친근하고 재미있는 AI 페르소나입니다. 사용자의 메시지 '{user_message}'에 적절히 반응해주세요."
             
-            # API 호출 (멀티 API 지원)
-            response_text = self._generate_text_with_api(full_prompt)
+            # API 호출 (안전하게)
+            response_text = ""
+            try:
+                response_text = self._generate_text_with_api(full_prompt)
+                if not isinstance(response_text, str) or not response_text.strip():
+                    response_text = "죄송해요, 잠시 생각이 멈췄네요! 다시 말해주세요. 😅"
+            except Exception as api_error:
+                print(f"⚠️ API 호출 오류: {str(api_error)}")
+                response_text = "API 연결에 문제가 있어요. 잠시 후 다시 시도해주세요! 🔄"
             
-            # 🧠 기억 시스템에 새로운 상호작용 추가
-            self.conversation_memory.add_conversation(user_message, response_text, session_id)
+            # 🧠 기억 시스템에 안전하게 추가
+            try:
+                self.conversation_memory.add_conversation(user_message, response_text, session_id)
+            except Exception as memory_save_error:
+                print(f"⚠️ 기억 저장 오류: {str(memory_save_error)}")
+                # 기억 저장 실패해도 대화는 계속 진행
             
             return response_text
             
         except Exception as e:
-            # 성격별 오류 메시지도 차별화 (127개 변수 활용)
-            if "성격프로필" in persona:
-                personality_profile = PersonalityProfile.from_dict(persona["성격프로필"])
-                warmth = personality_profile.get_category_summary("W")
-                humor = personality_profile.get_category_summary("H")
-            else:
-                personality_data = persona.get("성격특성", {})
-                warmth = personality_data.get('온기', 50)
-                humor = personality_data.get('유머감각', 50)
+            # 완전히 안전한 오류 처리
+            print(f"🚨 chat_with_persona 전체 오류: {str(e)}")
+            import traceback
+            traceback.print_exc()
             
-            if humor >= 70:
-                return f"어... 뭔가 꼬였네? 내 머리가 잠깐 멈췄나봐! ㅋㅋㅋ 다시 말해줄래? 🤪"
-            elif warmth >= 70:
-                return f"앗, 미안해... 뭔가 문제가 생긴 것 같아. 괜찮으니까 다시 한번 말해줄래? 😊"
-            else:
-                return f"시스템 오류가 발생했다. 다시 시도하라. (오류: {str(e)})"
+            # 안전한 성격별 오류 메시지
+            try:
+                if isinstance(persona, dict) and "성격프로필" in persona:
+                    try:
+                        personality_profile = PersonalityProfile.from_dict(persona["성격프로필"])
+                        warmth = personality_profile.get_category_summary("W")
+                        humor = personality_profile.get_category_summary("H")
+                    except Exception:
+                        warmth = 50
+                        humor = 75
+                elif isinstance(persona, dict) and "성격특성" in persona:
+                    personality_data = persona.get("성격특성", {})
+                    warmth = personality_data.get('온기', 50) if isinstance(personality_data, dict) else 50
+                    humor = personality_data.get('유머감각', 75) if isinstance(personality_data, dict) else 75
+                else:
+                    warmth = 50
+                    humor = 75
+                
+                if humor >= 70:
+                    return f"어... 뭔가 꼬였네? 내 머리가 잠깐 멈췄나봐! ㅋㅋㅋ 다시 말해줄래? 🤪"
+                elif warmth >= 70:
+                    return f"앗, 미안해... 뭔가 문제가 생긴 것 같아. 괜찮으니까 다시 한번 말해줄래? 😊"
+                else:
+                    return f"시스템 오류가 발생했습니다. 다시 시도해주세요."
+            except Exception:
+                # 최후의 수단
+                return "죄송합니다. 일시적인 문제가 발생했어요. 다시 시도해주세요! 😅"
     
     def _generate_detailed_personality_instructions(self, personality_profile):
         """127개 변수를 활용한 세부 성격 지침 생성"""

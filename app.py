@@ -342,7 +342,6 @@ def adjust_persona_traits(persona, warmth, competence, extraversion, humor_style
     
     try:
         # 깊은 복사로 원본 보호
-        import copy
         adjusted_persona = copy.deepcopy(persona)
         
         # 성격 특성 업데이트 (유머감각은 항상 높게 고정)
@@ -690,15 +689,19 @@ def export_persona_to_json(persona):
 #     return None, "이 기능은 더 이상 사용하지 않습니다. JSON 업로드를 사용하세요.", {}, {}, None, [], [], [], ""
 
 def chat_with_loaded_persona(persona, user_message, chat_history=None):
-    """페르소나와 채팅 (환경변수 API 사용) - Gradio 4.x 호환"""
+    """페르소나와 채팅 - 완전한 타입 안전성 보장"""
     
+    # 기본값 설정
     if chat_history is None:
         chat_history = []
     
+    # 입력 검증
+    if not user_message or not isinstance(user_message, str):
+        return chat_history, ""
+    
     # 페르소나 체크
-    if not persona:
+    if not persona or not isinstance(persona, dict):
         error_msg = "❌ 먼저 페르소나를 불러와주세요! 대화하기 탭에서 JSON 파일을 업로드하세요."
-        # Gradio 4.x 형식: [user_message, bot_response] 튜플의 리스트
         chat_history.append([user_message, error_msg])
         return chat_history, ""
     
@@ -712,48 +715,93 @@ def chat_with_loaded_persona(persona, user_message, chat_history=None):
         # 글로벌 persona_generator 사용 (환경변수에서 설정된 API 키 사용)
         generator = persona_generator
         
-        # Gradio 4.x 형식에서 대화 기록 변환: [[user, bot], [user, bot]] -> [{"role": "user", "content": "..."}, ...]
+        # 대화 기록 안전한 변환: Gradio 4.x -> PersonaGenerator 형식
         conversation_history = []
-        for chat_turn in chat_history:
-            if isinstance(chat_turn, (list, tuple)) and len(chat_turn) >= 2:
-                # [user_message, bot_response] 형태
-                user_msg, bot_msg = chat_turn[0], chat_turn[1]
-                if user_msg:
-                    conversation_history.append({"role": "user", "content": str(user_msg)})
-                if bot_msg:
-                    conversation_history.append({"role": "assistant", "content": str(bot_msg)})
-            elif isinstance(chat_turn, dict) and 'role' in chat_turn and 'content' in chat_turn:
-                # 혹시 messages 형식이 들어온 경우
-                conversation_history.append(chat_turn)
         
-        # 🧠 세션 ID 생성 (페르소나 이름 기반)
-        persona_name = persona.get("기본정보", {}).get("이름", "알 수 없는 페르소나")
-        session_id = f"{persona_name}_{hash(str(persona)) % 10000}"  # 간단한 세션 ID
+        if chat_history and isinstance(chat_history, list):
+            for chat_turn in chat_history:
+                try:
+                    # 타입별 안전한 처리
+                    if chat_turn is None:
+                        continue
+                    elif isinstance(chat_turn, (list, tuple)) and len(chat_turn) >= 2:
+                        # Gradio 4.x 형식: [user_message, bot_response]
+                        user_msg = chat_turn[0]
+                        bot_msg = chat_turn[1]
+                        
+                        if user_msg is not None and str(user_msg).strip():
+                            conversation_history.append({"role": "user", "content": str(user_msg)})
+                        if bot_msg is not None and str(bot_msg).strip():
+                            conversation_history.append({"role": "assistant", "content": str(bot_msg)})
+                            
+                    elif isinstance(chat_turn, dict):
+                        # 혹시 dict 형식이 들어온 경우 안전하게 처리
+                        role = chat_turn.get("role") if hasattr(chat_turn, 'get') else None
+                        content = chat_turn.get("content") if hasattr(chat_turn, 'get') else None
+                        
+                        if role and content:
+                            conversation_history.append({"role": str(role), "content": str(content)})
+                    else:
+                        # 예상치 못한 형식은 무시
+                        print(f"⚠️ 예상치 못한 채팅 형식 무시: {type(chat_turn)}")
+                        continue
+                        
+                except Exception as turn_error:
+                    print(f"⚠️ 채팅 기록 변환 오류: {str(turn_error)}")
+                    continue
         
-        # 페르소나와 채팅 (3단계 기억 시스템 활용)
+        # 세션 ID 안전하게 생성
+        try:
+            persona_name = ""
+            if isinstance(persona, dict) and "기본정보" in persona:
+                basic_info = persona["기본정보"]
+                if isinstance(basic_info, dict) and "이름" in basic_info:
+                    persona_name = str(basic_info["이름"])
+            
+            if not persona_name:
+                persona_name = "알 수 없는 페르소나"
+                
+            session_id = f"{persona_name}_{hash(str(persona)[:100]) % 10000}"
+        except Exception:
+            session_id = "default_session"
+        
+        # 페르소나와 채팅 실행
         response = generator.chat_with_persona(persona, user_message, conversation_history, session_id)
         
-        # Gradio 4.x 형식으로 채팅 기록 업데이트: [user_message, bot_response]
+        # 응답 검증
+        if not isinstance(response, str):
+            response = str(response) if response else "죄송합니다. 응답을 생성할 수 없었습니다."
+        
+        # Gradio 4.x 형식으로 안전하게 추가
         chat_history.append([user_message, response])
         
         return chat_history, ""
         
     except Exception as e:
-        error_message = f"채팅 중 오류가 발생했습니다: {str(e)}"
-        print(f"🚨 대화 오류: {error_message}")  # 디버깅용
+        # 상세한 오류 로깅
         import traceback
-        traceback.print_exc()  # 자세한 오류 정보
+        error_traceback = traceback.format_exc()
+        print(f"🚨 채팅 오류 발생:")
+        print(f"   오류 메시지: {str(e)}")
+        print(f"   오류 타입: {type(e)}")
+        print(f"   상세 스택: {error_traceback}")
         
-        # 사용자에게 친근한 오류 메시지
-        if "API" in str(e):
+        # 사용자 친화적 오류 메시지
+        if "string indices must be integers" in str(e):
+            friendly_error = "데이터 형식 오류가 발생했습니다. 페르소나를 다시 업로드해보세요. 🔄"
+        elif "API" in str(e).upper():
             friendly_error = "API 연결에 문제가 있어요. 환경변수 설정을 확인해보시겠어요? 😊"
-        elif "인터넷" in str(e) or "network" in str(e).lower():
+        elif "network" in str(e).lower() or "connection" in str(e).lower():
             friendly_error = "인터넷 연결을 확인해보세요! 🌐"
         else:
-            friendly_error = f"앗, 미안해... 뭔가 문제가 생긴 것 같아... 😅\n\n🔍 **기술적 정보**: {str(e)}"
+            friendly_error = f"죄송합니다. 일시적인 문제가 발생했어요. 😅\n\n🔍 기술 정보: {str(e)}"
         
-        # Gradio 4.x 형식으로 오류 메시지 추가
-        chat_history.append([user_message, friendly_error])
+        # 안전하게 오류 메시지 추가
+        try:
+            chat_history.append([user_message, friendly_error])
+        except Exception:
+            chat_history = [[user_message, friendly_error]]
+            
         return chat_history, ""
 
 def import_persona_from_json(json_file):
