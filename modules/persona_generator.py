@@ -2094,20 +2094,34 @@ class PersonaGenerator:
                 personality_type, user_message, conversation_history, memory_context
             )
             
-            # 대화 기록 구성 (단기 기억 활용)
+            # 대화 기록 구성 (단기 기억 활용) - 타입 안전성 강화
             history_text = ""
             if conversation_history:
                 history_text = "\n\n## 📝 대화 기록:\n"
                 recent_history = conversation_history[-3:]  # 최근 3개만 사용
                 for i, msg in enumerate(recent_history):
-                    if isinstance(msg, list) and len(msg) >= 2:
-                        history_text += f"사용자: {msg[0]}\n"
-                        history_text += f"페르소나: {msg[1]}\n\n"
-                    elif isinstance(msg, dict):
-                        if msg.get("role") == "user":
-                            history_text += f"사용자: {msg.get('content', '')}\n"
+                    try:
+                        # Gradio 4.x 형식: [user_message, bot_response]
+                        if isinstance(msg, (list, tuple)) and len(msg) >= 2:
+                            user_msg = str(msg[0]) if msg[0] is not None else ""
+                            bot_msg = str(msg[1]) if msg[1] is not None else ""
+                            history_text += f"사용자: {user_msg}\n"
+                            history_text += f"페르소나: {bot_msg}\n\n"
+                        # Gradio 5.x 형식: {"role": "user", "content": "..."}
+                        elif isinstance(msg, dict) and 'role' in msg and 'content' in msg:
+                            role = msg.get("role", "")
+                            content = str(msg.get("content", ""))
+                            if role == "user":
+                                history_text += f"사용자: {content}\n"
+                            elif role == "assistant":
+                                history_text += f"페르소나: {content}\n\n"
+                        # 예상치 못한 형식은 안전하게 무시
                         else:
-                            history_text += f"페르소나: {msg.get('content', '')}\n\n"
+                            print(f"⚠️ 예상치 못한 대화 기록 형식: {type(msg)} - {str(msg)[:50]}...")
+                            continue
+                    except Exception as msg_error:
+                        print(f"⚠️ 대화 기록 처리 오류: {str(msg_error)} - {str(msg)[:50]}...")
+                        continue
             
             # 현재 사용자 메시지 분석 및 성격별 반응 힌트
             message_analysis = self._analyze_user_message(user_message, personality_type)
