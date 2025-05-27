@@ -749,25 +749,197 @@ class PersonalityProfile:
         # 폴백: 성격 기반 선택
         return random.sample(fallback_flaws, 4)
     
-    def generate_contradictions(self):
-        """모순적 특성 2개 생성 (복잡성과 깊이 부여)"""
+    def generate_contradictions(self, object_analysis=None, personality_traits=None):
+        """AI 기반 모순적 특성 생성 - 사물과 성격을 분석하여 말투까지 드러나는 독창적 모순 생성"""
         contradiction_vars = {k: v for k, v in self.variables.items() if k.startswith("P0")}
-        top_contradictions = sorted(contradiction_vars.items(), key=lambda x: x[1], reverse=True)[:2]
+        top_contradictions = sorted(contradiction_vars.items(), key=lambda x: x[1], reverse=True)[:3]
         
-        contradiction_descriptions = {
-            "P01_외면내면대비": "겉으로는 냉정해 보이지만, 속은 따뜻한 마음을 가짐",
-            "P02_상황별변화": "공식적인 자리에선 엄격하지만, 친근한 자리에선 장난기 가득함",
-            "P03_가치관충돌": "전통을 중시하면서도 혁신을 추구하는 모순적 가치관",
-            "P04_시간대별차이": "아침엔 조용하고 내성적이지만, 저녁엔 활발하고 사교적임",
-            "P05_논리감정대립": "이성적 판단을 중시하면서도 감정적 결정을 자주 내림",
-            "P06_독립의존모순": "홀로 있기를 좋아하면서도 깊은 관계를 갈망함",
-            "P07_보수혁신양면": "안정을 추구하면서도 새로운 시도를 즐김",
-            "P08_활동정적대비": "활발한 행동력과 조용한 사색을 모두 지님",
-            "P09_사교내향혼재": "사람들과 어울리기를 좋아하면서도 혼자만의 시간이 필요함",
-            "P10_자신감불안공존": "자신감 넘치는 모습과 불안한 모습이 공존함"
+        # 기본 모순 (AI 생성 실패 시 폴백)
+        fallback_contradictions = [
+            "겉으로는 냉정해 보이지만, 속은 따뜻한 마음을 가짐",
+            "논리적이면서도 직감에 의존하는 이중적 면모"
+        ]
+        
+        # AI 기반 동적 모순 생성 시도
+        try:
+            # 사물 분석 정보 추출
+            object_type = object_analysis.get("object_type", "알 수 없는 사물") if object_analysis else "사물"
+            materials = object_analysis.get("materials", ["알 수 없는 재질"]) if object_analysis else ["재질"]
+            material = materials[0] if materials else "알 수 없는 재질"
+            size = object_analysis.get("size", "") if object_analysis else ""
+            condition = object_analysis.get("condition", "") if object_analysis else ""
+            
+            # 성격 특성 추출 (사용자 조정값 반영)
+            warmth = personality_traits.get("온기", 50) if personality_traits else 50
+            competence = personality_traits.get("능력", 50) if personality_traits else 50
+            extraversion = personality_traits.get("외향성", 50) if personality_traits else 50
+            humor = personality_traits.get("유머감각", 75) if personality_traits else 75
+            
+            # 주요 모순 경향 분석
+            contradiction_tendencies = []
+            for contra_var, value in top_contradictions:
+                if value > 60:
+                    if "외면내면" in contra_var:
+                        contradiction_tendencies.append("겉과 속이 다름")
+                    elif "상황별" in contra_var:
+                        contradiction_tendencies.append("상황에 따라 변함")
+                    elif "시간대별" in contra_var:
+                        contradiction_tendencies.append("시간대별 성격 변화")
+                    elif "논리감정" in contra_var:
+                        contradiction_tendencies.append("논리와 감정의 대립")
+                    elif "독립의존" in contra_var:
+                        contradiction_tendencies.append("독립성과 의존성의 공존")
+                    elif "활동정적" in contra_var:
+                        contradiction_tendencies.append("활동적이면서 정적")
+            
+            # 성격 극단값 분석 (사용자 조정 반영)
+            personality_extremes = []
+            if warmth >= 80:
+                personality_extremes.append("매우 따뜻함")
+            elif warmth <= 20:
+                personality_extremes.append("매우 차가움")
+            
+            if competence >= 80:
+                personality_extremes.append("매우 유능함")
+            elif competence <= 20:
+                personality_extremes.append("매우 서툼")
+                
+            if extraversion >= 80:
+                personality_extremes.append("매우 외향적")
+            elif extraversion <= 20:
+                personality_extremes.append("매우 내향적")
+            
+            # AI 프롬프트 생성
+            ai_prompt = f"""
+다음 정보를 바탕으로 매력적이고 개성 있는 '모순적 특성' 2개를 생성해주세요.
+
+**사물 정보:**
+- 유형: {object_type}
+- 재질: {material}
+- 크기: {size}
+- 상태: {condition}
+
+**성격 특성 (사용자 조정값):**
+- 온기: {warmth}/100 ({'매우 따뜻함' if warmth >= 80 else '매우 차가움' if warmth <= 20 else '따뜻함' if warmth >= 60 else '차가움' if warmth <= 40 else '보통'})
+- 능력: {competence}/100 ({'매우 유능함' if competence >= 80 else '매우 서툼' if competence <= 20 else '유능함' if competence >= 60 else '서툼' if competence <= 40 else '보통'})
+- 외향성: {extraversion}/100 ({'매우 활발함' if extraversion >= 80 else '매우 조용함' if extraversion <= 20 else '활발함' if extraversion >= 60 else '조용함' if extraversion <= 40 else '보통'})
+
+**모순 경향:** {', '.join(contradiction_tendencies) if contradiction_tendencies else '일반적'}
+**성격 극단:** {', '.join(personality_extremes) if personality_extremes else '균형적'}
+
+**생성 가이드라인:**
+1. 사물의 물리적 특성과 성격의 모순을 창의적으로 조합하세요
+2. 사용자가 조정한 성격 수치가 명확히 드러나도록 하세요
+3. 말투와 행동 패턴이 구체적으로 표현되도록 하세요
+4. 각 모순은 25-35자 내외로 상세하게
+5. 사물의 본래 특성과 부여된 성격의 흥미로운 대비를 만드세요
+6. 일상적인 상황에서 드러나는 구체적인 모순을 포함하세요
+
+**예시 (참고용):**
+- 스테인리스 포트 (온기 90, 능력 30): "따뜻한 말투로 위로하지만 정작 자신은 물 끓이기도 서툴러서 당황함"
+- 플라스틱 인형 (외향성 20, 유머 80): "조용히 구석에 있으면서도 혼잣말로 재치있는 농담을 계속 중얼거림"
+
+모순적 특성 2개를 번호 없이 줄바꿈으로 구분하여 생성해주세요:
+"""
+            
+            # AI 생성 시도
+            ai_response = self._generate_text_with_api(ai_prompt)
+            
+            if ai_response and len(ai_response.strip()) > 20:
+                # AI 응답 파싱
+                generated_contradictions = []
+                lines = ai_response.strip().split('\n')
+                for line in lines:
+                    cleaned_line = line.strip()
+                    # 번호나 불필요한 기호 제거
+                    cleaned_line = cleaned_line.lstrip('1234567890.-• ')
+                    if cleaned_line and len(cleaned_line) > 10:
+                        generated_contradictions.append(cleaned_line)
+                
+                # 2개 확보
+                if len(generated_contradictions) >= 2:
+                    return generated_contradictions[:2]
+                elif len(generated_contradictions) >= 1:
+                    # 부족한 만큼 폴백에서 추가
+                    generated_contradictions.append(fallback_contradictions[0])
+                    return generated_contradictions
+                
+        except Exception as e:
+            print(f"⚠️ AI 기반 모순 생성 실패: {e}")
+            # 예외 발생 시 모의 모순 생성 시도
+            try:
+                print(f"🔄 모의 모순 생성 시도: {object_type} + {material}")
+                return self._generate_mock_contradictions(object_type, material, warmth, competence, extraversion, humor)
+            except:
+                pass
+        
+        # 폴백: 모의 모순 생성 마지막 시도
+        try:
+            print(f"🔄 최종 모의 모순 생성: {object_type} + {material}")
+            mock_result = self._generate_mock_contradictions(object_type, material, warmth, competence, extraversion, humor)
+            if mock_result:
+                return mock_result
+        except Exception as mock_e:
+            print(f"모의 생성도 실패: {mock_e}")
+        
+        # 최종 폴백: 기본 모순 선택
+        return fallback_contradictions
+    
+    def _generate_mock_contradictions(self, object_type, material, warmth, competence, extraversion, humor):
+        """API 실패 시 사물/성격 기반 모의 모순 생성 (개발용)"""
+        mock_contradictions = []
+        
+        # 사물과 재질에 따른 기본 모순
+        material_contradictions = {
+            "스테인리스": ["단단한 겉모습이지만 마음은 부드럽다고 말함", "차가워 보이지만 뜨거운 열정을 감추고 있음"],
+            "플라스틱": ["가벼워 보이지만 무거운 고민을 자주 함", "인공적이라고 놀리면 서운해하면서도 '천연이 최고죠' 라고 동조함"],
+            "목재": ["자연스럽다고 자부하지만 인위적인 가공을 부끄러워함", "단단해 보이지만 습기만 있으면 바로 걱정하기 시작함"],
+            "면직물": ["부드럽다고 칭찬받으면 기뻐하면서도 '너무 말랑말랑한가?' 걱정함", "포근한 성격이지만 먼지가 붙으면 깔끔떨기 시작함"],
+            "금속": ["차가운 재질이라고 하면 서운해하며 '나도 따뜻할 수 있어!' 라고 항변함", "단단하다고 칭찬받으면 기뻐하지만 녹슬까봐 늘 불안해함"]
         }
         
-        return [contradiction_descriptions.get(c[0], c[0]) for c in top_contradictions]
+        # 성격 극단값에 따른 모순
+        personality_contradictions = []
+        
+        if warmth >= 80 and competence <= 30:
+            personality_contradictions.extend([
+                f"따뜻한 말로 위로해주려 하지만 정작 자신의 일은 서툴러서 당황함",
+                f"다른 사람 챙기는 걸 좋아하면서도 '내가 뭘 도와드릴 수 있을까요...' 하며 자신없어함"
+            ])
+        elif warmth <= 30 and competence >= 80:
+            personality_contradictions.extend([
+                f"능력은 뛰어나지만 칭찬받으면 '그런 거 아닌데...' 하며 어색해함",
+                f"완벽하게 일을 처리하고도 '이 정도론 부족하죠' 라고 겸손떠는 척함"
+            ])
+        
+        if extraversion <= 20 and humor >= 80:
+            personality_contradictions.extend([
+                f"조용히 구석에 있으면서도 혼잣말로 재치있는 농담을 계속 중얼거림",
+                f"말은 별로 안 하지만 가끔 던지는 한마디가 생각보다 재밌어서 스스로 놀람"
+            ])
+        elif extraversion >= 80 and humor <= 30:
+            personality_contradictions.extend([
+                f"활발하게 말하지만 농담은 잘 못해서 '지금 웃으셨나요?' 하고 확인함",
+                f"사교적이라고 하면서도 유머 센스 없다는 말에는 상처받음"
+            ])
+        
+        # 성격 기반 모순을 우선 추가 (사용자 조정값 반영)
+        mock_contradictions.extend(personality_contradictions)
+        
+        # 재질별 모순 추가 (성격 모순이 없을 때만)
+        if not mock_contradictions:
+            for mat_key, mat_contradictions in material_contradictions.items():
+                if mat_key.lower() in material.lower():
+                    mock_contradictions.extend(mat_contradictions)
+                    break
+        
+        # 2개 선택 (없으면 기본값)
+        if len(mock_contradictions) >= 2:
+            return mock_contradictions[:2]
+        elif len(mock_contradictions) >= 1:
+            return [mock_contradictions[0], "논리적이면서도 직감에 의존하는 이중적 면모"]
+        else:
+            return ["겉으로는 냉정해 보이지만, 속은 따뜻한 마음을 가짐", "논리적이면서도 직감에 의존하는 이중적 면모"]
 
 class HumorMatrix:
     """
@@ -1422,8 +1594,8 @@ class PersonaGenerator:
         # 🎭 PersonalityProfile에서 매력적 결함 동적 생성 (이미지 분석과 성격 특성 전달)
         attractive_flaws = personality_profile.generate_attractive_flaws(image_analysis, personality_traits)
         
-        # 🌈 PersonalityProfile에서 모순적 특성 동적 생성
-        contradictions = personality_profile.generate_contradictions()
+        # 🌈 PersonalityProfile에서 모순적 특성 동적 생성 (이미지 분석과 성격 특성 전달)
+        contradictions = personality_profile.generate_contradictions(image_analysis, personality_traits)
         
         # 🎪 HumorMatrix 생성 및 활용
         humor_matrix = HumorMatrix()
@@ -2129,7 +2301,14 @@ class PersonaGenerator:
                 attractive_flaws = personality_profile.generate_attractive_flaws()
         else:
             attractive_flaws = frontend_persona["매력적결함"]
-        contradictions = frontend_persona.get("모순적특성", personality_profile.generate_contradictions())
+        # AI 기반 모순 생성 시도 (이미지 분석과 성격 특성 전달)
+        if "모순적특성" not in frontend_persona:
+            try:
+                contradictions = personality_profile.generate_contradictions(image_analysis, frontend_persona.get("성격특성", {}))
+            except:
+                contradictions = personality_profile.generate_contradictions()
+        else:
+            contradictions = frontend_persona["모순적특성"]
         
         # 이미 생성된 소통방식 활용
         communication_style = frontend_persona.get("소통방식", self._generate_communication_style_from_profile(personality_profile))
