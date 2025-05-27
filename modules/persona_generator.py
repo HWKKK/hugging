@@ -607,41 +607,147 @@ class PersonalityProfile:
         
         return self
     
-    def generate_attractive_flaws(self):
-        """매력적 결함 3-4개 생성 (사물 특성 + 성격적 특성 혼합)"""
+    def _generate_text_with_api(self, prompt, image=None):
+        """PersonaGenerator의 API 메소드를 사용하여 텍스트 생성"""
+        # 전역 persona_generator를 찾아서 API 메소드 사용
+        import sys
+        # app.py 모듈에서 persona_generator를 찾기 시도
+        if 'app' in sys.modules:
+            app_module = sys.modules['app']
+            if hasattr(app_module, 'persona_generator'):
+                global_generator = app_module.persona_generator
+                if global_generator and hasattr(global_generator, '_generate_text_with_api'):
+                    return global_generator._generate_text_with_api(prompt, image)
+        
+        # 직접 API 호출 시도 (환경변수 기반)
+        import os
+        import google.generativeai as genai
+        
+        api_key = os.getenv("GEMINI_API_KEY")
+        if api_key:
+            try:
+                genai.configure(api_key=api_key)
+                model = genai.GenerativeModel('gemini-1.5-pro')
+                
+                if image:
+                    response = model.generate_content([prompt, image])
+                else:
+                    response = model.generate_content(prompt)
+                
+                return response.text if response.text else ""
+            except Exception as e:
+                print(f"API 호출 실패: {e}")
+                return None
+        
+        return None
+
+    def generate_attractive_flaws(self, object_analysis=None, personality_traits=None):
+        """AI 기반 매력적 결함 생성 - 사물 특성과 성격을 분석하여 창의적 결함 생성"""
+        # 성격 변수에서 높은 결함 변수들 추출
         flaw_vars = {k: v for k, v in self.variables.items() if k.startswith("F")}
-        top_flaws = sorted(flaw_vars.items(), key=lambda x: x[1], reverse=True)[:4]
+        top_flaw_categories = sorted(flaw_vars.items(), key=lambda x: x[1], reverse=True)[:6]
         
-        # 사물 특성 기반 매력적 결함
-        physical_flaws = [
-            "먼지가 쌓이면 조금 기분이 우울해짐",
-            "햇볕에 너무 오래 있으면 색이 바랠까 봐 걱정함",
-            "갑작스러운 충격에 놀라면 오랫동안 떨림",
-            "습도가 높으면 컨디션이 조금 나빠짐",
-            "새로운 냄새에 민감하게 반응함",
-            "완벽한 정리정돈을 꿈꾸지만 현실은 어지러움",
-            "자신의 모서리나 끝부분이 닳는 것을 신경씀",
-            "가끔 자신의 무게나 크기 때문에 미안해함"
-        ]
-        
-        # 성격적 매력적 결함
-        personality_flaws = [
+        # 기본 결함 (AI 생성 실패 시 폴백)
+        fallback_flaws = [
             "완벽해 보이려고 노력하지만 가끔 실수를 함",
             "생각이 너무 많아서 결정을 내리기 어려워함",
-            "너무 솔직해서 가끔 눈치가 없음", 
-            "지나치게 열정적이어서 쉬는 것을 잊을 때가 있음",
-            "새로운 아이디어에 너무 쉽게 흥분함",
             "호기심이 많아 집중력이 약간 부족함",
-            "감정 표현이 서툴러서 오해받을 때가 있음",
-            "과거의 좋은 기억에 자주 빠져 현실을 놓칠 때가 있음"
+            "감정 표현이 서툴러서 오해받을 때가 있음"
         ]
         
-        # 사물 특성 2개 + 성격적 특성 2개 조합
-        selected_flaws = []
-        selected_flaws.extend(random.sample(physical_flaws, 2))
-        selected_flaws.extend(random.sample(personality_flaws, 2))
+        # AI 기반 동적 결함 생성 시도
+        try:
+            # 사물 분석 정보 추출
+            object_type = object_analysis.get("object_type", "알 수 없는 사물") if object_analysis else "사물"
+            # materials는 배열이므로 첫 번째 요소 사용
+            materials = object_analysis.get("materials", ["알 수 없는 재질"]) if object_analysis else ["재질"]
+            material = materials[0] if materials else "알 수 없는 재질"
+            # colors도 배열이므로 처리
+            colors = object_analysis.get("colors", []) if object_analysis else []
+            color = colors[0] if colors else ""
+            condition = object_analysis.get("condition", "") if object_analysis else ""
+            
+            # 성격 특성 추출
+            warmth = personality_traits.get("온기", 50) if personality_traits else 50
+            competence = personality_traits.get("능력", 50) if personality_traits else 50
+            extraversion = personality_traits.get("외향성", 50) if personality_traits else 50
+            
+            # 주요 결함 카테고리 분석
+            flaw_tendencies = []
+            for flaw_var, value in top_flaw_categories:
+                if value > 60:
+                    if "완벽주의" in flaw_var:
+                        flaw_tendencies.append("완벽주의적 성향")
+                    elif "산만" in flaw_var:
+                        flaw_tendencies.append("집중력 부족")
+                    elif "소심" in flaw_var:
+                        flaw_tendencies.append("소심한 성격")
+                    elif "감정기복" in flaw_var:
+                        flaw_tendencies.append("감정 변화가 큼")
+                    elif "우유부단" in flaw_var:
+                        flaw_tendencies.append("결정 장애")
+                    elif "걱정" in flaw_var:
+                        flaw_tendencies.append("걱정이 많음")
+            
+            # AI 프롬프트 생성
+            ai_prompt = f"""
+다음 정보를 바탕으로 매력적이고 개성 있는 '결함' 4개를 생성해주세요.
+
+**사물 정보:**
+- 유형: {object_type}
+- 재질: {material}
+- 색상: {color}
+- 상태: {condition}
+
+**성격 특성:**
+- 온기: {warmth}/100 ({'따뜻함' if warmth >= 60 else '차가움' if warmth <= 40 else '보통'})
+- 능력: {competence}/100 ({'유능함' if competence >= 60 else '서툼' if competence <= 40 else '보통'})
+- 외향성: {extraversion}/100 ({'활발함' if extraversion >= 60 else '조용함' if extraversion <= 40 else '보통'})
+
+**주요 결함 성향:** {', '.join(flaw_tendencies) if flaw_tendencies else '일반적'}
+
+**생성 가이드라인:**
+1. 사물의 실제 재질과 특성을 고려하세요 (예: 금속이면 색 바램 걱정 X, 대신 물때나 긁힘 걱정)
+2. 물리적 특성과 성격적 특성을 자연스럽게 조합하세요
+3. 각 결함은 15-25자 내외로 간결하게
+4. 너무 부정적이지 않고 오히려 귀엽고 매력적으로 느껴지도록
+5. 사물의 용도와 환경을 고려한 현실적 걱정거리 포함
+
+**예시 (참고용):**
+- 스테인리스 전기포트: "물때가 생기면 자존심이 상함", "소음이 클까 봐 새벽엔 조심스러움"
+- 플라스틱 인형: "햇볕에 색이 바랠까 늘 걱정", "털이 헝클어지면 하루 종일 신경 쓰임"
+
+결함 4개를 번호 없이 줄바꿈으로 구분하여 생성해주세요:
+"""
+            
+            # AI 생성 시도
+            ai_response = self._generate_text_with_api(ai_prompt)
+            
+            if ai_response and len(ai_response.strip()) > 20:
+                # AI 응답 파싱
+                generated_flaws = []
+                lines = ai_response.strip().split('\n')
+                for line in lines:
+                    cleaned_line = line.strip()
+                    # 번호나 불필요한 기호 제거
+                    cleaned_line = cleaned_line.lstrip('1234567890.-• ')
+                    if cleaned_line and len(cleaned_line) > 5:
+                        generated_flaws.append(cleaned_line)
+                
+                # 4개 확보
+                if len(generated_flaws) >= 4:
+                    return generated_flaws[:4]
+                elif len(generated_flaws) >= 2:
+                    # 부족한 만큼 폴백에서 추가
+                    remaining = 4 - len(generated_flaws)
+                    generated_flaws.extend(random.sample(fallback_flaws, remaining))
+                    return generated_flaws
+                
+        except Exception as e:
+            print(f"⚠️ AI 기반 결함 생성 실패: {e}")
         
-        return selected_flaws
+        # 폴백: 성격 기반 선택
+        return random.sample(fallback_flaws, 4)
     
     def generate_contradictions(self):
         """모순적 특성 2개 생성 (복잡성과 깊이 부여)"""
@@ -1313,8 +1419,8 @@ class PersonaGenerator:
             "공감능력": personality_profile.variables.get("W06_공감능력", 50)
         }
         
-        # 🎭 PersonalityProfile에서 매력적 결함 동적 생성
-        attractive_flaws = personality_profile.generate_attractive_flaws()
+        # 🎭 PersonalityProfile에서 매력적 결함 동적 생성 (이미지 분석과 성격 특성 전달)
+        attractive_flaws = personality_profile.generate_attractive_flaws(image_analysis, personality_traits)
         
         # 🌈 PersonalityProfile에서 모순적 특성 동적 생성
         contradictions = personality_profile.generate_contradictions()
@@ -2014,8 +2120,15 @@ class PersonaGenerator:
             humor_matrix = HumorMatrix()
             humor_matrix.from_personality(personality_profile)
         
-        # 이미 생성된 매력적 결함과 모순적 특성 활용
-        attractive_flaws = frontend_persona.get("매력적결함", personality_profile.generate_attractive_flaws())
+        # 이미 생성된 매력적 결함과 모순적 특성 활용 (AI 기반 생성 시도)
+        if "매력적결함" not in frontend_persona:
+            # AI 기반 결함 생성 시도
+            try:
+                attractive_flaws = personality_profile.generate_attractive_flaws(image_analysis, frontend_persona.get("성격특성", {}))
+            except:
+                attractive_flaws = personality_profile.generate_attractive_flaws()
+        else:
+            attractive_flaws = frontend_persona["매력적결함"]
         contradictions = frontend_persona.get("모순적특성", personality_profile.generate_contradictions())
         
         # 이미 생성된 소통방식 활용
