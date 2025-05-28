@@ -557,6 +557,41 @@ def adjust_persona_traits(persona, warmth, competence, extraversion, humor_style
             
             # 업데이트된 프로필 저장
             adjusted_persona["성격프로필"] = profile.to_dict()
+            
+            # 🆕 변경된 변수 값 기반으로 AI가 새로운 매력적 결함과 모순적 특성 생성
+            try:
+                global persona_generator
+                if persona_generator and hasattr(persona_generator, 'api_key') and persona_generator.api_key:
+                    # 사물 정보 가져오기
+                    object_analysis = {
+                        "object_type": adjusted_persona.get("기본정보", {}).get("유형", "사물"),
+                        "material": adjusted_persona.get("기본정보", {}).get("재질", "알 수 없는 재질"),
+                        "description": adjusted_persona.get("기본정보", {}).get("설명", "")
+                    }
+                    
+                    # AI 기반 매력적 결함 생성 (변경된 성격 변수 반영)
+                    new_flaws = persona_generator.generate_attractive_flaws(
+                        object_analysis, 
+                        adjusted_persona["성격특성"]
+                    )
+                    
+                    # AI 기반 모순적 특성 생성 (변경된 성격 변수 반영)  
+                    new_contradictions = persona_generator.generate_contradictions(
+                        object_analysis,
+                        adjusted_persona["성격특성"]
+                    )
+                    
+                    # 업데이트
+                    if new_flaws:
+                        adjusted_persona["매력적결함"] = new_flaws
+                    if new_contradictions:
+                        adjusted_persona["모순적특성"] = new_contradictions
+                        
+                    print(f"🎭 AI가 새로운 성격에 맞는 결함/모순 생성: {len(new_flaws)}개 결함, {len(new_contradictions)}개 모순")
+                        
+            except Exception as ai_error:
+                print(f"⚠️ AI 결함/모순 생성 실패: {ai_error}")
+                # 실패해도 기본 조정은 계속 진행
         
         # 조정된 변수들을 DataFrame으로 생성
         variables_df = []
@@ -637,6 +672,27 @@ def adjust_persona_traits(persona, warmth, competence, extraversion, humor_style
         # 변화량 분석 생성
         change_analysis = show_variable_changes(original_persona, adjusted_persona)
         
+        # 변화된 매력적 결함과 모순적 특성 분석
+        flaws_changed = len(adjusted_persona.get("매력적결함", [])) != len(original_persona.get("매력적결함", []))
+        contradictions_changed = len(adjusted_persona.get("모순적특성", [])) != len(original_persona.get("모순적특성", []))
+        
+        additional_changes = ""
+        if flaws_changed or contradictions_changed:
+            additional_changes = "\n\n🎭 **AI가 새로 생성한 내용:**\n"
+            if flaws_changed:
+                new_flaws = adjusted_persona.get("매력적결함", [])
+                additional_changes += f"• 매력적 결함: {len(new_flaws)}개 새로 생성됨\n"
+                for i, flaw in enumerate(new_flaws[:2], 1):  # 처음 2개만 미리보기
+                    additional_changes += f"  {i}. {flaw}\n"
+                if len(new_flaws) > 2:
+                    additional_changes += f"  ... 외 {len(new_flaws) - 2}개\n"
+            
+            if contradictions_changed:
+                new_contradictions = adjusted_persona.get("모순적특성", [])
+                additional_changes += f"• 모순적 특성: {len(new_contradictions)}개 새로 생성됨\n"
+                for i, contradiction in enumerate(new_contradictions, 1):
+                    additional_changes += f"  {i}. {contradiction}\n"
+        
         adjustment_message = f"""
 ### 🎭 {persona_name}의 성격이 조정되었습니다!
 
@@ -649,15 +705,33 @@ def adjust_persona_traits(persona, warmth, competence, extraversion, humor_style
 
 🧬 **백그라운드**: 152개 세부 변수가 이 설정에 맞춰 자동 조정되었습니다.
 
-{change_analysis}
+{change_analysis}{additional_changes}
         """
         
-        return adjusted_persona, adjustment_message, adjusted_info, variables_df
+        # 조정된 매력적 결함과 모순적 특성을 DataFrame으로 생성
+        flaws_df = []
+        if "매력적결함" in adjusted_persona:
+            flaws = adjusted_persona["매력적결함"]
+            for i, flaw in enumerate(flaws, 1):
+                # 사물 특성 vs 성격적 특성 구분
+                if any(keyword in flaw for keyword in ["먼지", "햇볕", "색이", "충격", "습도", "냄새", "모서리", "무게", "크기"]):
+                    flaw_type = "사물 특성 기반"
+                else:
+                    flaw_type = "성격적 특성"
+                flaws_df.append([f"{i}. {flaw}", flaw_type])
+        
+        contradictions_df = []
+        if "모순적특성" in adjusted_persona:
+            contradictions = adjusted_persona["모순적특성"]
+            for i, contradiction in enumerate(contradictions, 1):
+                contradictions_df.append([f"{i}. {contradiction}", "복합적 매력"])
+        
+        return adjusted_persona, adjustment_message, adjusted_info, variables_df, flaws_df, contradictions_df
         
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return persona, f"조정 중 오류 발생: {str(e)}", {}, []
+        return persona, f"조정 중 오류 발생: {str(e)}", {}, [], [], []
 
 def finalize_persona(persona):
     """페르소나 최종 확정 - 환경변수 API 설정 사용"""
@@ -1744,7 +1818,7 @@ def create_main_interface():
         adjust_btn.click(
             fn=adjust_persona_traits,
             inputs=[current_persona, warmth_slider, competence_slider, extraversion_slider, humor_style_radio],
-            outputs=[current_persona, adjustment_result, adjusted_info_output, personality_variables_output]
+            outputs=[current_persona, adjustment_result, adjusted_info_output, personality_variables_output, attractive_flaws_output, contradictions_output]
         ).then(
             # 반영 후 미리보기도 업데이트
             fn=generate_realtime_preview,
