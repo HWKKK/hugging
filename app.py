@@ -300,9 +300,57 @@ def create_persona_from_image(image, name, location, time_spent, object_type, pu
         contradictions = backend_persona.get("모순적특성", [])
         contradictions_df = [[contradiction, "복합적 매력"] for contradiction in contradictions]
         
-        # 127개 성격 변수를 DataFrame 형태로 변환
+        # 127개 성격 변수를 DataFrame 형태로 변환 (카테고리별 분류)
         variables = backend_persona.get("성격변수127", {})
-        variables_df = [[var, value, "성격 변수"] for var, value in variables.items()]
+        if not variables and "성격프로필" in backend_persona:
+            # 성격프로필에서 직접 가져오기
+            variables = backend_persona["성격프로필"]["variables"]
+        
+        variables_df = []
+        for var, value in variables.items():
+            # 카테고리 분류
+            if var.startswith('W'):
+                category = f"🔥 온기/따뜻함 ({value})"
+            elif var.startswith('C'):
+                category = f"💪 능력/역량 ({value})"
+            elif var.startswith('E'):
+                category = f"🗣️ 외향성 ({value})"
+            elif var.startswith('H'):
+                category = f"😄 유머 ({value})"
+            elif var.startswith('F'):
+                category = f"💎 매력적결함 ({value})"
+            elif var.startswith('P'):
+                category = f"🎭 성격패턴 ({value})"
+            elif var.startswith('S'):
+                category = f"🗨️ 언어스타일 ({value})"
+            elif var.startswith('R'):
+                category = f"❤️ 관계성향 ({value})"
+            elif var.startswith('D'):
+                category = f"💬 대화역학 ({value})"
+            elif var.startswith('OBJ'):
+                category = f"🏠 사물정체성 ({value})"
+            elif var.startswith('FORM'):
+                category = f"✨ 형태특성 ({value})"
+            elif var.startswith('INT'):
+                category = f"🤝 상호작용 ({value})"
+            elif var.startswith('U'):
+                category = f"🌍 문화적특성 ({value})"
+            else:
+                category = f"📊 기타 ({value})"
+            
+            # 값에 따른 색상 표시
+            if value >= 80:
+                status = "🟢 매우 높음"
+            elif value >= 60:
+                status = "🟡 높음"  
+            elif value >= 40:
+                status = "🟠 보통"
+            elif value >= 20:
+                status = "🔴 낮음"
+            else:
+                status = "⚫ 매우 낮음"
+                
+            variables_df.append([var, value, category, status])
         
         progress(0.9, desc="완료 중...")
         
@@ -442,6 +490,9 @@ def adjust_persona_traits(persona, warmth, competence, extraversion, humor_style
         return None, "조정할 페르소나가 없습니다.", {}
     
     try:
+        # 원본 페르소나 저장 (변화량 비교용)
+        original_persona = copy.deepcopy(persona)
+        
         # 깊은 복사로 원본 보호
         adjusted_persona = copy.deepcopy(persona)
         
@@ -460,31 +511,101 @@ def adjust_persona_traits(persona, warmth, competence, extraversion, humor_style
             from modules.persona_generator import PersonalityProfile
             profile = PersonalityProfile.from_dict(adjusted_persona["성격프로필"])
             
-            # 온기 관련 변수들 조정
-            warmth_vars = ["W01_친절함", "W02_친근함", "W06_공감능력", "W07_포용력"]
+            # 온기 관련 변수들 조정 (10개 모두)
+            warmth_vars = ["W01_친절함", "W02_친근함", "W03_진실성", "W04_신뢰성", "W05_수용성",
+                          "W06_공감능력", "W07_포용력", "W08_격려성향", "W09_친밀감표현", "W10_무조건적수용"]
             for var in warmth_vars:
-                profile.variables[var] = warmth + random.randint(-10, 10)
-                profile.variables[var] = max(0, min(100, profile.variables[var]))
+                base_value = warmth + random.randint(-15, 15)
+                profile.variables[var] = max(0, min(100, base_value))
             
-            # 능력 관련 변수들 조정
-            competence_vars = ["C01_효율성", "C02_지능", "C05_정확성", "C09_실행력"]
+            # 능력 관련 변수들 조정 (16개 모두)
+            competence_vars = ["C01_효율성", "C02_지능", "C03_책임감", "C04_신뢰도", "C05_정확성",
+                              "C06_전문성", "C07_혁신성", "C08_적응력", "C09_실행력", "C10_분석력",
+                              "C11_의사결정력", "C12_문제해결력", "C13_계획수립능력", "C14_시간관리능력",
+                              "C15_품질관리능력", "C16_성과달성력"]
             for var in competence_vars:
-                profile.variables[var] = competence + random.randint(-10, 10)
-                profile.variables[var] = max(0, min(100, profile.variables[var]))
+                base_value = competence + random.randint(-15, 15)
+                profile.variables[var] = max(0, min(100, base_value))
             
-            # 외향성 관련 변수들 조정
-            extraversion_vars = ["E01_사교성", "E02_활동성", "E04_긍정정서"]
+            # 외향성 관련 변수들 조정 (6개 모두)
+            extraversion_vars = ["E01_사교성", "E02_활동성", "E03_적극성", "E04_긍정정서", "E05_자극추구성", "E06_주도성"]
             for var in extraversion_vars:
-                profile.variables[var] = extraversion + random.randint(-10, 10)
-                profile.variables[var] = max(0, min(100, profile.variables[var]))
+                base_value = extraversion + random.randint(-15, 15)
+                profile.variables[var] = max(0, min(100, base_value))
             
-            # 유머 관련 변수들은 항상 높게 유지
-            humor_vars = ["H01_언어유희빈도", "H02_상황유머감각", "H06_관찰유머능력", "H08_유머타이밍감"]
-            for var in humor_vars:
-                profile.variables[var] = random.randint(70, 85)
+            # 유머 관련 변수들 조정 (10개 모두, 유머스타일에 따라)
+            humor_vars = ["H01_언어유희빈도", "H02_상황유머감각", "H03_자기조롱능력", "H04_위트감각", 
+                         "H05_농담수용도", "H06_관찰유머능력", "H07_상황재치", "H08_유머타이밍감", 
+                         "H09_유머스타일다양성", "H10_유머적절성"]
+            
+            # 유머스타일에 따른 차별화
+            if humor_style == "따뜻한":
+                humor_bonus = [10, 10, 5, 8, 12, 8, 10, 10, 8, 12]  # 따뜻함 강화
+            elif humor_style == "재치있는":
+                humor_bonus = [15, 8, 8, 15, 8, 12, 15, 12, 12, 10]  # 재치/위트 강화
+            elif humor_style == "드라이":
+                humor_bonus = [12, 6, 10, 12, 6, 15, 8, 8, 10, 8]   # 관찰형/드라이 강화
+            else:  # 기본값
+                humor_bonus = [10, 10, 8, 10, 10, 10, 10, 10, 10, 10]
+            
+            for i, var in enumerate(humor_vars):
+                base_value = 75 + humor_bonus[i] + random.randint(-5, 5)  # 유머는 항상 높게
+                profile.variables[var] = max(50, min(100, base_value))
+                
+            # 업데이트된 성격변수127도 동시에 저장
+            adjusted_persona["성격변수127"] = profile.variables.copy()
             
             # 업데이트된 프로필 저장
             adjusted_persona["성격프로필"] = profile.to_dict()
+        
+        # 조정된 변수들을 DataFrame으로 생성
+        variables_df = []
+        if "성격변수127" in adjusted_persona:
+            variables = adjusted_persona["성격변수127"]
+            for var, value in variables.items():
+                # 카테고리 분류
+                if var.startswith('W'):
+                    category = f"🔥 온기/따뜻함 ({value})"
+                elif var.startswith('C'):
+                    category = f"💪 능력/역량 ({value})"
+                elif var.startswith('E'):
+                    category = f"🗣️ 외향성 ({value})"
+                elif var.startswith('H'):
+                    category = f"😄 유머 ({value})"
+                elif var.startswith('F'):
+                    category = f"💎 매력적결함 ({value})"
+                elif var.startswith('P'):
+                    category = f"🎭 성격패턴 ({value})"
+                elif var.startswith('S'):
+                    category = f"🗨️ 언어스타일 ({value})"
+                elif var.startswith('R'):
+                    category = f"❤️ 관계성향 ({value})"
+                elif var.startswith('D'):
+                    category = f"💬 대화역학 ({value})"
+                elif var.startswith('OBJ'):
+                    category = f"🏠 사물정체성 ({value})"
+                elif var.startswith('FORM'):
+                    category = f"✨ 형태특성 ({value})"
+                elif var.startswith('INT'):
+                    category = f"🤝 상호작용 ({value})"
+                elif var.startswith('U'):
+                    category = f"🌍 문화적특성 ({value})"
+                else:
+                    category = f"📊 기타 ({value})"
+                
+                # 값에 따른 색상 표시
+                if value >= 80:
+                    status = "🟢 매우 높음"
+                elif value >= 60:
+                    status = "🟡 높음"  
+                elif value >= 40:
+                    status = "🟠 보통"
+                elif value >= 20:
+                    status = "🔴 낮음"
+                else:
+                    status = "⚫ 매우 낮음"
+                    
+                variables_df.append([var, value, category, status])
         
         # 조정된 정보 표시
         adjusted_info = {
@@ -513,6 +634,9 @@ def adjust_persona_traits(persona, warmth, competence, extraversion, humor_style
             "외향성": extraversion
         }, full_object_info, attractive_flaws)
         
+        # 변화량 분석 생성
+        change_analysis = show_variable_changes(original_persona, adjusted_persona)
+        
         adjustment_message = f"""
 ### 🎭 {persona_name}의 성격이 조정되었습니다!
 
@@ -523,15 +647,17 @@ def adjust_persona_traits(persona, warmth, competence, extraversion, humor_style
 • 유머감각: 75/100 (고정 - 모든 페르소나가 유머러스!)
 • 유머스타일: {humor_style}
 
-🧬 **백그라운드**: 127개 세부 변수가 이 설정에 맞춰 자동 조정되었습니다.
+🧬 **백그라운드**: 152개 세부 변수가 이 설정에 맞춰 자동 조정되었습니다.
+
+{change_analysis}
         """
         
-        return adjusted_persona, adjustment_message, adjusted_info
+        return adjusted_persona, adjustment_message, adjusted_info, variables_df
         
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return persona, f"조정 중 오류 발생: {str(e)}", {}
+        return persona, f"조정 중 오류 발생: {str(e)}", {}, []
 
 def finalize_persona(persona):
     """페르소나 최종 확정 - 환경변수 API 설정 사용"""
@@ -1570,7 +1696,7 @@ def create_main_interface():
         adjust_btn.click(
             fn=adjust_persona_traits,
             inputs=[current_persona, warmth_slider, competence_slider, extraversion_slider, humor_style_radio],
-            outputs=[current_persona, adjustment_result, adjusted_info_output]
+            outputs=[current_persona, adjustment_result, adjusted_info_output, personality_variables_output]
         ).then(
             # 반영 후 미리보기도 업데이트
             fn=generate_realtime_preview,
@@ -1768,6 +1894,94 @@ def generate_realtime_preview(persona, warmth, competence, extraversion, humor_s
 
 **👋 예상 인사말:**
 {preview}"""
+
+def show_variable_changes(original_persona, adjusted_persona):
+    """변수 변화량을 시각화하여 표시"""
+    if not original_persona or not adjusted_persona:
+        return "변화량을 비교할 페르소나가 없습니다."
+    
+    # 원본과 조정된 변수들 가져오기
+    original_vars = original_persona.get("성격변수127", {})
+    if not original_vars and "성격프로필" in original_persona:
+        original_vars = original_persona["성격프로필"]["variables"]
+    
+    adjusted_vars = adjusted_persona.get("성격변수127", {})
+    if not adjusted_vars and "성격프로필" in adjusted_persona:
+        adjusted_vars = adjusted_persona["성격프로필"]["variables"]
+    
+    if not original_vars or not adjusted_vars:
+        return "변수 데이터를 찾을 수 없습니다."
+    
+    # 변화량 계산
+    changes = []
+    significant_changes = []  # 변화량이 10 이상인 항목들
+    
+    for var in original_vars:
+        if var in adjusted_vars:
+            original_val = original_vars[var]
+            adjusted_val = adjusted_vars[var]
+            change = adjusted_val - original_val
+            
+            changes.append((var, original_val, adjusted_val, change))
+            
+            if abs(change) >= 10:  # 변화량이 10 이상인 것만
+                significant_changes.append((var, original_val, adjusted_val, change))
+    
+    # 카테고리별 평균 변화량 계산
+    category_changes = {}
+    for var, orig, adj, change in changes:
+        if var.startswith('W'):
+            category = "온기"
+        elif var.startswith('C'):
+            category = "능력"
+        elif var.startswith('E'):
+            category = "외향성"
+        elif var.startswith('H'):
+            category = "유머"
+        else:
+            category = "기타"
+        
+        if category not in category_changes:
+            category_changes[category] = []
+        category_changes[category].append(change)
+    
+    # 평균 변화량 계산
+    avg_changes = {}
+    for category, change_list in category_changes.items():
+        avg_changes[category] = sum(change_list) / len(change_list)
+    
+    # 결과 포맷팅
+    result = "### 🔄 성격 변수 변화량 분석\n\n"
+    
+    # 카테고리별 평균 변화량
+    result += "**📊 카테고리별 평균 변화량:**\n"
+    for category, avg_change in avg_changes.items():
+        if avg_change > 5:
+            trend = "⬆️ 상승"
+        elif avg_change < -5:
+            trend = "⬇️ 하락"
+        else:
+            trend = "➡️ 유지"
+        result += f"- {category}: {avg_change:+.1f} {trend}\n"
+    
+    # 주요 변화량 (10 이상)
+    if significant_changes:
+        result += f"\n**🎯 주요 변화 항목 ({len(significant_changes)}개):**\n"
+        for var, orig, adj, change in sorted(significant_changes, key=lambda x: abs(x[3]), reverse=True)[:10]:
+            if change > 0:
+                arrow = "⬆️"
+                color = "🟢"
+            else:
+                arrow = "⬇️" 
+                color = "🔴"
+            
+            result += f"- {var}: {orig} → {adj} ({change:+d}) {arrow} {color}\n"
+    
+    result += f"\n**📈 총 변수 개수:** {len(changes)}개\n"
+    result += f"**🔄 변화된 변수:** {len([c for c in changes if c[3] != 0])}개\n"
+    result += f"**📊 주요 변화:** {len(significant_changes)}개 (변화량 ±10 이상)\n"
+    
+    return result
 
 if __name__ == "__main__":
     app = create_main_interface()
