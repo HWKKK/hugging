@@ -303,8 +303,8 @@ def create_persona_from_image(image, name, location, time_spent, object_type, pu
         # 127개 성격 변수를 DataFrame 형태로 변환 (카테고리별 분류)
         variables = backend_persona.get("성격변수127", {})
         if not variables and "성격프로필" in backend_persona:
-            # 성격프로필에서 직접 가져오기
-            variables = backend_persona["성격프로필"]["variables"]
+            # 성격프로필에서 직접 가져오기 (성격프로필 자체가 variables dict)
+            variables = backend_persona["성격프로필"]
         
         variables_df = []
         for var, value in variables.items():
@@ -1903,11 +1903,11 @@ def show_variable_changes(original_persona, adjusted_persona):
     # 원본과 조정된 변수들 가져오기
     original_vars = original_persona.get("성격변수127", {})
     if not original_vars and "성격프로필" in original_persona:
-        original_vars = original_persona["성격프로필"]["variables"]
+        original_vars = original_persona["성격프로필"]
     
     adjusted_vars = adjusted_persona.get("성격변수127", {})
     if not adjusted_vars and "성격프로필" in adjusted_persona:
-        adjusted_vars = adjusted_persona["성격프로필"]["variables"]
+        adjusted_vars = adjusted_persona["성격프로필"]
     
     if not original_vars or not adjusted_vars:
         return "변수 데이터를 찾을 수 없습니다."
