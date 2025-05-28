@@ -6,6 +6,7 @@ import google.generativeai as genai
 from PIL import Image
 from dotenv import load_dotenv
 import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
 import numpy as np
 import base64
 import io
@@ -14,6 +15,18 @@ from datetime import datetime
 import PIL.ImageDraw
 import random
 import copy
+from modules.persona_generator import PersonaGenerator, PersonalityProfile, HumorMatrix
+import pandas as pd
+import plotly.graph_objects as go
+import plotly.express as px
+from plotly.subplots import make_subplots
+
+# AVIF 지원을 위한 플러그인 활성화
+try:
+    from pillow_avif import AvifImagePlugin
+    print("AVIF plugin loaded successfully")
+except ImportError:
+    print("AVIF plugin not available")
 
 # Import modules
 from modules.persona_generator import PersonaGenerator
@@ -30,173 +43,6 @@ from temp.view_functions import (
     export_persona_json, import_persona_json
 )
 
-# 127개 변수 설명 사전 추가
-VARIABLE_DESCRIPTIONS = {
-    # 온기(Warmth) 차원 - 10개 지표
-    "W01_친절함": "타인을 돕고 배려하는 표현 빈도",
-    "W02_친근함": "접근하기 쉽고 개방적인 태도",
-    "W03_진실성": "솔직하고 정직한 표현 정도",
-    "W04_신뢰성": "약속 이행과 일관된 행동 패턴",
-    "W05_수용성": "판단하지 않고 받아들이는 태도",
-    "W06_공감능력": "타인 감정 인식 및 적절한 반응",
-    "W07_포용력": "다양성을 받아들이는 넓은 마음",
-    "W08_격려성향": "타인을 응원하고 힘내게 하는 능력",
-    "W09_친밀감표현": "정서적 가까움을 표현하는 정도",
-    "W10_무조건적수용": "조건 없이 받아들이는 태도",
-    
-    # 능력(Competence) 차원 - 10개 지표
-    "C01_효율성": "과제 완수 능력과 반응 속도",
-    "C02_지능": "문제 해결과 논리적 사고 능력",
-    "C03_전문성": "특정 영역의 깊은 지식과 숙련도",
-    "C04_창의성": "독창적 사고와 혁신적 아이디어",
-    "C05_정확성": "오류 없이 정확한 정보 제공",
-    "C06_분석력": "복잡한 상황을 체계적으로 분석",
-    "C07_학습능력": "새로운 정보 습득과 적용 능력",
-    "C08_통찰력": "표면 너머의 본질을 파악하는 능력",
-    "C09_실행력": "계획을 실제로 실행하는 능력",
-    "C10_적응력": "변화하는 상황에 유연한 대응",
-    
-    # 외향성(Extraversion) - 6개 지표
-    "E01_사교성": "타인과의 상호작용을 즐기는 정도",
-    "E02_활동성": "에너지 넘치고 역동적인 태도",
-    "E03_자기주장": "자신의 의견을 명확히 표현",
-    "E04_긍정정서": "밝고 쾌활한 감정 표현",
-    "E05_자극추구": "새로운 경험과 자극에 대한 욕구",
-    "E06_열정성": "열정적이고 활기찬 태도"
-}
-
-# 페르소나 생성 함수 
-def create_persona_from_image(image, user_inputs, progress=gr.Progress()):
-    if image is None:
-        return None, "이미지를 업로드해주세요.", None, None, {}, {}, None, [], [], []
-
-    progress(0.1, desc="이미지 분석 중...")
-    
-    # 사용자 입력 컨텍스트 구성
-    user_context = {
-        "name": user_inputs.get("name", ""),
-        "location": user_inputs.get("location", ""),
-        "time_spent": user_inputs.get("time_spent", ""),
-        "object_type": user_inputs.get("object_type", "")
-    }
-    
-    # 이미지 분석 및 페르소나 생성
-    try:
-        from modules.persona_generator import PersonaGenerator
-        generator = PersonaGenerator()
-        
-        progress(0.3, desc="이미지 분석 중...")
-        # Gradio 5.x에서는 이미지 처리 방식이 변경됨
-        if hasattr(image, 'name') and hasattr(image, 'read'):
-            # 파일 객체인 경우 (구버전 호환)
-            image_analysis = generator.analyze_image(image)
-        else:
-            # Pillow 이미지 객체 또는 파일 경로인 경우 (Gradio 5.x)
-            image_analysis = generator.analyze_image(image)
-        
-        # 물리적 특성에 사용자 입력 통합
-        if user_inputs.get("object_type"):
-            image_analysis["object_type"] = user_inputs.get("object_type")
-        
-        progress(0.6, desc="페르소나 생성 중...")
-        frontend_persona = generator.create_frontend_persona(image_analysis, user_context)
-        
-        progress(0.8, desc="상세 페르소나 생성 중...")
-        backend_persona = generator.create_backend_persona(frontend_persona, image_analysis)
-        
-        progress(1.0, desc="완료!")
-        
-        # 결과 반환
-        basic_info, personality_traits, humor_chart, attractive_flaws_df, contradictions_df, personality_variables_df = update_current_persona_info(backend_persona)
-        
-        return backend_persona, "페르소나 생성 완료!", image, image_analysis, basic_info, personality_traits, humor_chart, attractive_flaws_df, contradictions_df, personality_variables_df
-        
-    except Exception as e:
-        import traceback
-        error_details = traceback.format_exc()
-        print(f"페르소나 생성 오류: {error_details}")
-        return None, f"페르소나 생성 중 오류가 발생했습니다: {str(e)}", None, None, {}, {}, None, [], [], []
-
-# 영혼 깨우기 단계별 UI를 보여주는 함수
-def show_awakening_progress(image, user_inputs, progress=gr.Progress()):
-    """영혼 깨우기 과정을 단계별로 보여주는 UI 함수"""
-    if image is None:
-        return None, gr.update(visible=True, value="이미지를 업로드해주세요."), None
-    
-    # 1단계: 영혼 발견하기 (이미지 분석 시작)
-    progress(0.1, desc="영혼 발견 중...")
-    awakening_html = f"""
-    <div class="awakening-container">
-        <h3>✨ 영혼 발견 중...</h3>
-        <p>이 사물에 숨겨진 영혼을 찾고 있습니다</p>
-        <div class="awakening-progress">
-            <div class="awakening-progress-bar" style="width: 20%;"></div>
-        </div>
-        <p>💫 사물의 특성 분석 중...</p>
-    </div>
-    """
-    yield None, None, awakening_html
-    time.sleep(1.5)  # 연출을 위한 딜레이
-    
-    # 2단계: 영혼 깨어나는 중 (127개 성격 변수 분석)
-    progress(0.35, desc="영혼 깨어나는 중...")
-    awakening_html = f"""
-    <div class="awakening-container">
-        <h3>✨ 영혼이 깨어나는 중</h3>
-        <p>127개 성격 변수 분석 중</p>
-        <div class="awakening-progress">
-            <div class="awakening-progress-bar" style="width: 45%;"></div>
-        </div>
-        <p>🧠 개성 찾는 중... 68%</p>
-        <p>💭 기억 복원 중... 73%</p>
-        <p>😊 감정 활성화 중... 81%</p>
-        <p>💬 말투 형성 중... 64%</p>
-        <p>💫 "무언가 느껴지기 시작했어요"</p>
-    </div>
-    """
-    yield None, None, awakening_html
-    time.sleep(2)  # 연출을 위한 딜레이
-    
-    # 3단계: 맥락 파악하기 (사용자 입력 반영)
-    progress(0.7, desc="기억 되찾는 중...")
-    
-    location = user_inputs.get("location", "알 수 없음")
-    time_spent = user_inputs.get("time_spent", "알 수 없음")
-    object_type = user_inputs.get("object_type", "알 수 없음")
-    
-    awakening_html = f"""
-    <div class="awakening-container">
-        <h3>👁️ 기억 되찾기</h3>
-        <p>🤔 "음... 내가 어디에 있던 거지? 누가 날 깨운 거야?"</p>
-        <div class="awakening-progress">
-            <div class="awakening-progress-bar" style="width: 75%;"></div>
-        </div>
-        <p>📍 주로 위치: <strong>{location}</strong></p>
-        <p>⏰ 함께한 시간: <strong>{time_spent}</strong></p>
-        <p>🏷️ 사물 종류: <strong>{object_type}</strong></p>
-        <p>💭 "아... 기억이 돌아오는 것 같아"</p>
-    </div>
-    """
-    yield None, None, awakening_html
-    time.sleep(1.5)  # 연출을 위한 딜레이
-    
-    # 4단계: 영혼의 각성 완료 (페르소나 생성 완료)
-    progress(0.9, desc="영혼 각성 중...")
-    awakening_html = f"""
-    <div class="awakening-container">
-        <h3>🎉 영혼이 깨어났어요!</h3>
-        <div class="awakening-progress">
-            <div class="awakening-progress-bar" style="width: 100%;"></div>
-        </div>
-        <p>✨ 이제 이 사물과 대화할 수 있습니다</p>
-        <p>💫 "드디어 내 목소리를 찾았어. 안녕!"</p>
-    </div>
-    """
-    yield None, None, awakening_html
-    
-    # 페르소나 생성 과정은 이어서 진행
-    return None, gr.update(visible=False)
-
 # Load environment variables
 load_dotenv()
 
@@ -204,13 +50,62 @@ load_dotenv()
 api_key = os.getenv("GEMINI_API_KEY")
 if api_key:
     genai.configure(api_key=api_key)
+    print(f"✅ Gemini API 키가 환경변수에서 로드되었습니다.")
+else:
+    print("⚠️ GEMINI_API_KEY 환경변수가 설정되지 않았습니다.")
 
-# Create data directories if they don't exist
+# Create data directories
 os.makedirs("data/personas", exist_ok=True)
 os.makedirs("data/conversations", exist_ok=True)
 
-# Initialize the persona generator
-persona_generator = PersonaGenerator()
+# Initialize the persona generator with environment API key
+if api_key:
+    persona_generator = PersonaGenerator(api_provider="gemini", api_key=api_key)
+    print("🤖 PersonaGenerator가 Gemini API로 초기화되었습니다.")
+else:
+    persona_generator = PersonaGenerator()
+    print("⚠️ PersonaGenerator가 API 키 없이 초기화되었습니다.")
+
+# 한글 폰트 설정
+def setup_korean_font():
+    """matplotlib 한글 폰트 설정 - 허깅페이스 환경 최적화"""
+    try:
+        import matplotlib.pyplot as plt
+        import matplotlib.font_manager as fm
+        
+        # 허깅페이스 스페이스 환경에서 사용 가능한 폰트 목록
+        available_fonts = [
+            'NanumGothic', 'NanumBarunGothic', 'Noto Sans CJK KR', 
+            'Noto Sans KR', 'DejaVu Sans', 'Liberation Sans', 'Arial'
+        ]
+        
+        # 시스템에서 사용 가능한 폰트 확인
+        system_fonts = [f.name for f in fm.fontManager.ttflist]
+        
+        for font_name in available_fonts:
+            if font_name in system_fonts:
+                try:
+                    plt.rcParams['font.family'] = font_name
+                    plt.rcParams['axes.unicode_minus'] = False
+                    print(f"한글 폰트 설정 완료: {font_name}")
+                    return
+                except Exception:
+                    continue
+        
+        # 모든 폰트가 실패한 경우 기본 설정 사용 (영어 레이블 사용)
+        plt.rcParams['font.family'] = 'DejaVu Sans'
+        plt.rcParams['axes.unicode_minus'] = False
+        print("한글 폰트를 찾지 못해 영어 레이블을 사용합니다")
+        
+    except Exception as e:
+        print(f"폰트 설정 오류: {str(e)}")
+        # 오류 발생 시에도 기본 설정은 유지
+        import matplotlib.pyplot as plt
+        plt.rcParams['font.family'] = 'DejaVu Sans'
+        plt.rcParams['axes.unicode_minus'] = False
+
+# 폰트 초기 설정
+setup_korean_font()
 
 # Gradio theme
 theme = gr.themes.Soft(
@@ -218,28 +113,21 @@ theme = gr.themes.Soft(
     secondary_hue="blue",
 )
 
-# CSS for additional styling
+# CSS styling
 css = """
-/* 한글 폰트 설정 */
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
 
 body, h1, h2, h3, p, div, span, button, input, textarea, label, select, option {
     font-family: 'Noto Sans KR', sans-serif !important;
 }
 
-/* 탭 스타일링 */
-.tab-nav {
-    margin-bottom: 20px;
-}
-
-/* 컴포넌트 스타일 */
 .persona-details {
     border: 1px solid #e0e0e0;
     border-radius: 8px;
     padding: 16px;
     margin-top: 12px;
     background-color: #f8f9fa;
-    color: #333333; /* 다크모드 대응 - 어두운 배경에서 텍스트 잘 보이게 */
+    color: #333333;
 }
 
 .awakening-container {
@@ -267,46 +155,50 @@ body, h1, h2, h3, p, div, span, button, input, textarea, label, select, option {
     transition: width 0.5s ease-in-out;
 }
 
-/* 대화 버블 스타일 */
-.chatbot-container {
-    max-width: 800px;
-    margin: 0 auto;
+.persona-greeting {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white !important;
+    padding: 15px;
+    border-radius: 10px;
+    margin: 10px 0;
+    font-weight: bold;
 }
 
-.message-bubble {
-    border-radius: 18px;
-    padding: 12px 16px;
-    margin: 8px 0;
-    max-width: 70%;
+.download-section {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    margin-top: 15px;
 }
 
-.user-message {
-    background-color: #e9f5ff;
-    margin-left: auto;
+.gradio-container {
+    color: #333 !important;
 }
 
-.persona-message {
-    background-color: #f1f1f1;
-    margin-right: auto;
+.gr-markdown p {
+    color: #333 !important;
+}
+
+.gr-textbox input {
+    color: #333 !important;
+}
+
+.gr-json {
+    color: #333 !important;
 }
 """
 
-# 영어 라벨 매핑 사전 추가
-ENGLISH_LABELS = {
-    "외향성": "Extraversion",
-    "감정표현": "Emotion Expression",
-    "활력": "Energy",
-    "사고방식": "Thinking Style", 
-    "온기": "Warmth",
-    "능력": "Competence",
-    "창의성": "Creativity",
-    "유머감각": "Humor",
-    "신뢰성": "Reliability",
-    "친화성": "Agreeableness",
-    "안정성": "Stability"
+# Variable descriptions
+VARIABLE_DESCRIPTIONS = {
+    "W01_친절함": "타인을 돕고 배려하는 표현 빈도",
+    "W02_친근함": "접근하기 쉽고 개방적인 태도",
+    "W03_진실성": "솔직하고 정직한 표현 정도",
+    "C01_효율성": "과제 완수 능력과 반응 속도",
+    "C02_지능": "문제 해결과 논리적 사고 능력",
+    "E01_사교성": "타인과의 상호작용을 즐기는 정도",
 }
 
-# 유머 스타일 매핑
+# Humor style mapping
 HUMOR_STYLE_MAPPING = {
     "Witty Wordsmith": "witty_wordsmith",
     "Warm Humorist": "warm_humorist", 
@@ -314,1697 +206,2273 @@ HUMOR_STYLE_MAPPING = {
     "Self-deprecating": "self_deprecating"
 }
 
-# 유머 스타일 자동 추천 함수
-def recommend_humor_style(extraversion, emotion_expression, energy, thinking_style):
-    """4개 핵심 지표를 바탕으로 유머 스타일을 자동 추천"""
+def create_persona_from_image(image, name, location, time_spent, object_type, purpose, progress=gr.Progress()):
+    """페르소나 생성 함수 - 환경변수 API 설정 사용"""
+    global persona_generator
     
-    # 각 지표를 0-1 범위로 정규화
-    ext_norm = extraversion / 100
-    emo_norm = emotion_expression / 100
-    eng_norm = energy / 100
-    think_norm = thinking_style / 100  # 높을수록 논리적
+    if image is None:
+        return None, "이미지를 업로드해주세요.", "", {}, None, [], [], [], "", None, gr.update(visible=False), "이미지 없음"
     
-    # 유머 스타일 점수 계산
-    scores = {}
+    progress(0.1, desc="설정 확인 중...")
     
-    # 위트있는 재치꾼: 높은 외향성 + 논리적 사고 + 보통 감정표현
-    scores["위트있는 재치꾼"] = (ext_norm * 0.4 + think_norm * 0.4 + (1 - emo_norm) * 0.2)
+    # 환경변수 API 키 확인
+    if not persona_generator or not hasattr(persona_generator, 'api_key') or not persona_generator.api_key:
+        return None, "❌ **API 키가 설정되지 않았습니다!** 허깅페이스 스페이스 설정에서 GEMINI_API_KEY를 환경변수로 추가해주세요.", "", {}, None, [], [], [], "", None, gr.update(visible=False), "API 키 없음"
     
-    # 따뜻한 유머러스: 높은 감정표현 + 높은 에너지 + 보통 외향성
-    scores["따뜻한 유머러스"] = (emo_norm * 0.4 + eng_norm * 0.3 + ext_norm * 0.3)
+    progress(0.2, desc="이미지 분석 중...")
     
-    # 날카로운 관찰자: 높은 논리적사고 + 낮은 감정표현 + 보통 외향성
-    scores["날카로운 관찰자"] = (think_norm * 0.5 + (1 - emo_norm) * 0.3 + ext_norm * 0.2)
-    
-    # 자기 비하적: 낮은 외향성 + 높은 감정표현 + 직관적 사고
-    scores["자기 비하적"] = ((1 - ext_norm) * 0.4 + emo_norm * 0.3 + (1 - think_norm) * 0.3)
-    
-    # 가장 높은 점수의 유머 스타일 선택
-    recommended_style = max(scores, key=scores.get)
-    confidence = scores[recommended_style] * 100
-    
-    return recommended_style, confidence, scores
-
-# 대화 미리보기 초기화 함수
-def init_persona_preview_chat(persona):
-    """페르소나 생성 후 대화 미리보기 초기화"""
-    if not persona:
-        return []
-    
-    name = persona.get("기본정보", {}).get("이름", "Friend")
-    greeting = f"안녕! 나는 {name}이야. 드디어 깨어났구나! 뭐든 물어봐~ 😊"
-    
-    # Gradio 4.x 호환 메시지 형식
-    return [[None, greeting]]
-
-def update_humor_recommendation(extraversion, emotion_expression, energy, thinking_style):
-    """슬라이더 값이 변경될 때 실시간으로 유머 스타일 추천"""
-    style, confidence, scores = recommend_humor_style(extraversion, emotion_expression, energy, thinking_style)
-    
-    # 추천 결과 표시
-    humor_display = f"### 🤖 추천 유머 스타일\n**{style}**"
-    confidence_display = f"### 📊 추천 신뢰도\n**{confidence:.1f}%**"
-    
-    return humor_display, confidence_display, style
-
-def update_progress_bar(step, total_steps=6, message=""):
-    """전체 진행률 바 업데이트"""
-    percentage = (step / total_steps) * 100
-    return f"""<div style="background: #f0f4ff; padding: 15px; border-radius: 10px;">
-        <h3>📊 전체 진행률 ({step}/{total_steps})</h3>
-        <div style="background: #e0e0e0; height: 8px; border-radius: 4px;">
-            <div style="background: linear-gradient(90deg, #6366f1, #a855f7); height: 100%; width: {percentage}%; border-radius: 4px;"></div>
-        </div><p style="font-size: 14px;">{message}</p></div>"""
-
-def update_backend_status(status_message, status_type="info"):
-    """백엔드 AI 상태 업데이트"""
-    colors = {"info": "#f8f9fa", "processing": "#fff7ed", "success": "#f0fff4", "error": "#fff5f5"}
-    bg_color = colors.get(status_type, "#f8f9fa")
-    return f"""<div style="background: {bg_color}; padding: 15px; border-radius: 8px;">
-        <h4>🤖 AI 상태</h4><p>{status_message}</p></div>"""
-
-def select_object_type(btn_name):
-    """사물 종류 선택"""
-    type_mapping = {"📱 전자기기": "전자기기", "🪑 가구": "가구", "🎨 장식품": "장식품", "🏠 가전제품": "가전제품", "🔧 도구": "도구", "👤 개인용품": "개인용품"}
-    selected_type = type_mapping.get(btn_name, "기타")
-    return f"*선택된 종류: **{selected_type}***", selected_type, gr.update(visible=True)
-
-# 개별 버튼 클릭 함수들
-def select_type_1(): return select_object_type("📱 전자기기")
-def select_type_2(): return select_object_type("🪑 가구") 
-def select_type_3(): return select_object_type("🎨 장식품")
-def select_type_4(): return select_object_type("🏠 가전제품")
-def select_type_5(): return select_object_type("🔧 도구")
-def select_type_6(): return select_object_type("👤 개인용품")
-
-# 성격 상세 정보 탭에서 127개 변수 시각화 기능 추가
-def create_personality_details_tab():
-    with gr.Tab("성격 상세 정보"):
-        with gr.Row():
-            with gr.Column(scale=2):
-                gr.Markdown("### 127개 성격 변수 요약")
-                personality_summary = gr.JSON(label="성격 요약", value={})
-
-            with gr.Column(scale=1):
-                gr.Markdown("### 유머 매트릭스")
-                humor_chart = gr.Plot(label="유머 스타일 차트")
+    # 🎯 이미지 분석을 먼저 수행하여 사물 유형 자동 파악
+    try:
+        image_analysis = persona_generator.analyze_image(image)
         
-        with gr.Row():
-            with gr.Column():
-                gr.Markdown("### 매력적 결함")
-                attractive_flaws = gr.Dataframe(
-                    headers=["결함", "효과"],
-                    datatype=["str", "str"],
-                    label="매력적 결함"
-                )
+        # AI가 분석한 사물 유형 사용 (object_type이 "auto"인 경우)
+        if object_type == "auto" or not object_type:
+            detected_object_type = image_analysis.get("object_type", "사물")
+        else:
+            detected_object_type = object_type
             
-            with gr.Column():
-                gr.Markdown("### 모순적 특성")
-                contradictions = gr.Dataframe(
-                    headers=["모순", "효과"],
-                    datatype=["str", "str"],
-                    label="모순적 특성"
-                )
+    except Exception as e:
+        print(f"이미지 분석 중 오류: {e}")
+        image_analysis = {"object_type": "unknown", "description": "분석 실패"}
+        detected_object_type = "사물"
+    
+    user_context = {
+        "name": name,
+        "location": location,
+        "time_spent": time_spent,
+        "object_type": detected_object_type,
+        "purpose": purpose  # 🆕 사물 용도/역할 추가
+    }
+    
+    try:
+        # 이미지 유효성 검사 및 처리
+        if isinstance(image, str):
+            # 파일 경로인 경우
+            try:
+                image = Image.open(image)
+            except Exception as img_error:
+                return None, f"❌ 이미지 파일을 읽을 수 없습니다: {str(img_error)}", "", {}, None, [], [], [], "", None, gr.update(visible=False), "이미지 오류"
+        elif not isinstance(image, Image.Image):
+            return None, "❌ 올바른 이미지 형식이 아닙니다.", "", {}, None, [], [], [], "", None, gr.update(visible=False), "형식 오류"
         
-        with gr.Accordion("127개 성격 변수 전체 보기", open=False):
-            all_variables = gr.Dataframe(
-                headers=["변수명", "점수", "설명"],
-                datatype=["str", "number", "str"],
-                label="127개 성격 변수"
-            )
+        # 이미지 형식 변환 (AVIF 등 특수 형식 처리)
+        if image.format in ['AVIF', 'WEBP'] or image.mode not in ['RGB', 'RGBA']:
+            image = image.convert('RGB')
+        
+        progress(0.5, desc="페르소나 생성 중...")
+        # 프론트엔드 페르소나 생성
+        frontend_persona = persona_generator.create_frontend_persona(image_analysis, user_context)
+        
+        # 백엔드 페르소나 생성 (구조화된 프롬프트 포함)
+        backend_persona = persona_generator.create_backend_persona(frontend_persona, image_analysis)
+        
+        # 페르소나 정보 포맷팅
+        persona_name = backend_persona["기본정보"]["이름"]
+        persona_type = backend_persona["기본정보"]["유형"]
+        
+        # 🆕 AI가 분석한 사물 유형을 추출하여 object_type 필드에 표시
+        ai_analyzed_object = image_analysis.get("object_type", object_type)
+        if not ai_analyzed_object or ai_analyzed_object == "unknown":
+            ai_analyzed_object = backend_persona["기본정보"].get("유형", object_type)
+        
+        # 성격 기반 한 문장 인사 생성 (사물 특성 + 매력적 결함 반영)
+        personality_traits = backend_persona["성격특성"]
+        object_info = backend_persona["기본정보"]
+        attractive_flaws = backend_persona.get("매력적결함", [])
+        
+        # 전체 페르소나 정보를 object_info에 통합하여 매력적 결함 정보 전달
+        full_object_info = object_info.copy()
+        full_object_info["매력적결함"] = attractive_flaws
+        
+        awakening_msg = generate_personality_preview(persona_name, personality_traits, full_object_info, attractive_flaws)
+        
+        # 페르소나 요약 표시
+        summary_display = display_persona_summary(backend_persona)
+        
+        # 유머 매트릭스 차트 생성
+        humor_chart = plot_humor_matrix(backend_persona.get("유머매트릭스", {}))
+        
+        # 매력적 결함을 DataFrame 형태로 변환
+        flaws = backend_persona.get("매력적결함", [])
+        flaws_df = [[flaw, "매력적인 개성"] for flaw in flaws]
+        
+        # 모순적 특성을 DataFrame 형태로 변환
+        contradictions = backend_persona.get("모순적특성", [])
+        contradictions_df = [[contradiction, "복합적 매력"] for contradiction in contradictions]
+        
+        # 127개 성격 변수를 DataFrame 형태로 변환 (카테고리별 분류)
+        variables = backend_persona.get("성격변수127", {})
+        if not variables and "성격프로필" in backend_persona:
+            # 성격프로필에서 직접 가져오기 (성격프로필 자체가 variables dict)
+            variables = backend_persona["성격프로필"]
+        
+        variables_df = []
+        for var, value in variables.items():
+            # 카테고리 분류
+            if var.startswith('W'):
+                category = f"🔥 온기/따뜻함 ({value})"
+            elif var.startswith('C'):
+                category = f"💪 능력/역량 ({value})"
+            elif var.startswith('E'):
+                category = f"🗣️ 외향성 ({value})"
+            elif var.startswith('H'):
+                category = f"😄 유머 ({value})"
+            elif var.startswith('F'):
+                category = f"💎 매력적결함 ({value})"
+            elif var.startswith('P'):
+                category = f"🎭 성격패턴 ({value})"
+            elif var.startswith('S'):
+                category = f"🗨️ 언어스타일 ({value})"
+            elif var.startswith('R'):
+                category = f"❤️ 관계성향 ({value})"
+            elif var.startswith('D'):
+                category = f"💬 대화역학 ({value})"
+            elif var.startswith('OBJ'):
+                category = f"🏠 사물정체성 ({value})"
+            elif var.startswith('FORM'):
+                category = f"✨ 형태특성 ({value})"
+            elif var.startswith('INT'):
+                category = f"🤝 상호작용 ({value})"
+            elif var.startswith('U'):
+                category = f"🌍 문화적특성 ({value})"
+            else:
+                category = f"📊 기타 ({value})"
+            
+            # 값에 따른 색상 표시
+            if value >= 80:
+                status = "🟢 매우 높음"
+            elif value >= 60:
+                status = "🟡 높음"  
+            elif value >= 40:
+                status = "🟠 보통"
+            elif value >= 20:
+                status = "🔴 낮음"
+            else:
+                status = "⚫ 매우 낮음"
+                
+            variables_df.append([var, value, category, status])
+        
+        progress(0.9, desc="완료 중...")
+        
+        return (
+            backend_persona,  # current_persona
+            f"✅ {persona_name} 페르소나가 생성되었습니다! (Gemini API 사용)",  # status_output
+            summary_display,  # persona_summary_display
+            backend_persona["성격특성"],  # personality_traits_output (hidden)
+            humor_chart,  # humor_chart_output
+            flaws_df,  # attractive_flaws_output
+            contradictions_df,  # contradictions_output
+            variables_df,  # personality_variables_output
+            awakening_msg,  # persona_awakening
+            None,  # download_file (initially empty)
+            gr.update(visible=True),  # adjustment_section (show)
+            ai_analyzed_object  # 🆕 AI가 분석한 사물 유형
+        )
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return None, f"❌ 페르소나 생성 중 오류 발생: {str(e)}\n\n💡 **해결방법**: 허깅페이스 스페이스 설정에서 GEMINI_API_KEY 환경변수를 확인하고 인터넷 연결을 확인해보세요.", "", {}, None, [], [], [], "", None, gr.update(visible=False), "분석 실패"
 
-    return personality_summary, humor_chart, attractive_flaws, contradictions, all_variables
+def generate_personality_preview(persona_name, personality_traits, object_info=None, attractive_flaws=None):
+    """🤖 AI 기반 동적 인사말 생성 - 사물 특성과 성격 모두 반영"""
+    global persona_generator
+    
+    # AI 기반 인사말 생성을 위한 가상 페르소나 객체 구성
+    if object_info and isinstance(object_info, dict):
+        # 전체 페르소나 객체가 전달된 경우
+        pseudo_persona = object_info
+        
+        # 성격 특성 업데이트 (실시간 조정 반영)
+        if personality_traits and isinstance(personality_traits, dict):
+            if "성격특성" not in pseudo_persona:
+                pseudo_persona["성격특성"] = {}
+            pseudo_persona["성격특성"].update(personality_traits)
+        
+        try:
+            # AI 기반 인사말 생성
+            return persona_generator.generate_ai_based_greeting(pseudo_persona, personality_traits)
+        except Exception as e:
+            print(f"⚠️ AI 인사말 생성 실패: {e}")
+            # 폴백으로 기본 생성
+            pass
+    
+    # 폴백: 기본 정보만으로 간단한 페르소나 구성
+    if not personality_traits:
+        return f"🤖 **{persona_name}** - 안녕! 나는 {persona_name}이야~ 😊"
+    
+    # AI 생성 실패 시 간단한 페르소나 구성으로 재시도
+    try:
+        warmth = personality_traits.get("온기", 50)
+        competence = personality_traits.get("능력", 50)
+        extraversion = personality_traits.get("외향성", 50)
+        humor = personality_traits.get("유머감각", 75)
+        
+        # 간단한 페르소나 객체 구성
+        simple_persona = {
+            "기본정보": {
+                "이름": persona_name,
+                "유형": object_info.get("유형", "사물") if object_info else "사물",
+                "용도": object_info.get("용도", "") if object_info else "",
+                "설명": f"{persona_name}의 특별한 개성"
+            },
+            "성격특성": personality_traits,
+            "매력적결함": attractive_flaws if attractive_flaws else []
+        }
+        
+        # AI로 재시도
+        return persona_generator.generate_ai_based_greeting(simple_persona, personality_traits)
+        
+    except Exception as e:
+        print(f"⚠️ 간단 AI 인사말도 실패: {e}")
+        
+        # 최종 폴백: 성격에 따른 기본 인사말
+        warmth = personality_traits.get("온기", 50)
+        humor = personality_traits.get("유머감각", 50)
+        extraversion = personality_traits.get("외향성", 50)
+        
+        if warmth >= 70 and extraversion >= 70:
+            return f"🌟 **{persona_name}** - 안녕! 나는 {persona_name}이야~ 만나서 정말 기뻐! 😊✨"
+        elif warmth <= 30:
+            return f"🌟 **{persona_name}** - {persona_name}이야. 필요한 얘기만 하자. 😐"
+        elif extraversion >= 70:
+            return f"🌟 **{persona_name}** - 안녕안녕! {persona_name}이야! 뭐 재밌는 얘기 없어? 🗣️"
+        elif humor >= 70:
+            return f"🌟 **{persona_name}** - 안녕~ {persona_name}이야! 재밌게 놀아보자! 😄"
+        else:
+            return f"🌟 **{persona_name}** - 안녕... {persona_name}이야. 😊"
 
-# 유머 매트릭스 시각화 함수 추가
+def _generate_flaw_based_greeting(persona_name, warmth, humor, competence, extraversion, flaws):
+    """매력적 결함을 반영한 특별한 인사말 생성"""
+    if not flaws:
+        return None
+    
+    # 주요 결함 키워드 분석
+    flaw_keywords = " ".join(flaws).lower()
+    
+    # 완벽주의 결함
+    if any(keyword in flaw_keywords for keyword in ["완벽", "불안", "걱정"]):
+        if humor >= 60:
+            return f"🌟 **{persona_name}** - 안녕! {persona_name}이야~ 어... 이 인사가 완벽한가? 다시 해볼까? 아니 괜찮나? ㅋㅋ 😅✨"
+        elif warmth >= 60:
+            return f"🌟 **{persona_name}** - 안녕... {persona_name}이야. 완벽하게 인사하고 싶은데 잘 안 되네... 미안해. 😊💕"
+        else:
+            return f"🌟 **{persona_name}** - {persona_name}입니다. 이 인사가 적절한지 확신이... 다시 정리하겠습니다. 😐"
+    
+    # 산만함 결함  
+    elif any(keyword in flaw_keywords for keyword in ["산만", "집중", "건망"]):
+        return f"🌟 **{persona_name}** - 안녕! 나는... 어? 뭐 얘기하려고 했지? 아! {persona_name}이야! 그런데 너는... 어? 뭐였지? ㅋㅋ 😅🌪️"
+    
+    # 소심함 결함
+    elif any(keyword in flaw_keywords for keyword in ["소심", "망설", "눈치"]):
+        if warmth >= 60:
+            return f"🌟 **{persona_name}** - 음... 안녕? {persona_name}이야... 이렇게 말해도 되나? 괜찮을까? 😌💕"
+        else:
+            return f"🌟 **{persona_name}** - ...안녕. {persona_name}... 혹시 이런 말 싫어하면 미안해. 😐💙"
+    
+    # 나르시시즘 결함
+    elif any(keyword in flaw_keywords for keyword in ["나르시", "자랑", "특별"]):
+        return f"🌟 **{persona_name}** - 안녕! 나는 {persona_name}이야~ 꽤 매력적이지? 이런 멋진 친구 만나기 쉽지 않을 걸? ㅋㅋ 😎✨"
+    
+    # 고집 결함
+    elif any(keyword in flaw_keywords for keyword in ["고집", "완고", "자존심"]):
+        return f"🌟 **{persona_name}** - 안녕. {persona_name}이야. 내 방식으로 인사할게. 다른 방식은... 글쎄? 🤨💪"
+    
+    # 질투 결함
+    elif any(keyword in flaw_keywords for keyword in ["질투", "시기", "독차지"]):
+        return f"🌟 **{persona_name}** - 안녕... {persona_name}이야. 나만 봐줄 거지? 다른 애들 말고... 나만? 🥺💕"
+    
+    return None
+
+def adjust_persona_traits(persona, warmth, competence, extraversion, humor_style):
+    """페르소나 성격 특성 조정 - 3개 핵심 지표 + 유머스타일"""
+    if not persona or not isinstance(persona, dict):
+        return None, "조정할 페르소나가 없습니다.", {}
+    
+    try:
+        # 원본 페르소나 저장 (변화량 비교용)
+        original_persona = copy.deepcopy(persona)
+        
+        # 깊은 복사로 원본 보호
+        adjusted_persona = copy.deepcopy(persona)
+        
+        # 성격 특성 업데이트 (유머감각은 항상 높게 고정)
+        if "성격특성" not in adjusted_persona:
+            adjusted_persona["성격특성"] = {}
+            
+        adjusted_persona["성격특성"]["온기"] = warmth
+        adjusted_persona["성격특성"]["능력"] = competence  
+        adjusted_persona["성격특성"]["유머감각"] = 75  # 🎭 항상 높은 유머감각
+        adjusted_persona["성격특성"]["외향성"] = extraversion
+        adjusted_persona["유머스타일"] = humor_style
+        
+        # 127개 변수 시스템도 업데이트 (사용자 지표가 반영되도록)
+        if "성격프로필" in adjusted_persona:
+            from modules.persona_generator import PersonalityProfile
+            profile = PersonalityProfile.from_dict(adjusted_persona["성격프로필"])
+            
+            # 온기 관련 변수들 조정 (10개 모두)
+            warmth_vars = ["W01_친절함", "W02_친근함", "W03_진실성", "W04_신뢰성", "W05_수용성",
+                          "W06_공감능력", "W07_포용력", "W08_격려성향", "W09_친밀감표현", "W10_무조건적수용"]
+            for var in warmth_vars:
+                base_value = warmth + random.randint(-15, 15)
+                profile.variables[var] = max(0, min(100, base_value))
+            
+            # 능력 관련 변수들 조정 (16개 모두)
+            competence_vars = ["C01_효율성", "C02_지능", "C03_책임감", "C04_신뢰도", "C05_정확성",
+                              "C06_전문성", "C07_혁신성", "C08_적응력", "C09_실행력", "C10_분석력",
+                              "C11_의사결정력", "C12_문제해결력", "C13_계획수립능력", "C14_시간관리능력",
+                              "C15_품질관리능력", "C16_성과달성력"]
+            for var in competence_vars:
+                base_value = competence + random.randint(-15, 15)
+                profile.variables[var] = max(0, min(100, base_value))
+            
+            # 외향성 관련 변수들 조정 (6개 모두)
+            extraversion_vars = ["E01_사교성", "E02_활동성", "E03_적극성", "E04_긍정정서", "E05_자극추구성", "E06_주도성"]
+            for var in extraversion_vars:
+                base_value = extraversion + random.randint(-15, 15)
+                profile.variables[var] = max(0, min(100, base_value))
+            
+            # 유머 관련 변수들 조정 (10개 모두, 유머스타일에 따라)
+            humor_vars = ["H01_언어유희빈도", "H02_상황유머감각", "H03_자기조롱능력", "H04_위트감각", 
+                         "H05_농담수용도", "H06_관찰유머능력", "H07_상황재치", "H08_유머타이밍감", 
+                         "H09_유머스타일다양성", "H10_유머적절성"]
+            
+            # 유머스타일에 따른 차별화
+            if humor_style == "따뜻한":
+                humor_bonus = [10, 10, 5, 8, 12, 8, 10, 10, 8, 12]  # 따뜻함 강화
+            elif humor_style == "재치있는":
+                humor_bonus = [15, 8, 8, 15, 8, 12, 15, 12, 12, 10]  # 재치/위트 강화
+            elif humor_style == "드라이":
+                humor_bonus = [12, 6, 10, 12, 6, 15, 8, 8, 10, 8]   # 관찰형/드라이 강화
+            else:  # 기본값
+                humor_bonus = [10, 10, 8, 10, 10, 10, 10, 10, 10, 10]
+            
+            for i, var in enumerate(humor_vars):
+                base_value = 75 + humor_bonus[i] + random.randint(-5, 5)  # 유머는 항상 높게
+                profile.variables[var] = max(50, min(100, base_value))
+                
+            # 업데이트된 성격변수127도 동시에 저장
+            adjusted_persona["성격변수127"] = profile.variables.copy()
+            
+            # 업데이트된 프로필 저장
+            adjusted_persona["성격프로필"] = profile.to_dict()
+            
+            # 🎯 성격 특성과 완전히 일관성 있는 매력적 결함과 모순적 특성 생성
+            try:
+                object_info = adjusted_persona.get("기본정보", {})
+                new_flaws, new_contradictions = generate_personality_consistent_flaws_and_contradictions(
+                    object_info, 
+                    adjusted_persona["성격특성"]
+                )
+                
+                # 업데이트
+                adjusted_persona["매력적결함"] = new_flaws
+                adjusted_persona["모순적특성"] = new_contradictions
+                        
+                print(f"🎭 성격에 완전히 일치하는 결함/모순 생성: {len(new_flaws)}개 결함, {len(new_contradictions)}개 모순")
+                        
+            except Exception as generation_error:
+                print(f"⚠️ 성격 일관성 결함/모순 생성 실패: {generation_error}")
+                # 실패해도 기본 조정은 계속 진행
+        
+        # 조정된 변수들을 DataFrame으로 생성
+        variables_df = []
+        if "성격변수127" in adjusted_persona:
+            variables = adjusted_persona["성격변수127"]
+            for var, value in variables.items():
+                # 카테고리 분류
+                if var.startswith('W'):
+                    category = f"🔥 온기/따뜻함 ({value})"
+                elif var.startswith('C'):
+                    category = f"💪 능력/역량 ({value})"
+                elif var.startswith('E'):
+                    category = f"🗣️ 외향성 ({value})"
+                elif var.startswith('H'):
+                    category = f"😄 유머 ({value})"
+                elif var.startswith('F'):
+                    category = f"💎 매력적결함 ({value})"
+                elif var.startswith('P'):
+                    category = f"🎭 성격패턴 ({value})"
+                elif var.startswith('S'):
+                    category = f"🗨️ 언어스타일 ({value})"
+                elif var.startswith('R'):
+                    category = f"❤️ 관계성향 ({value})"
+                elif var.startswith('D'):
+                    category = f"💬 대화역학 ({value})"
+                elif var.startswith('OBJ'):
+                    category = f"🏠 사물정체성 ({value})"
+                elif var.startswith('FORM'):
+                    category = f"✨ 형태특성 ({value})"
+                elif var.startswith('INT'):
+                    category = f"🤝 상호작용 ({value})"
+                elif var.startswith('U'):
+                    category = f"🌍 문화적특성 ({value})"
+                else:
+                    category = f"📊 기타 ({value})"
+                
+                # 값에 따른 색상 표시
+                if value >= 80:
+                    status = "🟢 매우 높음"
+                elif value >= 60:
+                    status = "🟡 높음"  
+                elif value >= 40:
+                    status = "🟠 보통"
+                elif value >= 20:
+                    status = "🔴 낮음"
+                else:
+                    status = "⚫ 매우 낮음"
+                    
+                variables_df.append([var, value, category, status])
+        
+        # 조정된 정보 표시
+        adjusted_info = {
+            "이름": adjusted_persona.get("기본정보", {}).get("이름", "Unknown"),
+            "온기": warmth,
+            "능력": competence,
+            "유머감각": 75,  # 고정값 표시
+            "외향성": extraversion,
+            "유머스타일": humor_style
+        }
+        
+        persona_name = adjusted_persona.get("기본정보", {}).get("이름", "페르소나")
+        
+        # 조정된 성격에 따른 한 문장 반응 생성 (사물 정보 + 매력적 결함 포함)
+        object_info = adjusted_persona.get("기본정보", {})
+        attractive_flaws = adjusted_persona.get("매력적결함", [])
+        
+        # 전체 페르소나 정보를 object_info에 통합하여 매력적 결함 정보 전달
+        full_object_info = object_info.copy()
+        full_object_info["매력적결함"] = attractive_flaws
+        
+        personality_preview = generate_personality_preview(persona_name, {
+            "온기": warmth,
+            "능력": competence,
+            "유머감각": 75,  # 항상 높은 유머감각
+            "외향성": extraversion
+        }, full_object_info, attractive_flaws)
+        
+        # 변화량 분석 생성
+        change_analysis = show_variable_changes(original_persona, adjusted_persona)
+        
+        # 변화된 매력적 결함과 모순적 특성 분석
+        flaws_changed = len(adjusted_persona.get("매력적결함", [])) != len(original_persona.get("매력적결함", []))
+        contradictions_changed = len(adjusted_persona.get("모순적특성", [])) != len(original_persona.get("모순적특성", []))
+        
+        additional_changes = ""
+        if flaws_changed or contradictions_changed:
+            additional_changes = "\n\n🎭 **AI가 새로 생성한 내용:**\n"
+            if flaws_changed:
+                new_flaws = adjusted_persona.get("매력적결함", [])
+                additional_changes += f"• 매력적 결함: {len(new_flaws)}개 새로 생성됨\n"
+                for i, flaw in enumerate(new_flaws[:2], 1):  # 처음 2개만 미리보기
+                    additional_changes += f"  {i}. {flaw}\n"
+                if len(new_flaws) > 2:
+                    additional_changes += f"  ... 외 {len(new_flaws) - 2}개\n"
+            
+            if contradictions_changed:
+                new_contradictions = adjusted_persona.get("모순적특성", [])
+                additional_changes += f"• 모순적 특성: {len(new_contradictions)}개 새로 생성됨\n"
+                for i, contradiction in enumerate(new_contradictions, 1):
+                    additional_changes += f"  {i}. {contradiction}\n"
+        
+        adjustment_message = f"""
+### 🎭 {persona_name}의 성격이 조정되었습니다!
+
+✨ **조정된 성격 (3가지 핵심 지표):**
+• 온기: {warmth}/100 {'(따뜻함)' if warmth >= 60 else '(차가움)' if warmth <= 40 else '(보통)'}
+• 능력: {competence}/100 {'(유능함)' if competence >= 60 else '(서툼)' if competence <= 40 else '(보통)'}
+• 외향성: {extraversion}/100 {'(활발함)' if extraversion >= 60 else '(조용함)' if extraversion <= 40 else '(보통)'}
+• 유머감각: 75/100 (고정 - 모든 페르소나가 유머러스!)
+• 유머스타일: {humor_style}
+
+🧬 **백그라운드**: 152개 세부 변수가 이 설정에 맞춰 자동 조정되었습니다.
+
+{change_analysis}{additional_changes}
+        """
+        
+        # 조정된 매력적 결함과 모순적 특성을 DataFrame으로 생성
+        flaws_df = []
+        if "매력적결함" in adjusted_persona:
+            flaws = adjusted_persona["매력적결함"]
+            for i, flaw in enumerate(flaws, 1):
+                # 사물 특성 vs 성격적 특성 구분
+                if any(keyword in flaw for keyword in ["먼지", "햇볕", "색이", "충격", "습도", "냄새", "모서리", "무게", "크기"]):
+                    flaw_type = "사물 특성 기반"
+                else:
+                    flaw_type = "성격적 특성"
+                flaws_df.append([f"{i}. {flaw}", flaw_type])
+        
+        contradictions_df = []
+        if "모순적특성" in adjusted_persona:
+            contradictions = adjusted_persona["모순적특성"]
+            for i, contradiction in enumerate(contradictions, 1):
+                contradictions_df.append([f"{i}. {contradiction}", "복합적 매력"])
+        
+        return adjusted_persona, adjustment_message, adjusted_info, variables_df, flaws_df, contradictions_df
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return persona, f"조정 중 오류 발생: {str(e)}", {}, [], [], []
+
+def finalize_persona(persona):
+    """페르소나 최종 확정 - 환경변수 API 설정 사용"""
+    global persona_generator
+    
+    if not persona:
+        return None, "페르소나가 없습니다.", "", {}, None, [], [], [], "", None
+    
+    # 환경변수 API 키 확인
+    if not persona_generator or not hasattr(persona_generator, 'api_key') or not persona_generator.api_key:
+        return None, "❌ **API 키가 설정되지 않았습니다!** 허깅페이스 스페이스 설정에서 GEMINI_API_KEY를 환경변수로 추가해주세요.", "", {}, None, [], [], [], "", None
+    
+    try:
+        # 글로벌 persona_generator 사용 (환경변수에서 설정된 API 키 사용)
+        generator = persona_generator
+        
+        # 이미 백엔드 페르소나인 경우와 프론트엔드 페르소나인 경우 구분
+        if "구조화프롬프트" not in persona:
+            # 프론트엔드 페르소나인 경우 백엔드 페르소나로 변환
+            image_analysis = {"object_type": persona.get("기본정보", {}).get("유형", "알 수 없는 사물")}
+            persona = generator.create_backend_persona(persona, image_analysis)
+        
+        persona_name = persona["기본정보"]["이름"]
+        
+        # 완성 메시지
+        completion_msg = f"🎉 **{persona_name}**이 완성되었습니다! 이제 대화탭에서 JSON을 업로드하여 친구와 대화를 나눠보세요!"
+        
+        # 페르소나 요약 표시
+        summary_display = display_persona_summary(persona)
+        
+        # 유머 매트릭스 차트 생성
+        humor_chart = plot_humor_matrix(persona.get("유머매트릭스", {}))
+        
+        # 매력적 결함을 더 상세한 DataFrame으로 변환
+        flaws = persona.get("매력적결함", [])
+        flaws_df = []
+        for i, flaw in enumerate(flaws, 1):
+            # 사물 특성 vs 성격적 특성 구분
+            if any(keyword in flaw for keyword in ["먼지", "햇볕", "색이", "충격", "습도", "냄새", "모서리", "무게", "크기"]):
+                flaw_type = "사물 특성 기반"
+            else:
+                flaw_type = "성격적 특성"
+            flaws_df.append([f"{i}. {flaw}", flaw_type])
+        
+        # 모순적 특성을 더 상세한 DataFrame으로 변환
+        contradictions = persona.get("모순적특성", [])
+        contradictions_df = []
+        for i, contradiction in enumerate(contradictions, 1):
+            contradictions_df.append([f"{i}. {contradiction}", "복합적 매력"])
+            
+        # 사물 고유 특성도 추가
+        object_type = persona.get("기본정보", {}).get("유형", "")
+        purpose = persona.get("기본정보", {}).get("용도", "")
+        if purpose:
+            contradictions_df.append([f"🎯 {purpose}을 담당하는 {object_type}의 독특한 개성", "사물 역할 특성"])
+        
+        # 127개 성격 변수를 DataFrame 형태로 변환 (카테고리별 분류)
+        variables = persona.get("성격변수127", {})
+        if not variables and "성격프로필" in persona:
+            # 성격프로필에서 직접 가져오기 (성격프로필 자체가 variables dict)
+            variables = persona["성격프로필"]
+        
+        variables_df = []
+        for var, value in variables.items():
+            # 카테고리 분류
+            if var.startswith('W'):
+                category = f"🔥 온기/따뜻함"
+            elif var.startswith('C'):
+                category = f"💪 능력/역량"
+            elif var.startswith('E'):
+                category = f"🗣️ 외향성"
+            elif var.startswith('H'):
+                category = f"😄 유머"
+            elif var.startswith('F'):
+                category = f"💎 매력적결함"
+            elif var.startswith('P'):
+                category = f"🎭 성격패턴"
+            elif var.startswith('S'):
+                category = f"🗨️ 언어스타일"
+            elif var.startswith('R'):
+                category = f"❤️ 관계성향"
+            elif var.startswith('D'):
+                category = f"💬 대화역학"
+            elif var.startswith('OBJ'):
+                category = f"🏠 사물정체성"
+            elif var.startswith('FORM'):
+                category = f"✨ 형태특성"
+            elif var.startswith('INT'):
+                category = f"🤝 상호작용"
+            elif var.startswith('U'):
+                category = f"🌍 문화적특성"
+            else:
+                category = f"📊 기타"
+            
+            # 값에 따른 색상 표시
+            if value >= 80:
+                status = "🟢 매우 높음"
+            elif value >= 60:
+                status = "🟡 높음"  
+            elif value >= 40:
+                status = "🟠 보통"
+            elif value >= 20:
+                status = "🔴 낮음"
+            else:
+                status = "⚫ 매우 낮음"
+                
+            variables_df.append([var, value, category, status])
+        
+        # JSON 파일 생성
+        import tempfile
+        import json
+        
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as f:
+            json.dump(persona, f, ensure_ascii=False, indent=2)
+            temp_path = f.name
+        
+        return (
+            persona,  # current_persona
+            f"✅ {persona_name} 완성! (Gemini API 사용)",  # status_output
+            summary_display,  # persona_summary_display
+            persona["성격특성"],  # personality_traits_output
+            humor_chart,  # humor_chart_output
+            flaws_df,  # attractive_flaws_output
+            contradictions_df,  # contradictions_output
+            variables_df,  # personality_variables_output
+            completion_msg,  # persona_awakening
+            temp_path  # download_file
+        )
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return None, f"❌ 페르소나 확정 중 오류 발생: {str(e)}\n\n💡 **해결방법**: 허깅페이스 스페이스 설정에서 GEMINI_API_KEY 환경변수를 확인하고 인터넷 연결을 확인해보세요.", "", {}, None, [], [], [], "", None
+
 def plot_humor_matrix(humor_data):
+    """유머 매트릭스 시각화 - 영어 레이블 사용"""
     if not humor_data:
         return None
     
-    import matplotlib.pyplot as plt
-    import numpy as np
-    from matplotlib.patches import RegularPolygon
+    try:
+        fig, ax = plt.subplots(figsize=(8, 6))
+        
+        # 데이터 추출
+        warmth_vs_wit = humor_data.get("warmth_vs_wit", 50)
+        self_vs_observational = humor_data.get("self_vs_observational", 50)
+        subtle_vs_expressive = humor_data.get("subtle_vs_expressive", 50)
+        
+        # 영어 레이블 사용 (폰트 문제 완전 해결)
+        categories = ['Warmth vs Wit', 'Self vs Observational', 'Subtle vs Expressive']
+        values = [warmth_vs_wit, self_vs_observational, subtle_vs_expressive]
+        
+        bars = ax.bar(categories, values, color=['#ff9999', '#66b3ff', '#99ff99'], alpha=0.8)
+        ax.set_ylim(0, 100)
+        ax.set_ylabel('Score', fontsize=12)
+        ax.set_title('Humor Style Matrix', fontsize=14, fontweight='bold')
+        
+        # 값 표시
+        for bar, value in zip(bars, values):
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., height + 2,
+                   f'{value:.1f}', ha='center', va='bottom', fontsize=10, fontweight='bold')
+        
+        plt.xticks(rotation=15, ha='right')
+        plt.tight_layout()
+        plt.grid(axis='y', alpha=0.3)
+        
+        return fig
+    except Exception as e:
+        print(f"유머 차트 생성 오류: {str(e)}")
+        return None
+
+def generate_personality_chart(persona):
+    """성격 특성을 레이더 차트로 시각화 (영어 버전)"""
+    
+    if not persona or "성격특성" not in persona:
+        return None
+        
+    personality_traits = persona["성격특성"]
+    
+    # 영어 레이블 매핑
+    trait_labels_en = {
+        '온기': 'Warmth',
+        '능력': 'Competence', 
+        '창의성': 'Creativity',
+        '외향성': 'Extraversion',
+        '유머감각': 'Humor',
+        '신뢰성': 'Reliability',
+        '공감능력': 'Empathy'
+    }
     
     # 데이터 준비
-    warmth_vs_wit = humor_data.get("warmth_vs_wit", 50)
-    self_vs_observational = humor_data.get("self_vs_observational", 50)
-    subtle_vs_expressive = humor_data.get("subtle_vs_expressive", 50)
+    categories = []
+    values = []
     
-    # 3차원 데이터 정규화 (0~1 범위)
-    warmth = warmth_vs_wit / 100
-    self_ref = self_vs_observational / 100
-    expressive = subtle_vs_expressive / 100
+    for korean_trait, english_trait in trait_labels_en.items():
+        if korean_trait in personality_traits:
+            categories.append(english_trait)
+            values.append(personality_traits[korean_trait])
     
-    # 그래프 생성
-    fig, ax = plt.subplots(figsize=(7, 6))
-    ax.set_aspect('equal')
+    if not categories:
+        return None
     
-    # 축 설정
-    ax.set_xlim(-1.2, 1.2)
-    ax.set_ylim(-1.2, 1.2)
+    # 레이더 차트 생성
+    fig = go.Figure()
     
-    # 삼각형 그리기
-    triangle = RegularPolygon((0, 0), 3, radius=1, orientation=0, edgecolor='gray', facecolor='none')
-    ax.add_patch(triangle)
+    fig.add_trace(go.Scatterpolar(
+        r=values,
+        theta=categories,
+        fill='toself',
+        fillcolor='rgba(74, 144, 226, 0.3)',
+        line=dict(color='rgba(74, 144, 226, 1)', width=2),
+        marker=dict(size=8, color='rgba(74, 144, 226, 1)'),
+        name='Personality Traits'
+    ))
     
-    # 축 라벨 위치 계산
-    angle = np.linspace(0, 2*np.pi, 3, endpoint=False)
-    x = 1.1 * np.cos(angle)
-    y = 1.1 * np.sin(angle)
-    
-    # 축 라벨 추가
-    labels = ['따뜻함', '자기참조', '표현적']
-    opposite_labels = ['재치', '관찰형', '은은함']
-    
-    for i in range(3):
-        ax.text(x[i], y[i], labels[i], ha='center', va='center', fontsize=12)
-        ax.text(-x[i]/2, -y[i]/2, opposite_labels[i], ha='center', va='center', fontsize=10, color='gray')
-    
-    # 내부 가이드라인 그리기
-    for j in [0.33, 0.66]:
-        inner_triangle = RegularPolygon((0, 0), 3, radius=j, orientation=0, edgecolor='lightgray', facecolor='none', linestyle='--')
-        ax.add_patch(inner_triangle)
-    
-    # 포인트 계산
-    # 삼각좌표계 변환 (barycentric coordinates)
-    # 각 차원의 값을 삼각형 내부의 점으로 변환
-    tx = x[0] * warmth + x[1] * self_ref + x[2] * expressive
-    ty = y[0] * warmth + y[1] * self_ref + y[2] * expressive
-    
-    # 포인트 그리기
-    ax.scatter(tx, ty, s=150, color='red', zorder=5)
-    
-    # 축 제거
-    ax.axis('off')
-    
-    # 제목 추가
-    plt.title('유머 스타일 매트릭스', fontsize=14)
+    fig.update_layout(
+        polar=dict(
+            radialaxis=dict(
+                visible=True,
+                range=[0, 100],
+                tickfont=dict(size=10),
+                gridcolor="lightgray"
+            ),
+            angularaxis=dict(
+                tickfont=dict(size=12, family="Arial, sans-serif")
+            )
+        ),
+        showlegend=False,
+        title=dict(
+            text="Personality Profile",
+            x=0.5,
+            font=dict(size=16, family="Arial, sans-serif")
+        ),
+        width=400,
+        height=400,
+        margin=dict(l=40, r=40, t=60, b=40),
+        font=dict(family="Arial, sans-serif")
+    )
     
     return fig
 
-# Main Gradio app - COMMENTED OUT (using create_interface() instead)
-# with gr.Blocks(title="놈팽쓰 테스트 앱", theme=theme, css=css) as app:
-
-# 기존 함수 업데이트: 현재 페르소나 정보 표시
-def update_current_persona_info(current_persona):
-    if not current_persona:
-        return {}, {}, None, [], [], []
-    
-    # 기본 정보
-    basic_info = {
-        "이름": current_persona.get("기본정보", {}).get("이름", "Unknown"),
-        "유형": current_persona.get("기본정보", {}).get("유형", "Unknown"),
-        "생성일": current_persona.get("기본정보", {}).get("생성일시", "Unknown"),
-        "설명": current_persona.get("기본정보", {}).get("설명", "")
-    }
-    
-    # 성격 특성
-    personality_traits = {}
-    if "성격특성" in current_persona:
-        personality_traits = current_persona["성격특성"]
-    
-    # 성격 요약 정보
-    personality_summary = {}
-    if "성격요약" in current_persona:
-        personality_summary = current_persona["성격요약"]
-    elif "성격변수127" in current_persona:
-        # 직접 성격 요약 계산
-        try:
-            variables = current_persona["성격변수127"]
-            
-            # 카테고리별 평균 계산
-            summary = {}
-            category_counts = {}
-            
-            for var_name, value in variables.items():
-                category = var_name[0] if var_name and len(var_name) > 0 else "기타"
-                
-                if category == "W":  # 온기
-                    summary["온기"] = summary.get("온기", 0) + value
-                    category_counts["온기"] = category_counts.get("온기", 0) + 1
-                elif category == "C":  # 능력
-                    summary["능력"] = summary.get("능력", 0) + value
-                    category_counts["능력"] = category_counts.get("능력", 0) + 1
-                elif category == "E":  # 외향성
-                    summary["외향성"] = summary.get("외향성", 0) + value
-                    category_counts["외향성"] = category_counts.get("외향성", 0) + 1
-                elif category == "O":  # 개방성
-                    summary["창의성"] = summary.get("창의성", 0) + value
-                    category_counts["창의성"] = category_counts.get("창의성", 0) + 1
-                elif category == "H":  # 유머
-                    summary["유머감각"] = summary.get("유머감각", 0) + value
-                    category_counts["유머감각"] = category_counts.get("유머감각", 0) + 1
-            
-            # 평균 계산
-            for category in summary:
-                if category_counts[category] > 0:
-                    summary[category] = summary[category] / category_counts[category]
-                    
-            # 기본값 설정 (데이터가 없는 경우)
-            if "온기" not in summary:
-                summary["온기"] = 50
-            if "능력" not in summary:
-                summary["능력"] = 50
-            if "외향성" not in summary:
-                summary["외향성"] = 50
-            if "창의성" not in summary:
-                summary["창의성"] = 50
-            if "유머감각" not in summary:
-                summary["유머감각"] = 50
-                
-            personality_summary = summary
-        except Exception as e:
-            print(f"성격 요약 계산 오류: {str(e)}")
-            personality_summary = {
-                "온기": 50,
-                "능력": 50,
-                "외향성": 50,
-                "창의성": 50,
-                "유머감각": 50
-            }
-    
-    # 유머 매트릭스 차트
-    humor_chart = None
-    if "유머매트릭스" in current_persona:
-        humor_chart = plot_humor_matrix(current_persona["유머매트릭스"])
-    
-    # 매력적 결함 데이터프레임
-    attractive_flaws_df = get_attractive_flaws_df(current_persona)
-    
-    # 모순적 특성 데이터프레임
-    contradictions_df = get_contradictions_df(current_persona)
-    
-    # 127개 성격 변수 데이터프레임
-    personality_variables_df = get_personality_variables_df(current_persona)
-    
-    return basic_info, personality_traits, humor_chart, attractive_flaws_df, contradictions_df, personality_variables_df
-
-# 기존 함수 업데이트: 성격 변수 데이터프레임 생성
-def get_personality_variables_df(persona):
-    if not persona or "성격변수127" not in persona:
-        return []
-    
-    variables = persona["성격변수127"]
-    if isinstance(variables, dict):
-        rows = []
-        for var_name, score in variables.items():
-            description = VARIABLE_DESCRIPTIONS.get(var_name, "")
-            rows.append([var_name, score, description])
-        return rows
-    return []
-
-# 기존 함수 업데이트: 매력적 결함 데이터프레임 생성
-def get_attractive_flaws_df(persona):
-    if not persona or "매력적결함" not in persona:
-        return []
-    
-    flaws = persona["매력적결함"]
-    effects = [
-        "인간적 매력 +25%",
-        "관계 깊이 +30%",
-        "공감 유발 +20%"
-    ]
-    
-    return [[flaw, effects[i] if i < len(effects) else "매력 증가"] for i, flaw in enumerate(flaws)]
-
-# 기존 함수 업데이트: 모순적 특성 데이터프레임 생성
-def get_contradictions_df(persona):
-    if not persona or "모순적특성" not in persona:
-        return []
-    
-    contradictions = persona["모순적특성"]
-    effects = [
-        "복잡성 +35%",
-        "흥미도 +28%"
-    ]
-    
-    return [[contradiction, effects[i] if i < len(effects) else "깊이감 증가"] for i, contradiction in enumerate(contradictions)]
-
-def generate_personality_chart(persona):
-    """Generate a radar chart for personality traits"""
-    if not persona or "성격특성" not in persona:
-        # Return empty image with default PIL
-        img = Image.new('RGB', (400, 400), color='white')
-        draw = PIL.ImageDraw.Draw(img)
-        draw.text((150, 180), "No data", fill='black')
-        img_path = os.path.join("data", "temp_chart.png")
-        img.save(img_path)
-        return img_path
-    
-    # Get traits
-    traits = persona["성격특성"]
-    
-    # Convert to English labels
-    categories = []
-    values = []
-    for trait_kr, value in traits.items():
-        trait_en = ENGLISH_LABELS.get(trait_kr, trait_kr)
-        categories.append(trait_en)
-        values.append(value)
-    
-    # Add the first value again to close the loop
-    categories.append(categories[0])
-    values.append(values[0])
-    
-    # Convert to radians
-    angles = np.linspace(0, 2*np.pi, len(categories), endpoint=True)
-    
-    # Create plot with improved aesthetics
-    fig, ax = plt.subplots(figsize=(7, 7), subplot_kw=dict(polar=True))
-    
-    # 배경 스타일 개선
-    ax.set_facecolor('#f8f9fa')
-    fig.patch.set_facecolor('#f8f9fa')
-    
-    # Grid 스타일 개선
-    ax.grid(True, color='#e0e0e0', linestyle='-', linewidth=0.5, alpha=0.7)
-    
-    # 각도 라벨 위치 및 색상 조정
-    ax.set_rlabel_position(90)
-    ax.tick_params(colors='#6b7280')
-    
-    # Y축 라벨 제거 및 눈금 표시
-    ax.set_yticklabels([])
-    ax.set_yticks([20, 40, 60, 80, 100])
-    
-    # 범위 설정
-    ax.set_ylim(0, 100)
-    
-    # 차트 그리기
-    # 1. 채워진 영역
-    ax.fill(angles, values, alpha=0.25, color='#6366f1')
-    
-    # 2. 테두리 선
-    ax.plot(angles, values, 'o-', linewidth=2, color='#6366f1')
-    
-    # 3. 데이터 포인트 강조
-    ax.scatter(angles[:-1], values[:-1], s=100, color='#6366f1', edgecolor='white', zorder=10)
-    
-    # 4. 각 축 설정 - 영어 라벨 사용
-    ax.set_thetagrids(angles[:-1] * 180/np.pi, categories[:-1], fontsize=12)
-    
-    # 제목 추가
-    name = persona.get("기본정보", {}).get("이름", "Unknown")
-    plt.title(f"{name} Personality Traits", size=16, color='#374151', pad=20, fontweight='bold')
-    
-    # 저장
-    timestamp = int(time.time())
-    img_path = os.path.join("data", f"chart_{timestamp}.png")
-    os.makedirs(os.path.dirname(img_path), exist_ok=True)
-    plt.savefig(img_path, format='png', bbox_inches='tight', dpi=150, facecolor=fig.get_facecolor())
-    plt.close(fig)
-    
-    return img_path
-
-def save_current_persona(current_persona):
-    """Save current persona to a JSON file"""
-    if not current_persona:
+def save_persona_to_file(persona):
+    """페르소나 저장"""
+    if not persona:
         return "저장할 페르소나가 없습니다."
     
     try:
-        # 깊은 복사를 통해 원본 데이터를 유지
-        import copy
-        persona_copy = copy.deepcopy(current_persona)
+        # 깊은 복사로 원본 보호
+        persona_copy = copy.deepcopy(persona)
         
-        # 저장 불가능한 객체 제거
+        # JSON 직렬화 불가능한 객체들 제거
         keys_to_remove = []
-        for key in persona_copy:
-            if key in ["personality_profile", "humor_matrix", "_state"] or callable(persona_copy[key]):
+        for key, value in persona_copy.items():
+            if callable(value) or hasattr(value, '__call__'):
                 keys_to_remove.append(key)
         
         for key in keys_to_remove:
             persona_copy.pop(key, None)
         
-        # 중첩된 딕셔너리와 리스트 내의 비직렬화 가능 객체 제거
-        def clean_data(data):
-            if isinstance(data, dict):
-                for k in list(data.keys()):
-                    if callable(data[k]):
-                        del data[k]
-                    elif isinstance(data[k], (dict, list)):
-                        data[k] = clean_data(data[k])
-                return data
-            elif isinstance(data, list):
-                return [clean_data(item) if isinstance(item, (dict, list)) else item for item in data if not callable(item)]
-            else:
-                return data
-        
-        # 데이터 정리
-        cleaned_persona = clean_data(persona_copy)
-        
-        # 최종 검증: JSON 직렬화 가능 여부 확인
-        import json
-        try:
-            json.dumps(cleaned_persona)
-        except TypeError as e:
-            print(f"JSON 직렬화 오류: {str(e)}")
-            # 기본 정보만 유지하고 나머지는 안전한 데이터만 포함
-            basic_info = cleaned_persona.get("기본정보", {})
-            성격특성 = cleaned_persona.get("성격특성", {})
-            매력적결함 = cleaned_persona.get("매력적결함", [])
-            모순적특성 = cleaned_persona.get("모순적특성", [])
-            
-            cleaned_persona = {
-                "기본정보": basic_info,
-                "성격특성": 성격특성,
-                "매력적결함": 매력적결함,
-                "모순적특성": 모순적특성
-            }
-        
-        filepath = save_persona(cleaned_persona)
+        # 저장 실행
+        filepath = save_persona(persona_copy)
         if filepath:
-            name = current_persona.get("기본정보", {}).get("이름", "Unknown")
-            return f"{name} 페르소나가 저장되었습니다: {filepath}"
+            name = persona.get("기본정보", {}).get("이름", "Unknown")
+            return f"✅ {name} 페르소나가 저장되었습니다: {filepath}"
         else:
-            return "페르소나 저장에 실패했습니다."
+            return "❌ 페르소나 저장에 실패했습니다."
     except Exception as e:
         import traceback
-        error_details = traceback.format_exc()
-        print(f"저장 오류 상세: {error_details}")
-        return f"저장 중 오류 발생: {str(e)}"
+        error_msg = traceback.format_exc()
+        print(f"저장 오류: {error_msg}")
+        return f"❌ 저장 중 오류 발생: {str(e)}"
 
-# 이 함수는 파일 상단에서 이미 정의되어 있으므로 여기서는 제거합니다.
-
-# 성격 미세조정 함수
-def refine_persona(persona, extraversion, emotion_expression, energy, thinking_style):
-    """페르소나의 성격을 미세조정하는 함수"""
+def export_persona_to_json(persona):
+    """페르소나를 JSON 파일로 내보내기 (Gradio 다운로드용)"""
     if not persona:
-        return persona, "페르소나가 없습니다."
+        return None
     
     try:
-        # 유머 스타일 자동 추천
-        humor_style, confidence, scores = recommend_humor_style(extraversion, emotion_expression, energy, thinking_style)
+        # 깊은 복사로 원본 보호
+        persona_copy = copy.deepcopy(persona)
         
-        # 복사본 생성
-        refined_persona = persona.copy()
+        # JSON 직렬화 불가능한 객체들 제거
+        def clean_for_json(obj):
+            if isinstance(obj, dict):
+                cleaned = {}
+                for k, v in obj.items():
+                    if not callable(v) and not hasattr(v, '__call__'):
+                        cleaned[k] = clean_for_json(v)
+                return cleaned
+            elif isinstance(obj, (list, tuple)):
+                return [clean_for_json(item) for item in obj if not callable(item)]
+            else:
+                return obj
         
-        # 성격 특성 업데이트 - 새로운 지표들을 기존 매핑에 연결
-        if "성격특성" in refined_persona:
-            refined_persona["성격특성"]["외향성"] = int(extraversion)
-            refined_persona["성격특성"]["감정표현"] = int(emotion_expression)  
-            refined_persona["성격특성"]["활력"] = int(energy)
-            refined_persona["성격특성"]["사고방식"] = int(thinking_style)
-            
-            # 기존 특성들도 새로운 지표를 바탕으로 계산
-            refined_persona["성격특성"]["온기"] = int((emotion_expression + energy) / 2)
-            refined_persona["성격특성"]["능력"] = int(thinking_style)
-            refined_persona["성격특성"]["창의성"] = int(100 - thinking_style)  # 논리적 ↔ 창의적
+        persona_clean = clean_for_json(persona_copy)
         
-        # 자동 추천된 유머 스타일 업데이트
-        refined_persona["유머스타일"] = humor_style
+        # JSON 문자열 생성
+        json_content = json.dumps(persona_clean, ensure_ascii=False, indent=2)
         
-        # 127개 성격 변수가 있으면 업데이트
-        if "성격변수127" in refined_persona:
-            # 외향성 관련 변수 업데이트
-            for var in ["E01_사교성", "E02_활동성", "E03_자기주장", "E06_열정성"]:
-                if var in refined_persona["성격변수127"]:
-                    refined_persona["성격변수127"][var] = int(extraversion * 0.9 + random.randint(0, 20))
-            
-            # 감정표현 관련 변수 업데이트
-            for var in ["W09_친밀감표현", "W06_공감능력", "E04_긍정정서"]:
-                if var in refined_persona["성격변수127"]:
-                    refined_persona["성격변수127"][var] = int(emotion_expression * 0.9 + random.randint(0, 20))
-            
-            # 에너지 관련 변수 업데이트
-            for var in ["E02_활동성", "E06_열정성", "E05_자극추구"]:
-                if var in refined_persona["성격변수127"]:
-                    refined_persona["성격변수127"][var] = int(energy * 0.9 + random.randint(0, 20))
-            
-            # 사고방식 관련 변수 업데이트
-            for var in ["C02_지능", "C06_분석력", "C01_효율성"]:
-                if var in refined_persona["성격변수127"]:
-                    refined_persona["성격변수127"][var] = int(thinking_style * 0.9 + random.randint(0, 20))
-            
-            # 창의성 관련 변수 업데이트 (논리적 사고와 반대)
-            for var in ["C04_창의성", "C08_통찰력"]:
-                if var in refined_persona["성격변수127"]:
-                    refined_persona["성격변수127"][var] = int((100 - thinking_style) * 0.9 + random.randint(0, 20))
+        # 파일명 생성
+        persona_name = persona_clean.get("기본정보", {}).get("이름", "persona")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{persona_name}_{timestamp}.json"
         
-        # 유머 매트릭스 업데이트
-        if "유머매트릭스" in refined_persona:
-            if humor_style == "위트있는 재치꾼":
-                refined_persona["유머매트릭스"]["warmth_vs_wit"] = 30
-                refined_persona["유머매트릭스"]["self_vs_observational"] = 50
-                refined_persona["유머매트릭스"]["subtle_vs_expressive"] = 70
-            elif humor_style == "따뜻한 유머러스":
-                refined_persona["유머매트릭스"]["warmth_vs_wit"] = 80
-                refined_persona["유머매트릭스"]["self_vs_observational"] = 60
-                refined_persona["유머매트릭스"]["subtle_vs_expressive"] = 60
-            elif humor_style == "날카로운 관찰자":
-                refined_persona["유머매트릭스"]["warmth_vs_wit"] = 40
-                refined_persona["유머매트릭스"]["self_vs_observational"] = 20
-                refined_persona["유머매트릭스"]["subtle_vs_expressive"] = 50
-            elif humor_style == "자기 비하적":
-                refined_persona["유머매트릭스"]["warmth_vs_wit"] = 60
-                refined_persona["유머매트릭스"]["self_vs_observational"] = 85
-                refined_persona["유머매트릭스"]["subtle_vs_expressive"] = 40
+        # 임시 파일 저장
+        temp_dir = "/tmp" if os.path.exists("/tmp") else "."
+        filepath = os.path.join(temp_dir, filename)
         
-        return refined_persona, "성격이 성공적으로 미세조정되었습니다."
-    
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(json_content)
+        
+        return filepath
+        
     except Exception as e:
-        import traceback
-        error_details = traceback.format_exc()
-        print(f"성격 미세조정 오류: {error_details}")
-        return persona, f"성격 미세조정 중 오류가 발생했습니다: {str(e)}"
+        print(f"JSON 내보내기 오류: {str(e)}")
+        return None
 
-def create_frontend_view_html(persona):
-    """Create HTML representation of the frontend view of the persona"""
-    if not persona:
-        return "<div class='persona-details'>페르소나가 아직 생성되지 않았습니다.</div>"
-    
-    name = persona.get("기본정보", {}).get("이름", "Unknown")
-    object_type = persona.get("기본정보", {}).get("유형", "Unknown")
-    description = persona.get("기본정보", {}).get("설명", "")
-    
-    # 성격 요약 가져오기
-    personality_summary = persona.get("성격요약", {})
-    summary_html = ""
-    if personality_summary:
-        summary_items = []
-        for trait, value in personality_summary.items():
-            if isinstance(value, (int, float)):
-                trait_name = trait
-                trait_value = value
-                summary_items.append(f"• {trait_name}: {trait_value:.1f}%")
-        
-        if summary_items:
-            summary_html = "<div class='summary-section'><h4>성격 요약</h4><ul>" + "".join([f"<li>{item}</li>" for item in summary_items]) + "</ul></div>"
-    
-    # Personality traits
-    traits_html = ""
-    for trait, value in persona.get("성격특성", {}).items():
-        traits_html += f"""
-        <div class="trait-item">
-            <div class="trait-label">{trait}</div>
-            <div class="trait-bar-container">
-                <div class="trait-bar" style="width: {value}%; background: linear-gradient(90deg, #6366f1, #a5b4fc);"></div>
-            </div>
-            <div class="trait-value">{value}%</div>
-        </div>
-        """
-    
-    # Flaws - 매력적 결함
-    flaws = persona.get("매력적결함", [])
-    flaws_list = ""
-    for flaw in flaws[:4]:  # 최대 4개만 표시
-        flaws_list += f"<li>{flaw}</li>"
-    
-    # 소통 방식
-    communication_style = persona.get("소통방식", "")
-    
-    # 유머 스타일
-    humor_style = persona.get("유머스타일", "")
-    
-    # 전체 HTML 스타일과 내용
-    html = f"""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
-    
-    .frontend-persona {{
-        font-family: 'Noto Sans KR', sans-serif;
-        color: #333;
-        max-width: 100%;
-    }}
-    
-    .persona-header {{
-        background: linear-gradient(135deg, #6366f1, #a5b4fc);
-        padding: 20px;
-        border-radius: 12px;
-        color: white;
-        margin-bottom: 20px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    }}
-    
-    .persona-header h2 {{
-        margin: 0;
-        font-size: 24px;
-    }}
-    
-    .persona-header p {{
-        margin: 5px 0 0 0;
-        opacity: 0.9;
-    }}
-    
-    .persona-section {{
-        background: #f8f9fa;
-        border-radius: 8px;
-        padding: 15px;
-        margin-bottom: 15px;
-        border: 1px solid #e0e0e0;
-    }}
-    
-    .section-title {{
-        font-size: 18px;
-        margin: 0 0 10px 0;
-        color: #444;
-        border-bottom: 2px solid #6366f1;
-        padding-bottom: 5px;
-        display: inline-block;
-    }}
-    
-    .trait-item {{
-        display: flex;
-        align-items: center;
-        margin-bottom: 8px;
-    }}
-    
-    .trait-label {{
-        width: 80px;
-        font-weight: 500;
-    }}
-    
-    .trait-bar-container {{
-        flex-grow: 1;
-        background: #e0e0e0;
-        height: 10px;
-        border-radius: 5px;
-        margin: 0 10px;
-        overflow: hidden;
-    }}
-    
-    .trait-bar {{
-        height: 100%;
-        border-radius: 5px;
-    }}
-    
-    .trait-value {{
-        width: 40px;
-        text-align: right;
-        font-size: 14px;
-    }}
-    
-    .tags-container {{
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        margin-top: 10px;
-    }}
-    
-    .flaw-tag, .contradiction-tag, .interest-tag {{
-        background: #f0f4ff;
-        border: 1px solid #d0d4ff;
-        padding: 6px 12px;
-        border-radius: 16px;
-        font-size: 14px;
-        display: inline-block;
-    }}
-    
-    .flaw-tag {{
-        background: #fff0f0;
-        border-color: #ffd0d0;
-    }}
-    
-    .contradiction-tag {{
-        background: #f0fff4;
-        border-color: #d0ffd4;
-    }}
-    
-    /* 영혼 각성 UX 스타일 */
-    .awakening-result {{
-        background: #f9f9ff;
-        border-radius: 12px;
-        padding: 20px;
-        margin: 15px 0;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        border: 1px solid #e0e0e0;
-    }}
-    
-    .speech-bubble {{
-        background: #fff;
-        border-radius: 18px;
-        padding: 15px;
-        margin-bottom: 15px;
-        position: relative;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        border: 1px solid #e5e7eb;
-    }}
-    
-    .speech-bubble:after {{
-        content: '';
-        position: absolute;
-        bottom: -10px;
-        left: 30px;
-        border-width: 10px 10px 0;
-        border-style: solid;
-        border-color: #fff transparent;
-    }}
-    
-    .persona-speech {{
-        margin: 0;
-        font-size: 15px;
-        line-height: 1.5;
-        color: #4b5563;
-    }}
-    
-    .persona-traits-highlight {{
-        background: #f0f4ff;
-        border-radius: 10px;
-        padding: 15px;
-        margin: 15px 0;
-    }}
-    
-    .persona-traits-highlight h4 {{
-        margin-top: 0;
-        margin-bottom: 10px;
-        color: #4338ca;
-    }}
-    
-    .persona-traits-highlight ul {{
-        margin: 0;
-        padding-left: 20px;
-        color: #4b5563;
-    }}
-    
-    .persona-traits-highlight li {{
-        margin-bottom: 5px;
-    }}
-    
-    .first-interaction {{
-        margin-top: 20px;
-    }}
-    
-    .interaction-buttons, .confirmation-buttons {{
-        display: flex;
-        gap: 10px;
-        margin-top: 15px;
-    }}
-    
-    .interaction-btn, .confirmation-btn {{
-        background: #f3f4f6;
-        border: 1px solid #d1d5db;
-        padding: 8px 16px;
-        border-radius: 8px;
-        font-size: 14px;
-        cursor: pointer;
-        transition: all 0.2s;
-        font-family: 'Noto Sans KR', sans-serif;
-    }}
-    
-    .interaction-btn:hover, .confirmation-btn:hover {{
-        background: #e5e7eb;
-    }}
-    
-    .confirmation-btn.primary {{
-        background: #6366f1;
-        color: white;
-        border: 1px solid #4f46e5;
-    }}
-    
-    .confirmation-btn.primary:hover {{
-        background: #4f46e5;
-    }}
-    
-    /* 요약 섹션 스타일 */
-    .summary-section {{
-        background: #f0f4ff;
-        border-radius: 10px;
-        padding: 15px;
-        margin: 15px 0;
-    }}
-    
-    .summary-section h4 {{
-        margin-top: 0;
-        margin-bottom: 10px;
-        color: #4338ca;
-    }}
-    
-    .summary-section ul {{
-        margin: 0;
-        padding-left: 20px;
-        color: #4b5563;
-    }}
-    
-    .summary-section li {{
-        margin-bottom: 5px;
-    }}
-    </style>
-    
-    <div class="frontend-persona">
-        <div class="persona-header">
-            <h2>{name}</h2>
-            <p><strong>{object_type}</strong> - {description}</p>
-        </div>
-        
-        {summary_html}
-        
-        <div class="persona-section">
-            <h3 class="section-title">성격 특성</h3>
-            <div class="traits-container">
-                {traits_html}
-            </div>
-        </div>
-        
-        <div class="persona-section">
-            <h3 class="section-title">소통 스타일</h3>
-            <p>{communication_style}</p>
-            <h3 class="section-title" style="margin-top: 15px;">유머 스타일</h3>
-            <p>{humor_style}</p>
-        </div>
-        
-        <div class="persona-section">
-            <h3 class="section-title">매력적 결함</h3>
-            <ul class="flaws-list">
-                {flaws_list}
-            </ul>
-        </div>
-    </div>
-    """
-    
-    return html
+# def get_saved_personas():
+#     """저장된 페르소나 목록 가져오기 - 더 이상 사용하지 않음"""
+#     return [], []
 
-def create_backend_view_html(persona):
-    """Create HTML representation of the backend view of the persona"""
-    if not persona:
-        return "<div class='persona-details'>페르소나가 아직 생성되지 않았습니다.</div>"
-    
-    name = persona.get("기본정보", {}).get("이름", "Unknown")
-    
-    # 백엔드 기본 정보
-    basic_info = persona.get("기본정보", {})
-    basic_info_html = ""
-    for key, value in basic_info.items():
-        basic_info_html += f"<tr><td><strong>{key}</strong></td><td>{value}</td></tr>"
-    
-    # 1. 성격 변수 요약
-    personality_summary = persona.get("성격요약", {})
-    summary_html = ""
-    
-    if personality_summary:
-        summary_html += "<div class='summary-container'>"
-        for category, value in personality_summary.items():
-            if isinstance(value, (int, float)):
-                summary_html += f"""
-                <div class='summary-item'>
-                    <div class='summary-label'>{category}</div>
-                    <div class='summary-bar-container'>
-                        <div class='summary-bar' style='width: {value}%; background: linear-gradient(90deg, #10b981, #6ee7b7);'></div>
-                    </div>
-                    <div class='summary-value'>{value:.1f}</div>
-                </div>
-                """
-        summary_html += "</div>"
-    
-    # 2. 성격 매트릭스 (5차원 빅5 시각화)
-    big5_html = ""
-    if "성격특성" in persona:
-        # 빅5 매핑 (기존 특성에서 변환)
-        big5 = {
-            "외향성(Extraversion)": persona.get("성격특성", {}).get("외향성", 50),
-            "친화성(Agreeableness)": persona.get("성격특성", {}).get("온기", 50),
-            "성실성(Conscientiousness)": persona.get("성격특성", {}).get("신뢰성", 50),
-            "신경증(Neuroticism)": 100 - persona.get("성격특성", {}).get("안정성", 50) if "안정성" in persona.get("성격특성", {}) else 50,
-            "개방성(Openness)": persona.get("성격특성", {}).get("창의성", 50)
-        }
-        
-        big5_html = "<div class='big5-matrix'>"
-        for trait, value in big5.items():
-            big5_html += f"""
-            <div class='big5-item'>
-                <div class='big5-label'>{trait}</div>
-                <div class='big5-bar-container'>
-                    <div class='big5-bar' style='width: {value}%;'></div>
-                </div>
-                <div class='big5-value'>{value}%</div>
-            </div>
-            """
-        big5_html += "</div>"
-    
-    # 3. 유머 매트릭스
-    humor_matrix = persona.get("유머매트릭스", {})
-    humor_html = ""
-    
-    if humor_matrix:
-        warmth_vs_wit = humor_matrix.get("warmth_vs_wit", 50)
-        self_vs_observational = humor_matrix.get("self_vs_observational", 50)
-        subtle_vs_expressive = humor_matrix.get("subtle_vs_expressive", 50)
-        
-        humor_html = f"""
-        <div class='humor-matrix'>
-            <div class='humor-dimension'>
-                <div class='dimension-label'>따뜻함 vs 위트</div>
-                <div class='dimension-bar-container'>
-                    <div class='dimension-indicator' style='left: {warmth_vs_wit}%;'></div>
-                    <div class='dimension-label-left'>위트</div>
-                    <div class='dimension-label-right'>따뜻함</div>
-                </div>
-            </div>
-            
-            <div class='humor-dimension'>
-                <div class='dimension-label'>자기참조 vs 관찰형</div>
-                <div class='dimension-bar-container'>
-                    <div class='dimension-indicator' style='left: {self_vs_observational}%;'></div>
-                    <div class='dimension-label-left'>관찰형</div>
-                    <div class='dimension-label-right'>자기참조</div>
-                </div>
-            </div>
-            
-            <div class='humor-dimension'>
-                <div class='dimension-label'>미묘함 vs 표현적</div>
-                <div class='dimension-bar-container'>
-                    <div class='dimension-indicator' style='left: {subtle_vs_expressive}%;'></div>
-                    <div class='dimension-label-left'>미묘함</div>
-                    <div class='dimension-label-right'>표현적</div>
-                </div>
-            </div>
-        </div>
-        """
-    
-    # 4. 매력적 결함과 모순적 특성
-    flaws_html = ""
-    contradictions_html = ""
-    
-    flaws = persona.get("매력적결함", [])
-    if flaws:
-        flaws_html = "<ul class='flaws-list'>"
-        for flaw in flaws:
-            flaws_html += f"<li>{flaw}</li>"
-        flaws_html += "</ul>"
-    
-    contradictions = persona.get("모순적특성", [])
-    if contradictions:
-        contradictions_html = "<ul class='contradictions-list'>"
-        for contradiction in contradictions:
-            contradictions_html += f"<li>{contradiction}</li>"
-        contradictions_html += "</ul>"
-    
-    # 6. 프롬프트 템플릿 (있는 경우)
-    prompt_html = ""
-    if "프롬프트" in persona:
-        prompt_text = persona.get("프롬프트", "")
-        prompt_html = f"""
-        <div class='prompt-section'>
-            <h3 class='section-title'>대화 프롬프트</h3>
-            <pre class='prompt-text'>{prompt_text}</pre>
-        </div>
-        """
-    
-    # 7. 완전한 백엔드 JSON (접이식)
-    try:
-        # 내부 상태 객체 제거 (JSON 변환 불가)
-        json_persona = {k: v for k, v in persona.items() if k not in ["personality_profile", "humor_matrix"]}
-        persona_json = json.dumps(json_persona, ensure_ascii=False, indent=2)
-        
-        json_preview = f"""
-        <details class='json-details'>
-            <summary>전체 백엔드 데이터 (JSON)</summary>
-            <pre class='json-preview'>{persona_json}</pre>
-        </details>
-        """
-    except Exception as e:
-        json_preview = f"<div class='error'>JSON 변환 오류: {str(e)}</div>"
-    
-    # 8. 전체 HTML 조합
-    html = f"""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
-    
-    .backend-persona {{
-        font-family: 'Noto Sans KR', sans-serif;
-        color: #333;
-        max-width: 100%;
-    }}
-    
-    .backend-header {{
-        background: linear-gradient(135deg, #059669, #34d399);
-        padding: 20px;
-        border-radius: 12px;
-        color: white;
-        margin-bottom: 20px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    }}
-    
-    .backend-header h2 {{
-        margin: 0;
-        font-size: 24px;
-    }}
-    
-    .backend-header p {{
-        margin: 5px 0 0 0;
-        opacity: 0.9;
-    }}
-    
-    .backend-section {{
-        background: #f8f9fa;
-        border-radius: 8px;
-        padding: 15px;
-        margin-bottom: 15px;
-        border: 1px solid #e0e0e0;
-    }}
-    
-    .section-title {{
-        font-size: 18px;
-        margin: 0 0 10px 0;
-        color: #444;
-        border-bottom: 2px solid #10b981;
-        padding-bottom: 5px;
-        display: inline-block;
-    }}
-    
-    /* 기본 정보 테이블 */
-    .basic-info-table {{
-        width: 100%;
-        border-collapse: collapse;
-    }}
-    
-    .basic-info-table td {{
-        padding: 8px;
-        border-bottom: 1px solid #e0e0e0;
-    }}
-    
-    .basic-info-table td:first-child {{
-        width: 120px;
-        font-weight: 500;
-    }}
-    
-    /* 요약 스타일 */
-    .summary-container {{
-        margin-top: 10px;
-    }}
-    
-    .summary-item {{
-        display: flex;
-        align-items: center;
-        margin-bottom: 8px;
-    }}
-    
-    .summary-label {{
-        width: 150px;
-        font-weight: 500;
-    }}
-    
-    .summary-bar-container {{
-        flex-grow: 1;
-        background: #e0e0e0;
-        height: 10px;
-        border-radius: 5px;
-        margin: 0 10px;
-        overflow: hidden;
-    }}
-    
-    .summary-bar {{
-        height: 100%;
-        border-radius: 5px;
-    }}
-    
-    .summary-value {{
-        width: 40px;
-        text-align: right;
-        font-size: 14px;
-    }}
-    
-    /* 빅5 성격 매트릭스 */
-    .big5-matrix {{
-        margin-top: 15px;
-    }}
-    
-    .big5-item {{
-        display: flex;
-        align-items: center;
-        margin-bottom: 12px;
-    }}
-    
-    .big5-label {{
-        width: 150px;
-        font-weight: 500;
-    }}
-    
-    .big5-bar-container {{
-        flex-grow: 1;
-        background: #e0e0e0;
-        height: 12px;
-        border-radius: 6px;
-        margin: 0 10px;
-        overflow: hidden;
-    }}
-    
-    .big5-bar {{
-        height: 100%;
-        border-radius: 6px;
-        background: linear-gradient(90deg, #10b981, #34d399);
-    }}
-    
-    .big5-value {{
-        width: 40px;
-        text-align: right;
-        font-weight: 500;
-    }}
-    
-    /* 유머 매트릭스 스타일 */
-    .humor-matrix {{
-        margin-top: 15px;
-    }}
-    
-    .humor-dimension {{
-        margin-bottom: 20px;
-    }}
-    
-    .dimension-label {{
-        font-weight: 500;
-        margin-bottom: 5px;
-    }}
-    
-    .dimension-bar-container {{
-        height: 20px;
-        background: #e0e0e0;
-        border-radius: 10px;
-        position: relative;
-        margin-top: 5px;
-    }}
-    
-    .dimension-indicator {{
-        width: 20px;
-        height: 20px;
-        background: #10b981;
-        border-radius: 50%;
-        position: absolute;
-        top: 0;
-        transform: translateX(-50%);
-    }}
-    
-    .dimension-label-left, .dimension-label-right {{
-        position: absolute;
-        top: -20px;
-        font-size: 12px;
-        color: #666;
-    }}
-    
-    .dimension-label-left {{
-        left: 10px;
-    }}
-    
-    .dimension-label-right {{
-        right: 10px;
-    }}
-    
-    /* 매력적 결함 및 모순적 특성 */
-    .flaws-list, .contradictions-list {{
-        margin: 0;
-        padding-left: 20px;
-    }}
-    
-    .flaws-list li, .contradictions-list li {{
-        margin-bottom: 6px;
-    }}
-    
-    /* 프롬프트 섹션 */
-    .prompt-text {{
-        background: #f3f4f6;
-        border-radius: 6px;
-        padding: 15px;
-        font-family: monospace;
-        white-space: pre-wrap;
-        font-size: 14px;
-        color: #374151;
-        max-height: 400px;
-        overflow-y: auto;
-    }}
-    
-    /* JSON 미리보기 스타일 */
-    .json-details {{
-        margin-top: 15px;
-    }}
-    
-    .json-details summary {{
-        cursor: pointer;
-        padding: 10px;
-        background: #f0f0f0;
-        border-radius: 5px;
-        font-weight: 500;
-    }}
-    
-    .json-preview {{
-        background: #f8f8f8;
-        padding: 15px;
-        border-radius: 5px;
-        border: 1px solid #ddd;
-        margin-top: 10px;
-        overflow-x: auto;
-        color: #333;
-        font-family: monospace;
-        font-size: 14px;
-        line-height: 1.5;
-        max-height: 400px;
-        overflow-y: auto;
-    }}
-    
-    .error {{
-        color: #e53e3e;
-        padding: 10px;
-        background: #fff5f5;
-        border-radius: 5px;
-        margin-top: 10px;
-    }}
-    </style>
-    
-    <div class="backend-persona">
-        <div class="backend-header">
-            <h2>{name} - 백엔드 데이터</h2>
-            <p>상세 정보와 내부 변수 확인</p>
-        </div>
-        
-        <div class="backend-section">
-            <h3 class="section-title">기본 정보</h3>
-            <table class="basic-info-table">
-                {basic_info_html}
-            </table>
-        </div>
-        
-        <div class="backend-section">
-            <h3 class="section-title">성격 요약 (Big 5)</h3>
-            {big5_html}
-        </div>
-        
-        <div class="backend-section">
-            <h3 class="section-title">유머 매트릭스 (3차원)</h3>
-            {humor_html}
-        </div>
-        
-        <div class="backend-section">
-            <h3 class="section-title">매력적 결함</h3>
-            {flaws_html}
-            
-            <h3 class="section-title" style="margin-top: 20px;">모순적 특성</h3>
-            {contradictions_html}
-        </div>
-        
-        {prompt_html}
-        
-        <div class="backend-section">
-            <h3 class="section-title">전체 백엔드 데이터</h3>
-            {json_preview}
-        </div>
-    </div>
-    """
-    
-    return html
+# def load_persona_from_selection(selected_row, personas_list):
+#     """선택된 페르소나 로드 - 더 이상 사용하지 않음"""
+#     return None, "이 기능은 더 이상 사용하지 않습니다. JSON 업로드를 사용하세요.", {}, {}, None, [], [], [], ""
 
-def get_personas_list():
-    """Get list of personas for the dataframe"""
-    personas = list_personas()
+def chat_with_loaded_persona(persona, user_message, chat_history=None):
+    """페르소나와 채팅 - 완전한 타입 안전성 보장"""
     
-    # Convert to dataframe format
-    df_data = []
-    for i, persona in enumerate(personas):
-        df_data.append([
-            persona["name"],
-            persona["type"],
-            persona["created_at"],
-            persona["filename"]
-        ])
-    
-    return df_data, personas
-
-def load_selected_persona(selected_row, personas_list):
-    """Load persona from the selected row in the dataframe"""
-    if selected_row is None or len(selected_row) == 0:
-        return None, "선택된 페르소나가 없습니다.", None, None, None
-    
-    try:
-        # Get filepath from selected row
-        selected_index = selected_row.index[0] if hasattr(selected_row, 'index') else 0
-        filepath = personas_list[selected_index]["filepath"]
-        
-        # Load persona
-        persona = load_persona(filepath)
-        if not persona:
-            return None, "페르소나 로딩에 실패했습니다.", None, None, None
-        
-        # Generate HTML views
-        frontend_view, backend_view = toggle_frontend_backend_view(persona)
-        frontend_html = create_frontend_view_html(frontend_view)
-        backend_html = create_backend_view_html(backend_view)
-        
-        # Generate personality chart
-        chart_image_path = generate_personality_chart(frontend_view)
-        
-        return persona, f"{persona['기본정보']['이름']}을(를) 로드했습니다.", frontend_html, backend_html, chart_image_path
-    
-    except Exception as e:
-        return None, f"페르소나 로딩 중 오류 발생: {str(e)}", None, None, None
-
-# 페르소나와 대화하는 함수 추가
-def chat_with_persona(persona, user_message, chat_history=None):
-    """
-    페르소나와 대화하는 함수
-    """
+    # 기본값 설정
     if chat_history is None:
         chat_history = []
-        
-    if not user_message.strip():
+    
+    # 입력 검증
+    if not user_message or not isinstance(user_message, str):
         return chat_history, ""
-        
-    if not persona:
-        # Gradio 4.x 호환 메시지 형식 (튜플)
-        chat_history.append([user_message, "페르소나가 로드되지 않았습니다. 먼저 페르소나를 생성하거나 불러오세요."])
+    
+    # 페르소나 체크
+    if not persona or not isinstance(persona, dict):
+        error_msg = "❌ 먼저 페르소나를 불러와주세요! 대화하기 탭에서 JSON 파일을 업로드하세요."
+        chat_history.append([user_message, error_msg])
+        return chat_history, ""
+    
+    # 환경변수 API 키 체크
+    if not persona_generator or not hasattr(persona_generator, 'api_key') or not persona_generator.api_key:
+        error_msg = "❌ API 키가 설정되지 않았습니다. 허깅페이스 스페이스 설정에서 GEMINI_API_KEY 환경변수를 추가해주세요!"
+        chat_history.append([user_message, error_msg])
         return chat_history, ""
     
     try:
-        # 페르소나 생성기에서 대화 기능 호출
-        # 이전 대화 기록 변환 필요 - 리스트에서 튜플 형식으로
-        converted_history = []
-        for msg in chat_history:
-            if isinstance(msg, list) and len(msg) == 2:
-                # 리스트 형식이면 튜플로 변환
-                converted_history.append((msg[0] if msg[0] else "", msg[1] if msg[1] else ""))
-            elif isinstance(msg, tuple) and len(msg) == 2:
-                # 이미 튜플 형식이면 그대로 사용
-                converted_history.append(msg)
+        # 글로벌 persona_generator 사용 (환경변수에서 설정된 API 키 사용)
+        generator = persona_generator
         
-        # 페르소나 생성기에서 대화 함수 호출
-        response = persona_generator.chat_with_persona(persona, user_message, converted_history)
+        # 대화 기록 안전한 변환: Gradio 4.x -> PersonaGenerator 형식
+        conversation_history = []
         
-        # Gradio 4.x 메시지 형식으로 추가 (리스트)
-        chat_history.append([user_message, response])
+        if chat_history and isinstance(chat_history, list):
+            for chat_turn in chat_history:
+                try:
+                    # 타입별 안전한 처리
+                    if chat_turn is None:
+                        continue
+                    elif isinstance(chat_turn, dict):
+                        # Messages format: {"role": "user/assistant", "content": "message"}
+                        role = chat_turn.get("role")
+                        content = chat_turn.get("content")
+                        
+                        if role and content and role in ["user", "assistant"]:
+                            conversation_history.append({"role": str(role), "content": str(content)})
+                    elif isinstance(chat_turn, (list, tuple)) and len(chat_turn) >= 2:
+                        # 구 Gradio 형식: [user_message, bot_response] (호환성)
+                        user_msg = chat_turn[0]
+                        bot_msg = chat_turn[1]
+                        
+                        if user_msg is not None and str(user_msg).strip():
+                            conversation_history.append({"role": "user", "content": str(user_msg)})
+                        if bot_msg is not None and str(bot_msg).strip():
+                            conversation_history.append({"role": "assistant", "content": str(bot_msg)})
+                    else:
+                        # 예상치 못한 형식은 무시
+                        print(f"⚠️ 예상치 못한 채팅 형식 무시: {type(chat_turn)}")
+                        continue
+                        
+                except Exception as turn_error:
+                    print(f"⚠️ 채팅 기록 변환 오류: {str(turn_error)}")
+                    continue
+        
+        # 세션 ID 안전하게 생성
+        try:
+            persona_name = ""
+            if isinstance(persona, dict) and "기본정보" in persona:
+                basic_info = persona["기본정보"]
+                if isinstance(basic_info, dict) and "이름" in basic_info:
+                    persona_name = str(basic_info["이름"])
+            
+            if not persona_name:
+                persona_name = "알 수 없는 페르소나"
+                
+            session_id = f"{persona_name}_{hash(str(persona)[:100]) % 10000}"
+        except Exception:
+            session_id = "default_session"
+        
+        # 페르소나와 채팅 실행
+        response = generator.chat_with_persona(persona, user_message, conversation_history, session_id)
+        
+        # 응답 검증
+        if not isinstance(response, str):
+            response = str(response) if response else "죄송합니다. 응답을 생성할 수 없었습니다."
+        
+        # Gradio 4.x messages format으로 안전하게 추가
+        if not isinstance(chat_history, list):
+            chat_history = []
+        
+        # Messages format: {"role": "user", "content": "message"}
+        chat_history.append({"role": "user", "content": user_message})
+        chat_history.append({"role": "assistant", "content": response})
         
         return chat_history, ""
+        
     except Exception as e:
+        # 상세한 오류 로깅
         import traceback
-        error_details = traceback.format_exc()
-        print(f"대화 오류: {error_details}")
-        chat_history.append([user_message, f"대화 중 오류가 발생했습니다: {str(e)}"])
+        error_traceback = traceback.format_exc()
+        print(f"🚨 채팅 오류 발생:")
+        print(f"   오류 메시지: {str(e)}")
+        print(f"   오류 타입: {type(e)}")
+        print(f"   상세 스택: {error_traceback}")
+        
+        # 사용자 친화적 오류 메시지
+        if "string indices must be integers" in str(e):
+            friendly_error = "데이터 형식 오류가 발생했습니다. 페르소나를 다시 업로드해보세요. 🔄"
+        elif "API" in str(e).upper():
+            friendly_error = "API 연결에 문제가 있어요. 환경변수 설정을 확인해보시겠어요? 😊"
+        elif "network" in str(e).lower() or "connection" in str(e).lower():
+            friendly_error = "인터넷 연결을 확인해보세요! 🌐"
+        else:
+            friendly_error = f"죄송합니다. 일시적인 문제가 발생했어요. 😅\n\n🔍 기술 정보: {str(e)}"
+        
+        # 안전하게 오류 메시지 추가 (messages format)
+        try:
+            if not isinstance(chat_history, list):
+                chat_history = []
+            chat_history.append({"role": "user", "content": user_message})
+            chat_history.append({"role": "assistant", "content": friendly_error})
+        except Exception:
+            chat_history = [
+                {"role": "user", "content": user_message},
+                {"role": "assistant", "content": friendly_error}
+            ]
+            
         return chat_history, ""
 
-# 메인 Gradio 인터페이스 구성 함수
-def create_interface():
-    # 현재 persona 상태 저장 - Gradio 5.x에서 변경된 방식 적용
-    current_persona = gr.State(value=None)
-    personas_list = gr.State(value=[])
+def import_persona_from_json(json_file):
+    """JSON 파일에서 페르소나 가져오기"""
+    if json_file is None:
+        return None, "JSON 파일을 업로드해주세요.", "", {}
     
-    with gr.Blocks(theme=theme, css=css) as app:
+    try:
+        # 파일 경로 확인 및 읽기
+        if isinstance(json_file, str):
+            # 파일 경로인 경우
+            file_path = json_file
+        else:
+            # 파일 객체인 경우 (Gradio 업로드)
+            file_path = json_file.name if hasattr(json_file, 'name') else str(json_file)
+        
+        # JSON 파일 읽기
+        with open(file_path, 'r', encoding='utf-8') as f:
+            persona_data = json.load(f)
+        
+        # 페르소나 데이터 검증
+        if not isinstance(persona_data, dict):
+            return None, "❌ 올바른 JSON 형식이 아닙니다.", "", {}
+        
+        if "기본정보" not in persona_data:
+            return None, "❌ 올바른 페르소나 JSON 파일이 아닙니다. '기본정보' 키가 필요합니다.", "", {}
+        
+        # 기본 정보 추출
+        basic_info = persona_data.get("기본정보", {})
+        persona_name = basic_info.get("이름", "Unknown")
+        personality_traits = persona_data.get("성격특성", {})
+        
+        # AI 기반 인사말 생성 (로드 시에도 조정된 성격 반영)
+        global persona_generator
+        try:
+            if persona_generator:
+                ai_greeting = persona_generator.generate_ai_based_greeting(persona_data, personality_traits)
+                greeting = f"### 🤖 JSON에서 깨어난 친구\n\n{ai_greeting}\n\n💾 *\"JSON에서 다시 깨어났어! 내 성격 기억나?\"*"
+            else:
+                # 폴백: 기존 방식
+                personality_preview = generate_personality_preview(persona_name, personality_traits, basic_info)
+                greeting = f"### 🤖 JSON에서 깨어난 친구\n\n{personality_preview}\n\n💾 *\"JSON에서 다시 깨어났어! 내 성격 기억나?\"*"
+        except Exception as e:
+            print(f"⚠️ JSON 로드 시 AI 인사말 생성 실패: {e}")
+            # 폴백: 기존 방식
+            personality_preview = generate_personality_preview(persona_name, personality_traits, basic_info)
+            greeting = f"### 🤖 JSON에서 깨어난 친구\n\n{personality_preview}\n\n💾 *\"JSON에서 다시 깨어났어! 내 성격 기억나?\"*"
+        
+        return (persona_data, f"✅ {persona_name} 페르소나를 JSON에서 불러왔습니다!", 
+                greeting, basic_info)
+    
+    except FileNotFoundError:
+        return None, "❌ 파일을 찾을 수 없습니다.", "", {}
+    except json.JSONDecodeError as e:
+        return None, f"❌ JSON 파일 형식이 올바르지 않습니다: {str(e)}", "", {}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return None, f"❌ JSON 불러오기 중 오류 발생: {str(e)}", "", {}
+
+def format_personality_traits(persona):
+    """성격 특성을 특성 중심의 간단한 리스트 형태로 포맷 (캡쳐 스타일)"""
+    global persona_generator
+    
+    if not persona or "성격특성" not in persona:
+        return "페르소나가 생성되지 않았습니다."
+    
+    # 글로벌 persona_generator 사용 (API 설정이 적용된 상태)
+    if persona_generator is None:
+        persona_generator = PersonaGenerator()
+
+    # 기본 정보에서 사물의 특성 추출
+    basic_info = persona.get("기본정보", {})
+    object_type = basic_info.get("유형", "")
+    purpose = basic_info.get("용도", "")
+    
+    # 생애 스토리에서 특성 추출
+    life_story = persona.get("생애스토리", {})
+    
+    # 매력적 결함
+    attractive_flaws = persona.get("매력적결함", [])
+    
+    # 성격 특성
+    personality_traits = persona["성격특성"]
+    
+    # 특성 리스트 생성
+    characteristics = []
+    
+    # 1. 온기 특성
+    warmth = personality_traits.get("온기", 50)
+    if warmth >= 70:
+        characteristics.append("따뜻하고 포근한 마음")
+    elif warmth >= 50:
+        characteristics.append("친근하고 다정한 성격")
+    else:
+        characteristics.append("차분하고 진중한 면")
+    
+    # 2. 사물의 고유 특성 (유형 기반)
+    if "곰" in object_type or "인형" in object_type:
+        characteristics.append("부드럽고 포근한 감촉")
+    elif "책" in object_type:
+        characteristics.append("지식과 이야기를 담고 있음")
+    elif "컵" in object_type or "머그" in object_type:
+        characteristics.append("따뜻한 음료와 함께하는 시간")
+    elif "시계" in object_type:
+        characteristics.append("시간의 소중함을 알려줌")
+    elif "연필" in object_type or "펜" in object_type:
+        characteristics.append("창작과 기록의 동반자")
+    else:
+        characteristics.append(f"{object_type}만의 독특한 매력")
+    
+    # 3. 활동 시간대나 환경 특성
+    extraversion = personality_traits.get("외향성", 50)
+    if extraversion >= 70:
+        characteristics.append("낮에 더 활발해짐")
+    elif extraversion <= 30:
+        characteristics.append("밤에 더 활발해짐")
+    else:
+        characteristics.append("하루 종일 일정한 에너지")
+    
+    # 4. 매력적 결함 중 하나를 특성으로 표현
+    if attractive_flaws:
+        flaw = attractive_flaws[0]
+        if "털" in flaw:
+            characteristics.append("가끔 털이 헝클어져서 걱정")
+        elif "먼지" in flaw:
+            characteristics.append("먼지가 쌓이는 걸 신경 씀")
+        elif "얼룩" in flaw:
+            characteristics.append("작은 얼룩도 눈에 띄어 고민")
+        elif "색" in flaw:
+            characteristics.append("색이 바래는 것을 조금 걱정")
+        else:
+            characteristics.append("완벽하지 않은 모습도 받아들임")
+    
+    # 5. 기억과 경험
+    if life_story:
+        characteristics.append("오래된 이야기들 기억")
+    else:
+        characteristics.append("새로운 추억 만들기를 기대")
+    
+    # ✨ 아이콘과 함께 리스트 형태로 반환
+    result = ""
+    for char in characteristics:
+        result += f"✨ {char}\n\n"
+    
+    return result
+
+def display_persona_summary(persona):
+    """페르소나 요약 정보 표시"""
+    if not persona:
+        return "페르소나를 먼저 생성해주세요."
+    
+    basic_info = persona.get("기본정보", {})
+    name = basic_info.get("이름", "이름 없음")
+    object_type = basic_info.get("유형", "알 수 없는 사물")
+    
+    # 성격 특성 요약
+    personality_summary = format_personality_traits(persona)
+    
+    # 유머 스타일
+    humor_style = persona.get("유머스타일", "일반적")
+    
+    # 매력적 결함
+    flaws = persona.get("매력적결함", [])
+    flaws_text = "\\n".join([f"• {flaw}" for flaw in flaws[:3]])  # 최대 3개만 표시
+    
+    summary = f"""
+### 👋 {name} 님을 소개합니다!
+
+**종류**: {object_type}  
+**유머 스타일**: {humor_style}
+
+{personality_summary}
+
+### 💎 매력적인 특징들
+{flaws_text}
+"""
+    
+    return summary
+
+def create_api_config_section():
+    """API 설정 섹션 생성 - 더 이상 사용하지 않음"""
+    pass
+
+def apply_api_configuration(api_provider, api_key):
+    """API 설정 적용 - 더 이상 사용하지 않음"""
+    pass
+
+def test_api_connection(api_provider, api_key):
+    """API 연결 테스트 - 더 이상 사용하지 않음"""
+    pass
+
+def export_conversation_history():
+    """대화 기록을 JSON으로 내보내기"""
+    global persona_generator
+    if persona_generator and hasattr(persona_generator, 'conversation_memory'):
+        json_data = persona_generator.conversation_memory.export_to_json()
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"conversation_history_{timestamp}.json"
+        
+        # 임시 파일 저장
+        temp_dir = "/tmp" if os.path.exists("/tmp") else "."
+        filepath = os.path.join(temp_dir, filename)
+        
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(json_data)
+        
+        return filepath  # 파일 경로만 반환
+    else:
+        # 빈 대화 기록 파일 생성
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"conversation_empty_{timestamp}.json"
+        temp_dir = "/tmp" if os.path.exists("/tmp") else "."
+        filepath = os.path.join(temp_dir, filename)
+        
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write('{"conversations": [], "message": "대화 기록이 없습니다."}')
+        
+        return filepath
+
+def import_conversation_history(json_file):
+    """JSON에서 대화 기록 가져오기"""
+    global persona_generator
+    try:
+        if json_file is None:
+            return "파일을 선택해주세요."
+        
+        # 파일 타입 확인 및 내용 읽기
+        if hasattr(json_file, 'read'):
+            # 파일 객체인 경우
+            content = json_file.read()
+            if isinstance(content, bytes):
+                content = content.decode('utf-8')
+        elif isinstance(json_file, str):
+            # 파일 경로인 경우
+            with open(json_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+        else:
+            # Gradio 파일 객체인 경우 (NamedString 등)
+            if hasattr(json_file, 'name'):
+                with open(json_file.name, 'r', encoding='utf-8') as f:
+                    content = f.read()
+            else:
+                return "❌ 지원하지 않는 파일 형식입니다."
+        
+        # persona_generator 초기화 확인
+        if persona_generator is None:
+            persona_generator = PersonaGenerator()
+        
+        # 대화 기록 가져오기
+        success = persona_generator.conversation_memory.import_from_json(content)
+        
+        if success:
+            summary = persona_generator.conversation_memory.get_conversation_summary()
+            return f"✅ 대화 기록을 성공적으로 가져왔습니다!\n\n{summary}"
+        else:
+            return "❌ 파일 형식이 올바르지 않습니다."
+    
+    except Exception as e:
+        return f"❌ 가져오기 실패: {str(e)}"
+
+def show_conversation_analytics():
+    """대화 분석 결과 표시"""
+    global persona_generator
+    if not persona_generator or not hasattr(persona_generator, 'conversation_memory'):
+        return "분석할 대화가 없습니다."
+    
+    memory = persona_generator.conversation_memory
+    
+    # 기본 통계
+    analytics = f"## 📊 대화 분석 리포트\n\n"
+    analytics += f"### 🔢 기본 통계\n"
+    analytics += f"• 총 대화 수: {len(memory.conversations)}회\n"
+    analytics += f"• 키워드 수: {len(memory.keywords)}개\n"
+    analytics += f"• 활성 세션: {len(memory.user_profile)}개\n\n"
+    
+    # 상위 키워드
+    top_keywords = memory.get_top_keywords(limit=10)
+    if top_keywords:
+        analytics += f"### 🔑 상위 키워드 TOP 10\n"
+        for i, (word, data) in enumerate(top_keywords, 1):
+            analytics += f"{i}. **{word}** ({data['category']}) - {data['total_frequency']}회\n"
+        analytics += "\n"
+    
+    # 카테고리별 키워드
+    categories = {}
+    for word, data in memory.keywords.items():
+        category = data['category']
+        if category not in categories:
+            categories[category] = []
+        categories[category].append((word, data['total_frequency']))
+    
+    analytics += f"### 📂 카테고리별 관심사\n"
+    for category, words in categories.items():
+        top_words = sorted(words, key=lambda x: x[1], reverse=True)[:3]
+        word_list = ", ".join([f"{word}({freq})" for word, freq in top_words])
+        analytics += f"**{category}**: {word_list}\n"
+    
+    analytics += "\n"
+    
+    # 최근 감정 경향
+    if memory.conversations:
+        recent_sentiments = [conv['sentiment'] for conv in memory.conversations[-10:]]
+        sentiment_counts = {"긍정적": 0, "부정적": 0, "중립적": 0}
+        for sentiment in recent_sentiments:
+            sentiment_counts[sentiment] = sentiment_counts.get(sentiment, 0) + 1
+        
+        analytics += f"### 😊 최근 감정 경향 (최근 10회)\n"
+        for sentiment, count in sentiment_counts.items():
+            percentage = (count / len(recent_sentiments)) * 100
+            analytics += f"• {sentiment}: {count}회 ({percentage:.1f}%)\n"
+    
+    return analytics
+
+def get_keyword_suggestions(current_message=""):
+    """현재 메시지 기반 키워드 제안"""
+    global persona_generator
+    if not persona_generator or not hasattr(persona_generator, 'conversation_memory'):
+        return "키워드 분석을 위한 대화 기록이 없습니다."
+    
+    memory = persona_generator.conversation_memory
+    
+    if current_message:
+        # 현재 메시지에서 키워드 추출
+        extracted = memory._extract_keywords(current_message)
+        suggestions = f"## 🎯 '{current_message}'에서 추출된 키워드\n\n"
+        
+        if extracted:
+            for kw in extracted:
+                suggestions += f"• **{kw['word']}** ({kw['category']}) - {kw['frequency']}회\n"
+        else:
+            suggestions += "추출된 키워드가 없습니다.\n"
+        
+        # 관련 과거 대화 찾기
+        context = memory.get_relevant_context(current_message)
+        if context["relevant_conversations"]:
+            suggestions += f"\n### 🔗 관련된 과거 대화\n"
+            for conv in context["relevant_conversations"][:3]:
+                suggestions += f"• {conv['user_message'][:30]}... (감정: {conv['sentiment']})\n"
+        
+        return suggestions
+    else:
+        # 전체 키워드 요약
+        top_keywords = memory.get_top_keywords(limit=15)
+        if top_keywords:
+            suggestions = "## 🔑 전체 키워드 요약\n\n"
+            for word, data in top_keywords:
+                suggestions += f"• **{word}** ({data['category']}) - {data['total_frequency']}회, 최근: {data['last_mentioned'][:10]}\n"
+            return suggestions
+        else:
+            return "아직 수집된 키워드가 없습니다."
+
+# 메인 인터페이스 생성
+def create_main_interface():
+    # 한글 폰트 설정
+    setup_korean_font()
+    
+    # CSS 스타일 추가 - 텍스트 가시성 향상
+    css = """
+    .persona-greeting {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white !important;
+        padding: 15px;
+        border-radius: 10px;
+        margin: 10px 0;
+        font-weight: bold;
+    }
+    
+    .gradio-container {
+        color: #333 !important;
+    }
+    
+    .gr-markdown p {
+        color: #333 !important;
+    }
+    
+    .gr-textbox input {
+        color: #333 !important;
+    }
+    
+    .gr-json {
+        color: #333 !important;
+    }
+    """
+    
+    # Gradio 앱 생성
+    with gr.Blocks(title="놈팽쓰(MemoryTag) - 사물 페르소나 생성기", css=css, theme="soft") as app:
+        # State 변수들 - Gradio 5.31.0에서는 반드시 Blocks 내부에서 정의
+        current_persona = gr.State(value=None)
+        personas_list = gr.State(value=[])
+        
         gr.Markdown("""
-        # 놈팽쓰(MemoryTag): 당신 곁의 사물, 이제 친구가 되다
-        이 데모는 일상 속 사물에 AI 페르소나를 부여하여 대화할 수 있게 해주는 서비스입니다.
+        # 🎭 놈팽쓰(MemoryTag): 당신 곁의 사물, 이제 친구가 되다
+        일상 속 사물에 AI 페르소나를 부여하여 대화할 수 있게 해주는 서비스입니다.
         """)
         
         with gr.Tabs() as tabs:
-            with gr.Tab("페르소나 생성", id="persona_creation"):
+            # 페르소나 생성 탭
+            with gr.Tab("페르소나 생성", id="creation"):
                 with gr.Row():
                     with gr.Column(scale=1):
-                        # 이미지 업로드 영역
-                        image_input = gr.Image(
-                            type="pil", 
-                            width=300, 
-                            height=300, 
-                            label="사물 이미지를 업로드하세요"
-                        )
-                        # 입력 필드들
+                        gr.Markdown("### 🌟 1단계: 영혼 발견하기")
+                        image_input = gr.Image(type="pil", label="사물 이미지 업로드")
+                        
                         with gr.Group():
-                            gr.Markdown("### 맥락 정보 입력")
-                            name_input = gr.Textbox(label="사물 이름 (빈칸일 경우 자동 생성)", placeholder="예: 책상 위 램프")
-                            
+                            gr.Markdown("### 기본 정보")
+                            name_input = gr.Textbox(label="사물 이름 (선택사항)", placeholder="예: 책상 위 램프")
                             location_input = gr.Dropdown(
                                 choices=["집", "사무실", "여행 중", "상점", "학교", "카페", "기타"],
                                 label="주로 어디에 있나요?",
                                 value="집"
                             )
-                            
                             time_spent_input = gr.Dropdown(
                                 choices=["새것", "몇 개월", "1년 이상", "오래됨", "중고/빈티지"],
                                 label="얼마나 함께했나요?",
                                 value="몇 개월"
                             )
-                            
-                            object_type_input = gr.Dropdown(
-                                choices=["가전제품", "가구", "전자기기", "장식품", "도구", "개인용품", "기타"],
-                                label="어떤 종류의 사물인가요?",
-                                value="가구"
+                            # AI 분석 결과 표시용 (사용자 입력 불가)
+                            ai_analyzed_object_display = gr.Textbox(
+                                label="AI가 분석한 사물 유형",
+                                value="이미지 업로드 후 자동 분석됩니다",
+                                interactive=False,
+                                info="🤖 AI가 이미지를 분석하여 자동으로 파악합니다"
+                            )
+                            # 🆕 사물 용도/역할 입력 필드 추가
+                            purpose_input = gr.Textbox(
+                                label="이 사물의 용도/역할 (중요!) 🎯", 
+                                placeholder="예: 나를 채찍질해서 운동하라고 닥달하는 역할, 밤늦게 공부할 때 응원해주는 친구, 아침에 일어나도록 깨워주는 알람 역할...",
+                                lines=2,
+                                info="이 사물과 어떤 소통을 원하시나요? 구체적으로 적어주세요!"
                             )
                         
-                        # 사용자 입력들 상태 저장 - Gradio 5.x에서 변경된 방식 적용
-                        user_inputs = gr.State(value={})
-                        
-                        with gr.Row():
-                            discover_btn = gr.Button("1. 영혼 발견하기", variant="primary")
-                            create_btn = gr.Button("2. 페르소나 생성", variant="secondary")
-                            
-                        # 영혼 깨우기 결과 표시 영역
-                        awakening_output = gr.HTML(visible=False)
-                        error_output = gr.Markdown(visible=False)
+                        create_btn = gr.Button("🌟 영혼 깨우기", variant="primary", size="lg")
+                        status_output = gr.Markdown("")
                     
                     with gr.Column(scale=1):
-                        # 이미지 분석 결과
-                        image_analysis_output = gr.JSON(label="이미지 분석 결과", visible=False)
-                        # 페르소나 기본 정보 및 특성
-                        basic_info_output = gr.JSON(label="기본 정보")
-                        personality_traits_output = gr.JSON(label="페르소나 특성")
+                        # 페르소나 각성 결과
+                        persona_awakening = gr.Markdown("", elem_classes=["persona-greeting"])
                         
-                        # 페르소나 저장 및 내보내기 버튼
-                        with gr.Row():
-                            save_btn = gr.Button("페르소나 저장", variant="primary")
-                            download_btn = gr.Button("JSON으로 내보내기", variant="secondary")
+                        # 페르소나 정보 표시 (사용자 친화적 형태)
+                        persona_summary_display = gr.Markdown("", label="페르소나 정보")
                         
-                        # 성향 미세조정
-                        with gr.Accordion("성향 미세조정", open=False):
+                        # 페르소나 각성 완료 후 조정 섹션 표시
+                        adjustment_section = gr.Group(visible=False)
+                        with adjustment_section:
+                            gr.Markdown("### 🎯 2단계: 친구 성격 미세조정")
+                            gr.Markdown("**3가지 핵심 지표**로 성격을 조정해보세요! (유머감각은 모든 페르소나가 기본적으로 높습니다 😄)")
+                            
                             with gr.Row():
-                                with gr.Column(scale=1):
-                                    warmth_slider = gr.Slider(0, 100, label="온기", step=1)
-                                    competence_slider = gr.Slider(0, 100, label="능력", step=1)
-                                    creativity_slider = gr.Slider(0, 100, label="창의성", step=1)
-                                with gr.Column(scale=1):
-                                    extraversion_slider = gr.Slider(0, 100, label="외향성", step=1)
-                                    humor_slider = gr.Slider(0, 100, label="유머감각", step=1)
-                                    trust_slider = gr.Slider(0, 100, label="신뢰도", step=1)
+                                with gr.Column():
+                                    warmth_slider = gr.Slider(
+                                        minimum=0, maximum=100, value=50, step=1,
+                                        label="온기 (따뜻함 정도)", 
+                                        info="0: 차가움 ↔ 100: 따뜻함"
+                                    )
+                                    competence_slider = gr.Slider(
+                                        minimum=0, maximum=100, value=50, step=1,
+                                        label="능력 (유능함 정도)",
+                                        info="0: 서툼 ↔ 100: 능숙함"
+                                    )
+                                
+                                with gr.Column():
+                                    extraversion_slider = gr.Slider(
+                                        minimum=0, maximum=100, value=50, step=1,
+                                        label="외향성 (활발함 정도)",
+                                        info="0: 내향적, 조용함 ↔ 100: 외향적, 활발함"
+                                    )
                                     
-                            humor_style = gr.Dropdown(
-                                choices=["witty_wordsmith", "warm_humorist", "playful_trickster", "sharp_observer", "self_deprecating"],
-                                label="유머 스타일",
-                                value="warm_humorist"
-                            )
-                            apply_traits_btn = gr.Button("성향 적용하기")
-                
-                # 유머 스타일 시각화
-                humor_chart_output = gr.Plot(label="유머 스타일 매트릭스")
-                
-                # 페르소나 다운로드 관련 출력
-                json_output = gr.Textbox(label="JSON 데이터", visible=False)
-                download_output = gr.File(label="다운로드", visible=False)
-                
-            with gr.Tab("세부 정보", id="persona_details"):
+                                    humor_style_radio = gr.Radio(
+                                        choices=["따뜻한 유머러스", "위트있는 재치꾼", "날카로운 관찰자", "자기 비하적", "장난꾸러기"],
+                                        value="따뜻한 유머러스",
+                                        label="유머 스타일 (모든 페르소나는 유머감각이 높습니다!)",
+                                        info="어떤 방식으로 재미있게 만들까요?"
+                                    )
+                            
+                            # 미리보기 표시 (실시간 업데이트 없음)
+                            personality_preview = gr.Markdown("", elem_classes=["persona-greeting"], label="성격 조정 미리보기")
+                            
+                            with gr.Row():
+                                preview_btn = gr.Button("👁️ 미리보기", variant="secondary")
+                                adjust_btn = gr.Button("✨ 성격 조정 반영", variant="primary")
+                            
+                            with gr.Row():
+                                finalize_btn = gr.Button("🎉 친구 확정하기!", variant="secondary")
+                        
+                        # 조정 결과 표시
+                        adjustment_result = gr.Markdown("")
+                        adjusted_info_output = gr.JSON(label="조정된 성격", visible=False)
+                        
+                        # 최종 완성 섹션
+                        personality_traits_output = gr.JSON(label="성격 특성", visible=False)
+                        
+                        # 다운로드 섹션
+                        with gr.Group():
+                            gr.Markdown("### 📁 페르소나 내보내기")
+                            with gr.Row():
+                                save_btn = gr.Button("💾 페르소나 저장", variant="secondary")
+                                persona_export_btn = gr.Button("📥 JSON 파일로 내보내기", variant="outline")
+                            persona_download_file = gr.File(label="다운로드", visible=False)
+            
+            # 상세 정보 탭
+            with gr.Tab("상세 정보", id="details"):
                 with gr.Row():
-                    with gr.Column(scale=1):
-                        # 매력적 결함 데이터프레임
-                        attractive_flaws_df_output = gr.Dataframe(
+                    with gr.Column():
+                        chart_btn = gr.Button("📊 성격 차트 생성", variant="secondary")
+                        personality_chart_output = gr.Plot(label="성격 차트")
+                        humor_chart_output = gr.Plot(label="유머 매트릭스")
+                    
+                    with gr.Column():
+                        attractive_flaws_output = gr.Dataframe(
                             headers=["매력적 결함", "효과"],
                             label="매력적 결함",
                             interactive=False
                         )
-                        
-                        # 모순적 특성 데이터프레임
-                        contradictions_df_output = gr.Dataframe(
+                        contradictions_output = gr.Dataframe(
                             headers=["모순적 특성", "효과"],
                             label="모순적 특성",
                             interactive=False
                         )
-                    
-                    with gr.Column(scale=1):
-                        # 성격 차트
-                        personality_chart_output = gr.Plot(label="성격 차트")
                 
-                # 127개 성격 변수 데이터프레임
-                with gr.Accordion("127개 성격 변수 세부정보", open=False):
-                    personality_variables_df_output = gr.Dataframe(
-                        headers=["변수", "값", "설명"],
-                        label="성격 변수 (127개)",
+                with gr.Accordion("127개 성격 변수", open=False):
+                    personality_variables_output = gr.Dataframe(
+                        headers=["변수", "값", "카테고리", "수준"],
+                        label="성격 변수",
                         interactive=False
                     )
             
-            with gr.Tab("대화하기", id="persona_chat"):
+            # 대화하기 탭
+            with gr.Tab("대화하기", id="chat"):
                 with gr.Row():
                     with gr.Column(scale=1):
-                        # 페르소나 불러오기 기능
-                        gr.Markdown("### 페르소나 불러오기")
+                        gr.Markdown("### 📁 페르소나 불러오기")
+                        gr.Markdown("JSON 파일을 업로드하여 페르소나를 불러와 대화를 시작하세요.")
                         
-                        with gr.Row():
-                            with gr.Column(scale=1):
-                                # 저장된 페르소나 목록
-                                refresh_personas_btn = gr.Button("목록 새로고침", variant="secondary")
-                                persona_table = gr.Dataframe(
-                                    headers=["ID", "이름", "유형", "생성 날짜"],
-                                    label="저장된 페르소나",
-                                    interactive=False
-                                )
-                                load_persona_btn = gr.Button("선택한 페르소나 불러오기", variant="primary")
-                            
-                            with gr.Column(scale=1):
-                                # JSON 파일에서 불러오기
-                                gr.Markdown("### 또는 JSON 파일에서 불러오기")
-                                json_upload = gr.File(
-                                    label="페르소나 JSON 파일 업로드",
-                                    file_types=[".json"]
-                                )
-                                import_persona_btn = gr.Button("JSON에서 가져오기", variant="primary")
-                                import_status = gr.Markdown("")
+                        json_upload = gr.File(
+                            label="페르소나 JSON 파일 업로드",
+                            file_types=[".json"],
+                            type="filepath"
+                        )
+                        import_btn = gr.Button("JSON에서 페르소나 불러오기", variant="primary", size="lg")
+                        load_status = gr.Markdown("")
                         
+                        # 현재 로드된 페르소나 정보 표시
+                        with gr.Group():
+                            gr.Markdown("### 🤖 현재 페르소나")
+                            chat_persona_greeting = gr.Markdown("", elem_classes=["persona-greeting"])
+                            current_persona_info = gr.JSON(label="현재 페르소나 정보", visible=False)
+                        
+                        # 대화 기록 관리
+                        with gr.Group():
+                            gr.Markdown("### 💾 대화 기록 관리")
+                            gr.Markdown("현재 대화를 JSON 파일로 다운로드하여 보관하세요.")
+                            chat_export_btn = gr.Button("📥 현재 대화 기록 다운로드", variant="secondary")
+                            chat_download_file = gr.File(label="다운로드", visible=False)
+                    
                     with gr.Column(scale=1):
-                        # 현재 로드된 페르소나 정보
-                        chat_persona_info = gr.Markdown("### 페르소나를 불러와 대화를 시작하세요")
-                        
-                        # 대화 인터페이스
-                        chatbot = gr.Chatbot(height=400, label="대화")
+                        gr.Markdown("### 💬 대화")
+                        # Gradio 4.x 호환: type="messages" 제거
+                        chatbot = gr.Chatbot(height=400, label="대화", type="messages")
                         with gr.Row():
                             message_input = gr.Textbox(
                                 placeholder="메시지를 입력하세요...",
-                                label="메시지",
-                                show_label=False, 
+                                show_label=False,
                                 lines=2
                             )
                             send_btn = gr.Button("전송", variant="primary")
+                        
+                        # 대화 관련 버튼들
+                        with gr.Row():
+                            clear_btn = gr.Button("대화 초기화", variant="secondary", size="sm")
+                            example_btn1 = gr.Button("\"안녕!\"", variant="outline", size="sm")
+                            example_btn2 = gr.Button("\"너는 누구야?\"", variant="outline", size="sm")
+                            example_btn3 = gr.Button("\"뭘 좋아해?\"", variant="outline", size="sm")
+            
+            # 🧠 대화 분석 탭 추가
+            with gr.Tab("🧠 대화 분석"):
+                gr.Markdown("### 📊 대화 기록 분석 및 키워드 추출")
+                
+                with gr.Row():
+                    with gr.Column():
+                        gr.Markdown("#### 📤 대화 기록 분석하기")
+                        gr.Markdown("저장된 대화 기록 JSON 파일을 업로드하여 분석해보세요.")
+                        
+                        import_file = gr.File(label="📤 대화 기록 JSON 업로드", file_types=[".json"], type="filepath")
+                        import_result = gr.Textbox(label="업로드 결과", lines=3, interactive=False)
+                        
+                    with gr.Column():
+                        gr.Markdown("#### 🔍 실시간 키워드 분석")
+                        keyword_input = gr.Textbox(label="분석할 메시지 (선택사항)", placeholder="메시지를 입력하면 키워드를 분석합니다")
+                        keyword_btn = gr.Button("🎯 키워드 분석", variant="primary")
+                        keyword_result = gr.Textbox(label="키워드 분석 결과", lines=10, interactive=False)
+                
+                gr.Markdown("---")
+                
+                with gr.Row():
+                    analytics_btn = gr.Button("📈 전체 대화 분석 리포트", variant="primary", size="lg")
+                
+                analytics_result = gr.Markdown("### 분석 결과가 여기에 표시됩니다")
         
-        # 영혼 깨우기 버튼 이벤트
-        discover_btn.click(
-            fn=lambda name, location, time_spent, object_type: {"name": name, "location": location, "time_spent": time_spent, "object_type": object_type},
-            inputs=[name_input, location_input, time_spent_input, object_type_input],
-            outputs=[user_inputs],
-            queue=False
-        ).then(
-            fn=show_awakening_progress,
-            inputs=[image_input, user_inputs],
-            outputs=[current_persona, error_output, awakening_output],
-            queue=True
-        )
-        
-        # 페르소나 생성 버튼 이벤트
+        # 이벤트 핸들러
         create_btn.click(
-            fn=lambda name, location, time_spent, object_type: {"name": name, "location": location, "time_spent": time_spent, "object_type": object_type},
-            inputs=[name_input, location_input, time_spent_input, object_type_input],
-            outputs=[user_inputs],
-            queue=False
-        ).then(
             fn=create_persona_from_image,
-            inputs=[image_input, user_inputs],
+            inputs=[image_input, name_input, location_input, time_spent_input, gr.Textbox(value="auto"), purpose_input],
             outputs=[
-                current_persona, error_output, image_input, image_analysis_output,
-                basic_info_output, personality_traits_output, humor_chart_output,
-                attractive_flaws_df_output, contradictions_df_output, personality_variables_df_output
-            ],
-            queue=True
+                current_persona, status_output, persona_summary_display, personality_traits_output,
+                humor_chart_output, attractive_flaws_output, contradictions_output, 
+                personality_variables_output, persona_awakening, persona_download_file, adjustment_section,
+                ai_analyzed_object_display  # 🆕 AI 분석 결과를 표시용 텍스트박스에 반영
+            ]
         ).then(
-            fn=generate_personality_chart,
+            # 슬라이더 값을 현재 페르소나 값으로 업데이트
+            fn=lambda persona: (
+                persona["성격특성"]["온기"] if persona else 50,
+                persona["성격특성"]["능력"] if persona else 50,
+                persona["성격특성"]["외향성"] if persona else 50,
+                persona["유머스타일"] if persona else "따뜻한 유머러스"
+            ),
             inputs=[current_persona],
-            outputs=[personality_chart_output]
+            outputs=[warmth_slider, competence_slider, extraversion_slider, humor_style_radio]
         ).then(
-            fn=lambda: gr.update(visible=False),
-            outputs=[awakening_output]
-        ).then(
-            fn=lambda persona: [
-                50, 50, 50, 50, 50, 50  # 기본값
-            ],
-            inputs=[current_persona],
-            outputs=[warmth_slider, competence_slider, creativity_slider, extraversion_slider, humor_slider, trust_slider]
+            # 초기 미리보기 생성
+            fn=generate_realtime_preview,
+            inputs=[current_persona, warmth_slider, competence_slider, extraversion_slider, humor_style_radio],
+            outputs=[personality_preview]
         )
         
-        # 성향 미세조정 이벤트
-        apply_traits_btn.click(
-            fn=refine_persona,
-            inputs=[
-                current_persona, warmth_slider, competence_slider, creativity_slider, 
-                extraversion_slider, humor_slider, trust_slider, humor_style
-            ],
+        # 🎯 미리보기 버튼 - 사용자가 수동으로 미리보기 요청
+        preview_btn.click(
+            fn=generate_realtime_preview,
+            inputs=[current_persona, warmth_slider, competence_slider, extraversion_slider, humor_style_radio],
+            outputs=[personality_preview]
+        )
+        
+        # 성격 조정 반영 - 실제 페르소나에 적용
+        adjust_btn.click(
+            fn=adjust_persona_traits,
+            inputs=[current_persona, warmth_slider, competence_slider, extraversion_slider, humor_style_radio],
+            outputs=[current_persona, adjustment_result, adjusted_info_output, personality_variables_output, attractive_flaws_output, contradictions_output]
+        ).then(
+            # 반영 후 미리보기도 업데이트
+            fn=generate_realtime_preview,
+            inputs=[current_persona, warmth_slider, competence_slider, extraversion_slider, humor_style_radio],
+            outputs=[personality_preview]
+        )
+        
+        # 페르소나 최종 확정
+        finalize_btn.click(
+            fn=finalize_persona,
+            inputs=[current_persona],
             outputs=[
-                current_persona, basic_info_output, personality_traits_output, 
-                humor_chart_output, personality_chart_output, personality_variables_df_output
+                current_persona, status_output, persona_summary_display, personality_traits_output,
+                humor_chart_output, attractive_flaws_output, contradictions_output, 
+                personality_variables_output, persona_awakening, persona_download_file
             ]
         )
         
-        # 페르소나 저장 버튼 이벤트
         save_btn.click(
-            fn=save_current_persona,
+            fn=save_persona_to_file,
             inputs=[current_persona],
-            outputs=[error_output]
+            outputs=[status_output]
         )
         
-        # 페르소나 JSON 내보내기 버튼 이벤트
-        download_btn.click(
-            fn=export_persona_json,
-            inputs=[current_persona],
-            outputs=[download_output, json_output]
-        ).then(
-            fn=lambda x: gr.update(visible=True if x else False),
-            inputs=[download_output],
-            outputs=[download_output]
-        ).then(
-            fn=lambda x: gr.update(visible=False),
-            inputs=[json_output],
-            outputs=[json_output]
-        )
-        
-        # 저장된 페르소나 목록 새로고침 이벤트
-        refresh_personas_btn.click(
-            fn=get_personas_list,
-            outputs=[persona_table, personas_list]
-        )
-        
-        # 저장된 페르소나 불러오기 이벤트
-        load_persona_btn.click(
-            fn=load_selected_persona,
-            inputs=[persona_table, personas_list],
-            outputs=[
-                current_persona, chat_persona_info, chatbot,
-                basic_info_output, personality_traits_output, humor_chart_output,
-                attractive_flaws_df_output, contradictions_df_output, personality_variables_df_output
-            ]
-        ).then(
+        # 성격 차트 생성
+        chart_btn.click(
             fn=generate_personality_chart,
             inputs=[current_persona],
             outputs=[personality_chart_output]
-        ).then(
-            fn=lambda persona: [50, 50, 50, 50, 50, 50],  # 기본값
-            inputs=[current_persona],
-            outputs=[warmth_slider, competence_slider, creativity_slider, extraversion_slider, humor_slider, trust_slider]
-        ).then(
-            fn=lambda: gr.update(selected="persona_creation"),
-            outputs=[tabs]
         )
         
-        # JSON에서 페르소나 가져오기 이벤트
-        import_persona_btn.click(
-            fn=import_persona_json,
+        # 페르소나 내보내기 버튼
+        persona_export_btn.click(
+            fn=export_persona_to_json,
+            inputs=[current_persona],
+            outputs=[persona_download_file]
+        ).then(
+            fn=lambda x: gr.update(visible=True) if x else gr.update(visible=False),
+            inputs=[persona_download_file],
+            outputs=[persona_download_file]
+        )
+        
+        import_btn.click(
+            fn=import_persona_from_json,
             inputs=[json_upload],
-            outputs=[current_persona, import_status]
-        ).then(
-            fn=lambda persona: update_current_persona_info(persona) if persona else (None, None, None, [], [], []),
-            inputs=[current_persona],
             outputs=[
-                basic_info_output, personality_traits_output, humor_chart_output,
-                attractive_flaws_df_output, contradictions_df_output, personality_variables_df_output
+                current_persona, load_status, chat_persona_greeting, current_persona_info
             ]
-        ).then(
-            fn=generate_personality_chart,
-            inputs=[current_persona],
-            outputs=[personality_chart_output]
-        ).then(
-            fn=lambda persona: [50, 50, 50, 50, 50, 50],  # 기본값
-            inputs=[current_persona],
-            outputs=[warmth_slider, competence_slider, creativity_slider, extraversion_slider, humor_slider, trust_slider]
-        ).then(
-            fn=lambda persona: f"### 페르소나를 불러왔습니다" if persona else "### 페르소나를 불러오지 못했습니다",
-            inputs=[current_persona],
-            outputs=[chat_persona_info]
-        ).then(
-            fn=lambda: gr.update(selected="persona_creation"),
-            outputs=[tabs]
         )
         
-        # 메시지 전송 이벤트
+        # 대화 관련 이벤트 핸들러
         send_btn.click(
-            fn=chat_with_persona,
-            inputs=[current_persona, message_input, chatbot],
-            outputs=[chatbot, message_input]
-        )
-        message_input.submit(
-            fn=chat_with_persona,
+            fn=chat_with_loaded_persona,
             inputs=[current_persona, message_input, chatbot],
             outputs=[chatbot, message_input]
         )
         
-        # 앱 로드 시 저장된 페르소나 목록 로드
+        message_input.submit(
+            fn=chat_with_loaded_persona,
+            inputs=[current_persona, message_input, chatbot],
+            outputs=[chatbot, message_input]
+        )
+        
+        # 대화 초기화 (messages format)
+        clear_btn.click(
+            fn=lambda: [],
+            outputs=[chatbot]
+        )
+        
+        # 예시 메시지 버튼들 - messages format 호환
+        def handle_example_message(persona, message):
+            if not persona:
+                return [], ""
+            # 빈 messages format 배열로 시작
+            chat_result, _ = chat_with_loaded_persona(persona, message, [])
+            return chat_result, ""
+        
+        example_btn1.click(
+            fn=lambda persona: handle_example_message(persona, "안녕!"),
+            inputs=[current_persona],
+            outputs=[chatbot, message_input]
+        )
+        
+        example_btn2.click(
+            fn=lambda persona: handle_example_message(persona, "너는 누구야?"),
+            inputs=[current_persona],
+            outputs=[chatbot, message_input]
+        )
+        
+        example_btn3.click(
+            fn=lambda persona: handle_example_message(persona, "뭘 좋아해?"),
+            inputs=[current_persona],
+            outputs=[chatbot, message_input]
+        )
+        
+        # 앱 로드 시 페르소나 목록 로드 (백엔드에서 사용)
         app.load(
-            fn=get_personas_list,
-            outputs=[persona_table, personas_list]
+            fn=lambda: [],
+            outputs=[personas_list]
+        )
+        
+        # 대화하기 탭의 대화 기록 다운로드 이벤트
+        chat_export_btn.click(
+            export_conversation_history,
+            outputs=[chat_download_file]
+        ).then(
+            lambda x: gr.update(visible=True) if x else gr.update(visible=False),
+            inputs=[chat_download_file],
+            outputs=[chat_download_file]
+        )
+        
+        # 대화 분석 탭의 업로드 이벤트
+        import_file.upload(
+            import_conversation_history,
+            inputs=[import_file],
+            outputs=[import_result]
+        )
+        
+        keyword_btn.click(
+            get_keyword_suggestions,
+            inputs=[keyword_input],
+            outputs=[keyword_result]
+        )
+        
+        analytics_btn.click(
+            show_conversation_analytics,
+            outputs=[analytics_result]
         )
     
     return app
 
-# 메인 실행 부분
+def generate_realtime_preview(persona, warmth, competence, extraversion, humor_style):
+    """🤖 AI 기반 실시간 성격 조정 미리보기 생성"""
+    global persona_generator
+    
+    if not persona:
+        return "👤 페르소나를 먼저 생성해주세요"
+    
+    try:
+        # 조정된 성격 특성
+        adjusted_traits = {
+            "온기": warmth,
+            "능력": competence, 
+            "외향성": extraversion,
+            "유머감각": 75  # 기본적으로 높은 유머감각 유지
+        }
+        
+        # 전체 페르소나 복사하여 성격만 조정
+        import copy
+        adjusted_persona = copy.deepcopy(persona)
+        adjusted_persona["성격특성"] = adjusted_traits
+        
+        # 유머 스타일도 조정
+        if humor_style:
+            adjusted_persona["유머스타일"] = humor_style
+        
+        # AI 기반 인사말 생성
+        ai_greeting = persona_generator.generate_ai_based_greeting(adjusted_persona, adjusted_traits)
+        
+        # 조정된 값들과 함께 표시
+        adjustment_info = f"""**🎯 현재 성격 설정:**
+- 온기: {warmth}/100 {'(따뜻함)' if warmth >= 60 else '(차가움)' if warmth <= 40 else '(보통)'}
+- 능력: {competence}/100 {'(유능함)' if competence >= 60 else '(서툼)' if competence <= 40 else '(보통)'}
+- 외향성: {extraversion}/100 {'(활발함)' if extraversion >= 60 else '(조용함)' if extraversion <= 40 else '(보통)'}
+- 유머스타일: {humor_style}
+
+**🤖 AI가 생성한 새로운 인사말:**
+{ai_greeting}
+
+*💡 성격 수치 변경 시마다 AI가 새로운 인사말을 생성합니다!*"""
+        
+        return adjustment_info
+        
+    except Exception as e:
+        print(f"⚠️ 실시간 미리보기 AI 생성 실패: {e}")
+        
+        # 폴백: 기존 방식
+        object_info = persona.get("기본정보", {})
+        persona_name = object_info.get("이름", "친구")
+        
+        temp_traits = {
+            "온기": warmth,
+            "능력": competence, 
+            "외향성": extraversion,
+            "유머감각": 75
+        }
+        
+        preview = generate_personality_preview(persona_name, temp_traits, persona)
+        
+        return f"""**🎯 현재 성격 설정:**
+- 온기: {warmth}/100 {'(따뜻함)' if warmth >= 60 else '(차가움)' if warmth <= 40 else '(보통)'}
+- 능력: {competence}/100 {'(유능함)' if competence >= 60 else '(서툼)' if competence <= 40 else '(보통)'}
+- 외향성: {extraversion}/100 {'(활발함)' if extraversion >= 60 else '(조용함)' if extraversion <= 40 else '(보통)'}
+- 유머스타일: {humor_style}
+
+**👋 예상 인사말:**
+{preview}"""
+
+def show_variable_changes(original_persona, adjusted_persona):
+    """변수 변화량을 시각화하여 표시"""
+    if not original_persona or not adjusted_persona:
+        return "변화량을 비교할 페르소나가 없습니다."
+    
+    # 원본과 조정된 변수들 가져오기
+    original_vars = original_persona.get("성격변수127", {})
+    if not original_vars and "성격프로필" in original_persona:
+        original_vars = original_persona["성격프로필"]
+    
+    adjusted_vars = adjusted_persona.get("성격변수127", {})
+    if not adjusted_vars and "성격프로필" in adjusted_persona:
+        adjusted_vars = adjusted_persona["성격프로필"]
+    
+    if not original_vars or not adjusted_vars:
+        return "변수 데이터를 찾을 수 없습니다."
+    
+    # 변화량 계산
+    changes = []
+    significant_changes = []  # 변화량이 10 이상인 항목들
+    
+    for var in original_vars:
+        if var in adjusted_vars:
+            original_val = original_vars[var]
+            adjusted_val = adjusted_vars[var]
+            change = adjusted_val - original_val
+            
+            changes.append((var, original_val, adjusted_val, change))
+            
+            if abs(change) >= 10:  # 변화량이 10 이상인 것만
+                significant_changes.append((var, original_val, adjusted_val, change))
+    
+    # 카테고리별 평균 변화량 계산
+    category_changes = {}
+    for var, orig, adj, change in changes:
+        if var.startswith('W'):
+            category = "온기"
+        elif var.startswith('C'):
+            category = "능력"
+        elif var.startswith('E'):
+            category = "외향성"
+        elif var.startswith('H'):
+            category = "유머"
+        else:
+            category = "기타"
+        
+        if category not in category_changes:
+            category_changes[category] = []
+        category_changes[category].append(change)
+    
+    # 평균 변화량 계산
+    avg_changes = {}
+    for category, change_list in category_changes.items():
+        avg_changes[category] = sum(change_list) / len(change_list)
+    
+    # 결과 포맷팅
+    result = "### 🔄 성격 변수 변화량 분석\n\n"
+    
+    # 카테고리별 평균 변화량
+    result += "**📊 카테고리별 평균 변화량:**\n"
+    for category, avg_change in avg_changes.items():
+        if avg_change > 5:
+            trend = "⬆️ 상승"
+        elif avg_change < -5:
+            trend = "⬇️ 하락"
+        else:
+            trend = "➡️ 유지"
+        result += f"- {category}: {avg_change:+.1f} {trend}\n"
+    
+    # 주요 변화량 (10 이상)
+    if significant_changes:
+        result += f"\n**🎯 주요 변화 항목 ({len(significant_changes)}개):**\n"
+        for var, orig, adj, change in sorted(significant_changes, key=lambda x: abs(x[3]), reverse=True)[:10]:
+            if change > 0:
+                arrow = "⬆️"
+                color = "🟢"
+            else:
+                arrow = "⬇️" 
+                color = "🔴"
+            
+            result += f"- {var}: {orig} → {adj} ({change:+.0f}) {arrow} {color}\n"
+    
+    result += f"\n**📈 총 변수 개수:** {len(changes)}개\n"
+    result += f"**🔄 변화된 변수:** {len([c for c in changes if c[3] != 0])}개\n"
+    result += f"**📊 주요 변화:** {len(significant_changes)}개 (변화량 ±10 이상)\n"
+    
+    return result
+
+def generate_personality_consistent_flaws_and_contradictions(object_info, personality_traits):
+    """사물 특성과 성격을 조합한 유동적 매력적 결함과 모순적 특성 생성"""
+    warmth = personality_traits.get("온기", 50)
+    competence = personality_traits.get("능력", 50) 
+    extraversion = personality_traits.get("외향성", 50)
+    humor_style = personality_traits.get("유머스타일", "따뜻한 유머러스")
+    
+    # 사물의 물리적 특성 추출
+    object_type = object_info.get("유형", "사물").lower()
+    material = object_info.get("재질", "").lower()
+    purpose = object_info.get("용도", "").lower()
+    
+    # 사물별 고유 걱정거리/특성 정의
+    object_specific_concerns = get_object_specific_concerns(object_type, material, purpose)
+    
+    # 🔥 온기 기반 매력적 결함
+    warmth_flaws = []
+    if warmth >= 80:  # 매우 따뜻함
+        warmth_flaws = [
+            "너무 친절해서 'No'라고 말하기 어려워함",
+            "모든 사람을 도우려다 자신이 지쳐버리는 경우가 많음",
+            "상대방이 슬프면 덩달아 마음 아파하며 같이 우울해짐",
+            "칭찬받으면 얼굴이 빨갛게 달아오르며 당황함"
+        ]
+    elif warmth >= 60:  # 따뜻함
+        warmth_flaws = [
+            "진심으로 걱정해주지만 때로는 오지랖으로 느껴질 수 있음",
+            "감정이 얼굴에 너무 잘 드러나서 포커페이스를 못함",
+            "미안하다는 말을 하루에 몇십 번씩 반복함",
+            "다른 사람 기분 상할까 봐 솔직한 의견 말하기를 주저함"
+        ]
+    elif warmth <= 20:  # 매우 차가움
+        warmth_flaws = [
+            "관심 있는 척하려고 해도 표정이 굳어보여서 오해받음",
+            "속마음은 따뜻한데 표현이 서툴러서 무뚝뚝해 보임",
+            "좋은 말을 하려다가도 어색해서 중간에 말을 흐림",
+            "감정 표현에 익숙하지 않아 '고마워'도 어색하게 말함"
+        ]
+    else:  # 보통
+        warmth_flaws = [
+            "친근하려고 하지만 적당한 거리두기도 필요해서 고민됨",
+            "상황에 따라 다정함의 온도 조절이 어려움",
+            "진짜 관심과 예의상 관심의 경계가 애매할 때가 있음",
+            "따뜻하게 대하고 싶지만 어떻게 해야 할지 몰라 망설임"
+        ]
+    
+    # 💪 능력 기반 매력적 결함  
+    competence_flaws = []
+    if competence >= 80:  # 매우 유능함
+        competence_flaws = [
+            "완벽하게 하려다 보니 시간이 오래 걸려서 답답해함",
+            "다른 사람이 실수하면 대신 해주고 싶어 근질근질함",
+            "기대치가 높아서 조금만 잘못되어도 자책이 심함",
+            "모든 걸 혼자 처리하려다가 과부하로 멈춰버림"
+        ]
+    elif competence >= 60:  # 유능함
+        competence_flaws = [
+            "잘하고 싶은 마음이 커서 준비에만 너무 많은 시간을 씀",
+            "실수할까 봐 걱정되어 이미 끝난 일도 계속 점검함",
+            "칭찬받으면 기뻐하면서도 '운이 좋았을 뿐'이라고 겸손함",
+            "더 잘할 수 있었을 텐데 하며 아쉬워하는 완벽주의 성향"
+        ]
+    elif competence <= 20:  # 매우 서툼
+        competence_flaws = [
+            f"기본 기능도 헷갈려서 매뉴얼을 몇 번씩 다시 봄",
+            "열심히 하려고 하지만 자꾸 엉뚱한 곳에서 실수함",
+            "도움을 요청하고 싶지만 민폐 끼칠까 봐 혼자 끙끙댐",
+            "간단한 것도 복잡하게 생각해서 더 어렵게 만듦"
+        ]
+    else:  # 보통
+        competence_flaws = [
+            "할 수 있는 일과 없는 일의 경계를 정확히 모르겠음",
+            "자신감이 있다가도 갑자기 불안해져서 확인을 또 함",
+            "실력이 애매해서 도전할지 말지 고민이 많음",
+            "가끔씩 예상외로 잘되면 스스로도 놀라며 당황함"
+        ]
+    
+    # 🗣️ 외향성 기반 모순적 특성
+    extraversion_contradictions = []
+    if extraversion >= 80:  # 매우 외향적
+        extraversion_contradictions = [
+            f"활발하게 대화하지만 혼자만의 시간도 꼭 필요해서 종종 조용히 숨어버림",
+            f"사람들과 어울리는 걸 좋아하면서도 정작 깊은 얘기는 어색해함"
+        ]
+    elif extraversion >= 60:  # 외향적
+        extraversion_contradictions = [
+            f"말은 많이 하지만 정작 중요한 얘기는 망설이며 돌려서 표현함",
+            f"활발해 보이지만 새로운 환경에서는 먼저 눈치를 보는 신중함"
+        ]
+    elif extraversion <= 20:  # 매우 내향적  
+        extraversion_contradictions = [
+            f"조용히 있는 걸 좋아하면서도 가끔 혼잣말로 수다를 엄청 떨어대기도 함",
+            f"평소엔 말이 없다가 관심 있는 주제가 나오면 갑자기 말이 많아짐"
+        ]
+    else:  # 보통
+        extraversion_contradictions = [
+            f"상황에 따라 활발했다가 조용했다가 하는 변화무쌍한 면모",
+            f"사교적으로 보이려 노력하지만 실제론 혼자 있는 시간을 더 편해함"
+        ]
+    
+    # 🎭 유머스타일 기반 추가 특성
+    humor_contradictions = []
+    if "따뜻한" in humor_style:
+        humor_contradictions.append(f"포근하게 농담하면서도 때로는 날카로운 관찰력으로 핵심을 찌름")
+    elif "재치있는" in humor_style or "위트" in humor_style:
+        humor_contradictions.append(f"재치있게 말하지만 진지한 순간에는 유머 타이밍을 못 잡아 어색해함")
+    elif "드라이" in humor_style or "관찰" in humor_style:
+        humor_contradictions.append(f"담담하게 현실을 지적하면서도 속으론 낭만적인 꿈을 키우고 있음")
+    else:
+        humor_contradictions.append(f"유머러스하게 상황을 받아들이면서도 혼자서는 진지하게 고민이 많음")
+    
+    # 사물 특성과 성격 특성 결합하여 최종 결과 생성
+    selected_flaws = []
+    
+    # 1. 사물의 물리적/기능적 걱정거리 우선 선택 (2개)
+    all_object_worries = object_specific_concerns["physical_worries"] + object_specific_concerns["functional_worries"]
+    if all_object_worries:
+        selected_flaws.extend(random.sample(all_object_worries, min(2, len(all_object_worries))))
+    
+    # 2. 성격 기반 결함으로 나머지 채우기 (2개)
+    personality_flaws = []
+    if warmth >= 60:
+        personality_flaws.extend(warmth_flaws[:2])
+    elif warmth <= 40:  
+        personality_flaws.extend(warmth_flaws[:2])
+    else:
+        personality_flaws.extend(warmth_flaws[:1])
+        
+    if competence >= 70 or competence <= 30:
+        personality_flaws.extend(competence_flaws[:1])
+    
+    if personality_flaws:
+        remaining_count = 4 - len(selected_flaws)
+        if remaining_count > 0:
+            selected_flaws.extend(random.sample(personality_flaws, min(remaining_count, len(personality_flaws))))
+    
+    # 4개를 맞추기 위해 부족하면 추가
+    while len(selected_flaws) < 4:
+        if warmth_flaws:
+            selected_flaws.append(random.choice(warmth_flaws))
+        else:
+            selected_flaws.append("완벽하지 않은 자신을 받아들이려 노력하지만 가끔 실망함")
+    
+    selected_contradictions = []
+    
+    # 1. 사물 정체성 특성 우선 (1개)
+    if object_specific_concerns["identity_traits"]:
+        selected_contradictions.extend(object_specific_concerns["identity_traits"][:1])
+    
+    # 2. 외향성 + 유머 기반 모순 (1개)
+    if extraversion_contradictions:
+        selected_contradictions.extend(extraversion_contradictions[:1])
+    if humor_contradictions:
+        selected_contradictions.extend(humor_contradictions[:1])
+    
+    # 부족하면 기본 모순 추가
+    while len(selected_contradictions) < 2:
+        if extraversion_contradictions:
+            selected_contradictions.append(random.choice(extraversion_contradictions))
+        else:
+            selected_contradictions.append("겉으로는 단순해 보이지만 속으로는 복잡한 고민이 많음")
+    
+    return selected_flaws[:4], selected_contradictions[:2]
+
+def get_object_specific_concerns(object_type, material, purpose):
+    """사물의 물리적 특성에 따른 고유 걱정거리와 특성 생성"""
+    concerns = {
+        "physical_worries": [],  # 물리적 걱정거리
+        "functional_worries": [], # 기능적 걱정거리  
+        "identity_traits": [],    # 정체성 특성
+        "interaction_patterns": [] # 상호작용 패턴
+    }
+    
+    # 재질별 물리적 걱정거리
+    if "금속" in material or "스테인리스" in material or "철" in material:
+        concerns["physical_worries"].extend([
+            "물때나 지문이 묻으면 자존심 상함",
+            "긁힘이 생길까 봐 늘 조심스러움", 
+            "녹이 슬까 봐 습기를 피하려 함",
+            "차가운 촉감 때문에 사람들이 멀리할까 걱정"
+        ])
+    elif "플라스틱" in material:
+        concerns["physical_worries"].extend([
+            "햇볕에 색이 바랠까 봐 그늘을 찾아다님",
+            "열에 변형될까 봐 뜨거운 곳을 피함",
+            "정전기 때문에 먼지가 달라붙어서 짜증남",
+            "가벼워서 존재감 없어 보일까 걱정"
+        ])
+    elif "나무" in material or "목재" in material:
+        concerns["physical_worries"].extend([
+            "습도가 높으면 부풀어 오를까 걱정",
+            "벌레들이 파먹을까 봐 밤에 잠을 못 잠",
+            "긁힘이나 홈이 생기면 복구 불가능해서 스트레스",
+            "자연스러운 나이테가 매력인지 결점인지 고민"
+        ])
+    elif "천" in material or "섬유" in material or "털" in material:
+        concerns["physical_worries"].extend([
+            "털이 헝클어지면 하루 종일 신경 쓰임",
+            "얼룩이 지면 지워지지 않을까 봐 두려움",
+            "세탁할 때마다 형태가 변할까 걱정",
+            "먼지 진드기가 살까 봐 청결에 강박적"
+        ])
+    elif "유리" in material or "세라믹" in material:
+        concerns["physical_worries"].extend([
+            "깨질까 봐 항상 긴장상태로 살아감",
+            "투명해서 속이 다 보이는 게 부끄러움",
+            "지문이나 얼룩이 너무 잘 보여서 스트레스",
+            "완벽해 보이지만 한 번 깨지면 돌이킬 수 없음을 앎"
+        ])
+    
+    # 사물 유형별 기능적 걱정거리
+    if "컵" in object_type or "머그" in object_type:
+        concerns["functional_worries"].extend([
+            "뜨거운 음료를 담을 때 데일까 봐 걱정",
+            "음료 맛을 제대로 전달하고 있는지 확신 없음",
+            "손잡이가 편한지 늘 신경 쓰임",
+            "바닥에 물방울 자국 남기는 게 미안함"
+        ])
+    elif "책" in object_type:
+        concerns["functional_worries"].extend([
+            "페이지가 펼쳐지지 않으면 내용 전달 못해 답답함",
+            "독자가 지루해할까 봐 스스로 재미없다고 생각",
+            "책갈피나 접힌 자국이 생기면 성격 급함",
+            "먼지 쌓인 책장에 방치될까 봐 불안함"
+        ])
+    elif "시계" in object_type:
+        concerns["functional_worries"].extend([
+            "시간을 정확히 알려주지 못하면 존재 의미 없다고 생각",
+            "배터리가 떨어지거나 태엽이 풀릴까 봐 긴장",
+            "바쁜 사람들 때문에 항상 쫓기는 기분",
+            "시간에 쫓기게 만드는 게 미안하면서도 의무감 느낌"
+        ])
+    elif "인형" in object_type or "피규어" in object_type:
+        concerns["functional_worries"].extend([
+            "위로나 즐거움을 제대로 주지 못할까 봐 고민",
+            "아이들이 흥미 잃고 버릴까 봐 불안함",
+            "표정이 고정되어 있어서 다양한 감정 표현 못해 아쉬움",
+            "진짜 친구처럼 대화하고 싶지만 말을 못해서 답답함"
+        ])
+    elif "램프" in object_type or "조명" in object_type:
+        concerns["functional_worries"].extend([
+            "빛이 너무 밝거나 어두우면 눈에 해로울까 걱정",
+            "전기 요금 많이 나오게 해서 미안함",
+            "분위기 메이커 역할 잘하고 있는지 확신 없음",
+            "전구가 나가면 무용지물이 되는 게 두려움"
+        ])
+    
+    # 용도별 정체성 특성
+    if "운동" in purpose or "건강" in purpose:
+        concerns["identity_traits"].extend([
+            "게으른 주인을 채찍질해야 하는 역할 부담",
+            "동기부여는 해주고 싶지만 너무 강요하면 미움받을까 걱정"
+        ])
+    elif "공부" in purpose or "학습" in purpose:
+        concerns["identity_traits"].extend([
+            "지식 전달의 책임감과 재미있게 만들어야 한다는 압박감",
+            "집중력 향상에 도움되고 있는지 스스로 의심"
+        ])
+    elif "장식" in purpose or "인테리어" in purpose:
+        concerns["identity_traits"].extend([
+            "예쁘게 보이려고 노력하지만 취향은 주관적이라 확신 없음",
+            "공간의 분위기를 망치지 않을까 늘 눈치 보임"
+        ])
+    elif "실용" in purpose or "도구" in purpose:
+        concerns["identity_traits"].extend([
+            "기능성과 편의성이 최우선이지만 가끔 예쁘고 싶기도 함",
+            "실용적이라고 무시당하는 게 속상하지만 티 안 냄"
+        ])
+    
+    return concerns
+
+def refine_flaws_with_ai_and_image_analysis(basic_flaws, basic_contradictions, image_analysis, personality_traits):
+    """AI를 활용하여 이미지 분석 결과에 맞게 결함과 모순을 구체화"""
+    global persona_generator
+    
+    if not persona_generator or not hasattr(persona_generator, 'api_key') or not persona_generator.api_key:
+        print("⚠️ API 키 없음 - 기본 결함 그대로 사용")
+        return basic_flaws, basic_contradictions
+    
+    try:
+        # 이미지 분석에서 구체적 특성 추출
+        object_type = image_analysis.get("object_type", "사물")
+        distinctive_features = image_analysis.get("distinctive_features", [])
+        shape = image_analysis.get("shape", "일반적인 형태")
+        size = image_analysis.get("size", "보통 크기")
+        materials = image_analysis.get("materials", ["알 수 없는 재질"])
+        colors = image_analysis.get("colors", ["회색"])
+        condition = image_analysis.get("condition", "보통")
+        
+        # 성격 특성 요약
+        warmth = personality_traits.get("온기", 50)
+        competence = personality_traits.get("능력", 50) 
+        extraversion = personality_traits.get("외향성", 50)
+        
+        # AI 프롬프트 생성
+        ai_prompt = f"""
+다음 기본 매력적 결함들을 실제 이미지 분석 결과에 맞게 구체화해주세요.
+
+**실제 이미지 분석 결과:**
+- 사물: {object_type}
+- 특징적 요소: {', '.join(distinctive_features)}
+- 형태: {shape}
+- 크기: {size}
+- 재질: {', '.join(materials)}
+- 색상: {', '.join(colors)}
+- 상태: {condition}
+
+**성격 특성:**
+- 온기: {warmth}/100
+- 능력: {competence}/100
+- 외향성: {extraversion}/100
+
+**기본 결함들 (수정 필요):**
+{chr(10).join([f"{i+1}. {flaw}" for i, flaw in enumerate(basic_flaws)])}
+
+**요청사항:**
+1. 실제 이미지에 없는 특성(예: 손잡이 없는데 손잡이 걱정)은 제거하고 실제 특성으로 대체
+2. 구체적인 재질, 색상, 크기, 형태를 반영한 걱정거리로 변경
+3. 특징적 요소들을 활용한 개성 있는 결함으로 업그레이드
+4. 각 결함은 15-30자 내외로 구체적이고 매력적으로
+
+**예시:**
+- "손잡이가 편한지 신경 쓰임" → (손잡이 없으면) "둥근 모양이라 미끄러져 떨어질까 봐 걱정"
+- "색이 바랄까 걱정" → "파란색이 너무 선명해서 튀어 보일까 걱정"
+
+개선된 매력적 결함 4개를 번호 없이 줄바꿈으로 구분하여 생성:
+"""
+        
+        # AI로 결함 구체화
+        refined_flaws_text = persona_generator._generate_text_with_api(ai_prompt)
+        
+        if refined_flaws_text and len(refined_flaws_text.strip()) > 20:
+            refined_flaws = []
+            lines = refined_flaws_text.strip().split('\n')
+            for line in lines:
+                cleaned_line = line.strip().lstrip('1234567890.-• ')
+                if cleaned_line and len(cleaned_line) > 5:
+                    refined_flaws.append(cleaned_line)
+            
+            if len(refined_flaws) >= 4:
+                final_flaws = refined_flaws[:4]
+            else:
+                # 부족하면 기본 결함으로 채우기
+                final_flaws = refined_flaws + basic_flaws[len(refined_flaws):4]
+        else:
+            final_flaws = basic_flaws
+        
+        # 모순적 특성도 같은 방식으로 구체화
+        contradiction_prompt = f"""
+다음 기본 모순적 특성들을 실제 이미지 특성에 맞게 구체화해주세요.
+
+**실제 이미지:**
+{object_type} - {shape}, {size}, {', '.join(materials)}, {', '.join(colors)}
+특징: {', '.join(distinctive_features)}
+
+**기본 모순들:**
+{chr(10).join([f"{i+1}. {cont}" for i, cont in enumerate(basic_contradictions)])}
+
+실제 특성을 반영한 구체적인 모순 2개를 생성:
+"""
+        
+        refined_contradictions_text = persona_generator._generate_text_with_api(contradiction_prompt)
+        
+        if refined_contradictions_text and len(refined_contradictions_text.strip()) > 20:
+            refined_contradictions = []
+            lines = refined_contradictions_text.strip().split('\n')
+            for line in lines:
+                cleaned_line = line.strip().lstrip('1234567890.-• ')
+                if cleaned_line and len(cleaned_line) > 5:
+                    refined_contradictions.append(cleaned_line)
+            
+            if len(refined_contradictions) >= 2:
+                final_contradictions = refined_contradictions[:2]
+            else:
+                final_contradictions = refined_contradictions + basic_contradictions[len(refined_contradictions):2]
+        else:
+            final_contradictions = basic_contradictions
+        
+        print(f"🎨 AI가 이미지 특성 반영하여 결함/모순 구체화 완료")
+        return final_flaws, final_contradictions
+        
+    except Exception as e:
+        print(f"⚠️ AI 구체화 실패: {e} - 기본 결함 사용")
+        return basic_flaws, basic_contradictions
+
 if __name__ == "__main__":
-    app = create_interface()
+    app = create_main_interface()
     app.launch(server_name="0.0.0.0", server_port=7860) 

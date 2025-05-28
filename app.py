@@ -2359,6 +2359,120 @@ def get_object_specific_concerns(object_type, material, purpose):
     
     return concerns
 
+def refine_flaws_with_ai_and_image_analysis(basic_flaws, basic_contradictions, image_analysis, personality_traits):
+    """AI를 활용하여 이미지 분석 결과에 맞게 결함과 모순을 구체화"""
+    global persona_generator
+    
+    if not persona_generator or not hasattr(persona_generator, 'api_key') or not persona_generator.api_key:
+        print("⚠️ API 키 없음 - 기본 결함 그대로 사용")
+        return basic_flaws, basic_contradictions
+    
+    try:
+        # 이미지 분석에서 구체적 특성 추출
+        object_type = image_analysis.get("object_type", "사물")
+        distinctive_features = image_analysis.get("distinctive_features", [])
+        shape = image_analysis.get("shape", "일반적인 형태")
+        size = image_analysis.get("size", "보통 크기")
+        materials = image_analysis.get("materials", ["알 수 없는 재질"])
+        colors = image_analysis.get("colors", ["회색"])
+        condition = image_analysis.get("condition", "보통")
+        
+        # 성격 특성 요약
+        warmth = personality_traits.get("온기", 50)
+        competence = personality_traits.get("능력", 50) 
+        extraversion = personality_traits.get("외향성", 50)
+        
+        # AI 프롬프트 생성
+        ai_prompt = f"""
+다음 기본 매력적 결함들을 실제 이미지 분석 결과에 맞게 구체화해주세요.
+
+**실제 이미지 분석 결과:**
+- 사물: {object_type}
+- 특징적 요소: {', '.join(distinctive_features)}
+- 형태: {shape}
+- 크기: {size}
+- 재질: {', '.join(materials)}
+- 색상: {', '.join(colors)}
+- 상태: {condition}
+
+**성격 특성:**
+- 온기: {warmth}/100
+- 능력: {competence}/100
+- 외향성: {extraversion}/100
+
+**기본 결함들 (수정 필요):**
+{chr(10).join([f"{i+1}. {flaw}" for i, flaw in enumerate(basic_flaws)])}
+
+**요청사항:**
+1. 실제 이미지에 없는 특성(예: 손잡이 없는데 손잡이 걱정)은 제거하고 실제 특성으로 대체
+2. 구체적인 재질, 색상, 크기, 형태를 반영한 걱정거리로 변경
+3. 특징적 요소들을 활용한 개성 있는 결함으로 업그레이드
+4. 각 결함은 15-30자 내외로 구체적이고 매력적으로
+
+**예시:**
+- "손잡이가 편한지 신경 쓰임" → (손잡이 없으면) "둥근 모양이라 미끄러져 떨어질까 봐 걱정"
+- "색이 바랄까 걱정" → "파란색이 너무 선명해서 튀어 보일까 걱정"
+
+개선된 매력적 결함 4개를 번호 없이 줄바꿈으로 구분하여 생성:
+"""
+        
+        # AI로 결함 구체화
+        refined_flaws_text = persona_generator._generate_text_with_api(ai_prompt)
+        
+        if refined_flaws_text and len(refined_flaws_text.strip()) > 20:
+            refined_flaws = []
+            lines = refined_flaws_text.strip().split('\n')
+            for line in lines:
+                cleaned_line = line.strip().lstrip('1234567890.-• ')
+                if cleaned_line and len(cleaned_line) > 5:
+                    refined_flaws.append(cleaned_line)
+            
+            if len(refined_flaws) >= 4:
+                final_flaws = refined_flaws[:4]
+            else:
+                # 부족하면 기본 결함으로 채우기
+                final_flaws = refined_flaws + basic_flaws[len(refined_flaws):4]
+        else:
+            final_flaws = basic_flaws
+        
+        # 모순적 특성도 같은 방식으로 구체화
+        contradiction_prompt = f"""
+다음 기본 모순적 특성들을 실제 이미지 특성에 맞게 구체화해주세요.
+
+**실제 이미지:**
+{object_type} - {shape}, {size}, {', '.join(materials)}, {', '.join(colors)}
+특징: {', '.join(distinctive_features)}
+
+**기본 모순들:**
+{chr(10).join([f"{i+1}. {cont}" for i, cont in enumerate(basic_contradictions)])}
+
+실제 특성을 반영한 구체적인 모순 2개를 생성:
+"""
+        
+        refined_contradictions_text = persona_generator._generate_text_with_api(contradiction_prompt)
+        
+        if refined_contradictions_text and len(refined_contradictions_text.strip()) > 20:
+            refined_contradictions = []
+            lines = refined_contradictions_text.strip().split('\n')
+            for line in lines:
+                cleaned_line = line.strip().lstrip('1234567890.-• ')
+                if cleaned_line and len(cleaned_line) > 5:
+                    refined_contradictions.append(cleaned_line)
+            
+            if len(refined_contradictions) >= 2:
+                final_contradictions = refined_contradictions[:2]
+            else:
+                final_contradictions = refined_contradictions + basic_contradictions[len(refined_contradictions):2]
+        else:
+            final_contradictions = basic_contradictions
+        
+        print(f"🎨 AI가 이미지 특성 반영하여 결함/모순 구체화 완료")
+        return final_flaws, final_contradictions
+        
+    except Exception as e:
+        print(f"⚠️ AI 구체화 실패: {e} - 기본 결함 사용")
+        return basic_flaws, basic_contradictions
+
 if __name__ == "__main__":
     app = create_main_interface()
     app.launch(server_name="0.0.0.0", server_port=7860) 
