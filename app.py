@@ -714,9 +714,57 @@ def finalize_persona(persona):
         if purpose:
             contradictions_df.append([f"🎯 {purpose}을 담당하는 {object_type}의 독특한 개성", "사물 역할 특성"])
         
-        # 127개 성격 변수를 DataFrame 형태로 변환
+        # 127개 성격 변수를 DataFrame 형태로 변환 (카테고리별 분류)
         variables = persona.get("성격변수127", {})
-        variables_df = [[var, value, "성격 변수"] for var, value in variables.items()]
+        if not variables and "성격프로필" in persona:
+            # 성격프로필에서 직접 가져오기 (성격프로필 자체가 variables dict)
+            variables = persona["성격프로필"]
+        
+        variables_df = []
+        for var, value in variables.items():
+            # 카테고리 분류
+            if var.startswith('W'):
+                category = f"🔥 온기/따뜻함"
+            elif var.startswith('C'):
+                category = f"💪 능력/역량"
+            elif var.startswith('E'):
+                category = f"🗣️ 외향성"
+            elif var.startswith('H'):
+                category = f"😄 유머"
+            elif var.startswith('F'):
+                category = f"💎 매력적결함"
+            elif var.startswith('P'):
+                category = f"🎭 성격패턴"
+            elif var.startswith('S'):
+                category = f"🗨️ 언어스타일"
+            elif var.startswith('R'):
+                category = f"❤️ 관계성향"
+            elif var.startswith('D'):
+                category = f"💬 대화역학"
+            elif var.startswith('OBJ'):
+                category = f"🏠 사물정체성"
+            elif var.startswith('FORM'):
+                category = f"✨ 형태특성"
+            elif var.startswith('INT'):
+                category = f"🤝 상호작용"
+            elif var.startswith('U'):
+                category = f"🌍 문화적특성"
+            else:
+                category = f"📊 기타"
+            
+            # 값에 따른 색상 표시
+            if value >= 80:
+                status = "🟢 매우 높음"
+            elif value >= 60:
+                status = "🟡 높음"  
+            elif value >= 40:
+                status = "🟠 보통"
+            elif value >= 20:
+                status = "🔴 낮음"
+            else:
+                status = "⚫ 매우 낮음"
+                
+            variables_df.append([var, value, category, status])
         
         # JSON 파일 생성
         import tempfile
@@ -1581,7 +1629,7 @@ def create_main_interface():
                 
                 with gr.Accordion("127개 성격 변수", open=False):
                     personality_variables_output = gr.Dataframe(
-                        headers=["변수", "값", "설명"],
+                        headers=["변수", "값", "카테고리", "수준"],
                         label="성격 변수",
                         interactive=False
                     )
@@ -1975,7 +2023,7 @@ def show_variable_changes(original_persona, adjusted_persona):
                 arrow = "⬇️" 
                 color = "🔴"
             
-            result += f"- {var}: {orig} → {adj} ({change:+d}) {arrow} {color}\n"
+            result += f"- {var}: {orig} → {adj} ({change:+.0f}) {arrow} {color}\n"
     
     result += f"\n**📈 총 변수 개수:** {len(changes)}개\n"
     result += f"**🔄 변화된 변수:** {len([c for c in changes if c[3] != 0])}개\n"
