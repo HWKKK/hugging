@@ -2331,42 +2331,12 @@ class PersonaGenerator:
         return backend_persona
     
     def _create_compatibility_profile(self, personality_traits):
-        """기존 성격 특성에서 PersonalityProfile 생성 (호환성)"""
-        profile = PersonalityProfile()
+        """기존 성격 특성에서 PersonalityProfile 생성 (호환성) - 개선된 127개 변수 시스템 사용"""
+        # 🎯 개선된 _generate_personality_variables 시스템을 활용하여 127개 변수 모두 생성
+        variables_dict = self._generate_personality_variables(personality_traits)
         
-        # 기본 6-7개 특성을 127개 변수에 매핑
-        warmth = personality_traits.get("온기", 50)
-        competence = personality_traits.get("능력", 50)
-        extraversion = personality_traits.get("외향성", 50)
-        creativity = personality_traits.get("창의성", 50)
-        humor = personality_traits.get("유머감각", 50)
-        empathy = personality_traits.get("공감능력", 50)
-        
-        # 온기 관련 변수들 설정
-        for var in ["W01_친절함", "W02_친근함", "W06_공감능력", "W07_포용력"]:
-            profile.variables[var] = max(0, min(100, warmth + random.randint(-10, 10)))
-        
-        # 능력 관련 변수들 설정
-        for var in ["C01_효율성", "C02_지능", "C05_정확성", "C09_실행력"]:
-            profile.variables[var] = max(0, min(100, competence + random.randint(-10, 10)))
-        
-        # 외향성 관련 변수들 설정
-        for var in ["E01_사교성", "E02_활동성", "E04_긍정정서"]:
-            profile.variables[var] = max(0, min(100, extraversion + random.randint(-10, 10)))
-        
-        # 창의성 관련 변수들 설정
-        profile.variables["C04_창의성"] = creativity
-        for var in ["O01_상상력", "O02_심미성"]:
-            profile.variables[var] = max(0, min(100, creativity + random.randint(-15, 15)))
-        
-        # 유머 관련 변수들 설정
-        for var in ["H01_언어유희빈도", "H02_상황유머감각", "H08_유머타이밍감"]:
-            profile.variables[var] = max(0, min(100, humor + random.randint(-10, 10)))
-        
-        # 공감 관련 변수들 설정
-        profile.variables["W06_공감능력"] = empathy
-        for var in ["A06_공감민감성", "R06_친밀감수용도"]:
-            profile.variables[var] = max(0, min(100, empathy + random.randint(-15, 15)))
+        # PersonalityProfile 객체 생성
+        profile = PersonalityProfile(variables=variables_dict)
         
         return profile
     
