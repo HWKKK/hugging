@@ -701,6 +701,9 @@ def adjust_persona_traits(persona, warmth, competence, extraversion, humor_style
 {change_analysis}{additional_changes}
         """
         
+        # 🆕 조정된 페르소나의 요약 생성 (동적 특성 설명 포함)
+        adjusted_summary_display = display_persona_summary(adjusted_persona)
+        
         # 조정된 매력적 결함과 모순적 특성을 DataFrame으로 생성
         flaws_df = []
         if "매력적결함" in adjusted_persona:
@@ -732,12 +735,12 @@ def adjust_persona_traits(persona, warmth, competence, extraversion, humor_style
                     contradiction_type = "💫 복합적 매력"
                 contradictions_df.append([f"{i}. {contradiction}", contradiction_type])
         
-        return adjusted_persona, adjustment_message, adjusted_info, variables_df, flaws_df, contradictions_df
+        return adjusted_persona, adjustment_message, adjusted_info, variables_df, flaws_df, contradictions_df, adjusted_summary_display
         
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return persona, f"조정 중 오류 발생: {str(e)}", {}, [], [], []
+        return persona, f"조정 중 오류 발생: {str(e)}", {}, [], [], [], ""
 
 def finalize_persona(persona):
     """페르소나 최종 확정 - 환경변수 API 설정 사용"""
@@ -1252,84 +1255,147 @@ def import_persona_from_json(json_file):
         return None, f"❌ JSON 불러오기 중 오류 발생: {str(e)}", "", {}
 
 def format_personality_traits(persona):
-    """성격 특성을 특성 중심의 간단한 리스트 형태로 포맷 (캡쳐 스타일)"""
+    """🧠 완전한 변수 기반 동적 성격 특성 설명 생성 - 하드코딩 제거"""
     global persona_generator
     
     if not persona or "성격특성" not in persona:
         return "페르소나가 생성되지 않았습니다."
     
-    # 글로벌 persona_generator 사용 (API 설정이 적용된 상태)
-    if persona_generator is None:
-        persona_generator = PersonaGenerator()
-
     # 기본 정보에서 사물의 특성 추출
     basic_info = persona.get("기본정보", {})
     object_type = basic_info.get("유형", "")
     purpose = basic_info.get("용도", "")
     
-    # 생애 스토리에서 특성 추출
-    life_story = persona.get("생애스토리", {})
-    
     # 매력적 결함
     attractive_flaws = persona.get("매력적결함", [])
     
-    # 성격 특성
+    # 성격 특성 (조정된 값들)
     personality_traits = persona["성격특성"]
     
-    # 특성 리스트 생성
+    # 🤖 AI 기반 동적 특성 설명 생성 시도
+    if persona_generator and hasattr(persona_generator, 'api_key') and persona_generator.api_key:
+        try:
+            warmth = personality_traits.get("온기", 50)
+            competence = personality_traits.get("능력", 50)
+            extraversion = personality_traits.get("외향성", 50)
+            humor_style = persona.get("유머스타일", "따뜻한 유머러스")
+            
+            ai_prompt = f"""
+다음 정보를 바탕으로 이 페르소나의 5가지 핵심 특성을 간결하게 설명해주세요.
+
+**사물 정보:**
+- 유형: {object_type}
+- 용도: {purpose}
+
+**조정된 성격 수치:**
+- 온기: {warmth}/100 {'(매우 따뜻함)' if warmth >= 80 else '(따뜻함)' if warmth >= 60 else '(보통)' if warmth >= 40 else '(차가움)' if warmth >= 20 else '(매우 차가움)'}
+- 능력: {competence}/100 {'(매우 유능함)' if competence >= 80 else '(유능함)' if competence >= 60 else '(보통)' if competence >= 40 else '(서툼)' if competence >= 20 else '(매우 서툼)'}
+- 외향성: {extraversion}/100 {'(매우 활발함)' if extraversion >= 80 else '(활발함)' if extraversion >= 60 else '(보통)' if extraversion >= 40 else '(조용함)' if extraversion >= 20 else '(매우 조용함)'}
+- 유머스타일: {humor_style}
+
+**매력적 결함:**
+{chr(10).join([f"- {flaw}" for flaw in attractive_flaws[:2]])}
+
+**요청사항:**
+1. 성격 수치를 정확히 반영한 특성 설명
+2. 사물의 고유 특성과 성격의 조합
+3. 각 특성은 5-15자로 간결하게
+4. 매력적이고 개성적인 표현
+
+**형식:**
+[성격 기반 특성 1]
+[사물 기반 특성 1] 
+[활동/에너지 특성 1]
+[결함 기반 특성 1]
+[경험/기억 특성 1]
+"""
+            
+            ai_response = persona_generator._generate_text_with_api(ai_prompt)
+            
+            if ai_response and len(ai_response.strip()) > 20:
+                lines = ai_response.strip().split('\n')
+                ai_characteristics = []
+                
+                for line in lines:
+                    clean_line = line.strip().lstrip('1234567890.-• []').strip()
+                    if clean_line and len(clean_line) > 3:
+                        ai_characteristics.append(clean_line)
+                
+                if len(ai_characteristics) >= 3:
+                    result = ""
+                    for char in ai_characteristics[:5]:  # 최대 5개
+                        result += f"✨ {char}\n\n"
+                    return result
+                    
+        except Exception as e:
+            print(f"⚠️ AI 특성 설명 생성 실패: {e} - 변수 기반 폴백 사용")
+    
+    # 🔧 폴백: 순수 변수 기반 논리적 생성
     characteristics = []
     
-    # 1. 온기 특성
+    # 1. 온기 기반 특성 (수치 반영)
     warmth = personality_traits.get("온기", 50)
-    if warmth >= 70:
-        characteristics.append("따뜻하고 포근한 마음")
-    elif warmth >= 50:
-        characteristics.append("친근하고 다정한 성격")
-    else:
+    if warmth >= 80:
+        characteristics.append("매우 따뜻하고 포근한 마음")
+    elif warmth >= 65:
+        characteristics.append("따뜻하고 친근한 성격")
+    elif warmth >= 35:
+        characteristics.append("적당히 친근한 균형감")
+    elif warmth >= 20:
         characteristics.append("차분하고 진중한 면")
-    
-    # 2. 사물의 고유 특성 (유형 기반)
-    if "곰" in object_type or "인형" in object_type:
-        characteristics.append("부드럽고 포근한 감촉")
-    elif "책" in object_type:
-        characteristics.append("지식과 이야기를 담고 있음")
-    elif "컵" in object_type or "머그" in object_type:
-        characteristics.append("따뜻한 음료와 함께하는 시간")
-    elif "시계" in object_type:
-        characteristics.append("시간의 소중함을 알려줌")
-    elif "연필" in object_type or "펜" in object_type:
-        characteristics.append("창작과 기록의 동반자")
     else:
-        characteristics.append(f"{object_type}만의 독특한 매력")
+        characteristics.append("신중하고 내성적인 깊이")
     
-    # 3. 활동 시간대나 환경 특성
+    # 2. 능력 기반 특성 (수치 반영)
+    competence = personality_traits.get("능력", 50)
+    if competence >= 80:
+        characteristics.append("완벽주의적 꼼꼼함")
+    elif competence >= 65:
+        characteristics.append("믿음직한 안정감")
+    elif competence >= 35:
+        characteristics.append("적당한 여유로움")
+    else:
+        characteristics.append("겸손하고 배우려는 마음")
+    
+    # 3. 외향성 기반 활동 특성 (수치 반영)
     extraversion = personality_traits.get("외향성", 50)
-    if extraversion >= 70:
-        characteristics.append("낮에 더 활발해짐")
-    elif extraversion <= 30:
-        characteristics.append("밤에 더 활발해짐")
-    else:
+    if extraversion >= 80:
+        characteristics.append("활기차고 에너지 넘치는 모습")
+    elif extraversion >= 65:
+        characteristics.append("낮에 더 활발해지는 리듬")
+    elif extraversion >= 35:
         characteristics.append("하루 종일 일정한 에너지")
-    
-    # 4. 매력적 결함 중 하나를 특성으로 표현
-    if attractive_flaws:
-        flaw = attractive_flaws[0]
-        if "털" in flaw:
-            characteristics.append("가끔 털이 헝클어져서 걱정")
-        elif "먼지" in flaw:
-            characteristics.append("먼지가 쌓이는 걸 신경 씀")
-        elif "얼룩" in flaw:
-            characteristics.append("작은 얼룩도 눈에 띄어 고민")
-        elif "색" in flaw:
-            characteristics.append("색이 바래는 것을 조금 걱정")
-        else:
-            characteristics.append("완벽하지 않은 모습도 받아들임")
-    
-    # 5. 기억과 경험
-    if life_story:
-        characteristics.append("오래된 이야기들 기억")
     else:
-        characteristics.append("새로운 추억 만들기를 기대")
+        characteristics.append("조용하고 차분한 시간 선호")
+    
+    # 4. 사물 고유 특성 (동적 생성)
+    if object_type:
+        if any(keyword in object_type.lower() for keyword in ["컵", "머그", "잔"]):
+            characteristics.append("따뜻한 음료와 함께하는 위로")
+        elif any(keyword in object_type.lower() for keyword in ["책", "노트"]):
+            characteristics.append("지식과 이야기를 품은 깊이")
+        elif any(keyword in object_type.lower() for keyword in ["시계", "알람"]):
+            characteristics.append("시간의 소중함을 아는 정확성")
+        elif any(keyword in object_type.lower() for keyword in ["램프", "조명", "등"]):
+            characteristics.append("따뜻한 빛으로 공간을 밝히는 역할")
+        elif any(keyword in object_type.lower() for keyword in ["인형", "곰", "장난감"]):
+            characteristics.append("부드러운 위로와 따뜻한 포옹")
+        else:
+            characteristics.append(f"{object_type}만의 독특한 개성")
+    else:
+        characteristics.append("알 수 없는 신비로운 매력")
+    
+    # 5. 결함/경험 기반 특성 (동적 반영)
+    if attractive_flaws:
+        first_flaw = attractive_flaws[0]
+        if any(keyword in first_flaw for keyword in ["완벽", "걱정", "신경"]):
+            characteristics.append("세심한 관심과 배려하는 마음")
+        elif any(keyword in first_flaw for keyword in ["색", "모양", "외모"]):
+            characteristics.append("자신의 모습에 대한 소소한 고민")
+        else:
+            characteristics.append("완벽하지 않은 모습도 솔직하게 받아들임")
+    else:
+        characteristics.append("새로운 경험에 대한 기대와 호기심")
     
     # ✨ 아이콘과 함께 리스트 형태로 반환
     result = ""
@@ -1828,7 +1894,7 @@ def create_main_interface():
         adjust_btn.click(
             fn=adjust_persona_traits,
             inputs=[current_persona, warmth_slider, competence_slider, extraversion_slider, humor_style_radio],
-            outputs=[current_persona, adjustment_result, adjusted_info_output, personality_variables_output, attractive_flaws_output, contradictions_output]
+            outputs=[current_persona, adjustment_result, adjusted_info_output, personality_variables_output, attractive_flaws_output, contradictions_output, persona_summary_display]
         ).then(
             # 반영 후 미리보기도 업데이트
             fn=generate_realtime_preview,
