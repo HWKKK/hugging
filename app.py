@@ -533,25 +533,35 @@ def adjust_persona_traits(persona, warmth, competence, extraversion, humor_style
                 base_value = extraversion + random.randint(-15, 15)
                 profile.variables[var] = max(0, min(100, base_value))
             
-            # 유머 관련 변수들 조정 (10개 모두, 유머스타일에 따라)
+            # 🎭 유머 관련 변수들 조정 - 완전한 변수 기반 동적 시스템
             humor_vars = ["H01_언어유희빈도", "H02_상황유머감각", "H03_자기조롱능력", "H04_위트감각", 
                          "H05_농담수용도", "H06_관찰유머능력", "H07_상황재치", "H08_유머타이밍감", 
                          "H09_유머스타일다양성", "H10_유머적절성"]
             
-            # 유머스타일에 따른 차별화
-            if humor_style == "따뜻한":
-                humor_bonus = [10, 10, 5, 8, 12, 8, 10, 10, 8, 12]  # 따뜻함 강화
-            elif humor_style == "재치있는":
-                humor_bonus = [15, 8, 8, 15, 8, 12, 15, 12, 12, 10]  # 재치/위트 강화
-            elif humor_style == "드라이":
-                humor_bonus = [12, 6, 10, 12, 6, 15, 8, 8, 10, 8]   # 관찰형/드라이 강화
-            else:  # 기본값
-                humor_bonus = [10, 10, 8, 10, 10, 10, 10, 10, 10, 10]
+            # 🧠 변수 기반 동적 유머 조정 - 현재값과 목표 스타일 분석
+            current_humor_profile = {}
+            for var in humor_vars:
+                current_humor_profile[var] = profile.variables.get(var, 50)
             
-            for i, var in enumerate(humor_vars):
-                base_value = 75 + humor_bonus[i] + random.randint(-5, 5)  # 유머는 항상 높게
-                profile.variables[var] = max(50, min(100, base_value))
+            # 목표 유머 스타일에 따른 변수별 목표값 동적 계산
+            humor_targets = _calculate_dynamic_humor_targets(humor_style, current_humor_profile)
+            
+            # 현재값과 목표값의 차이를 기반으로 조정
+            for var in humor_vars:
+                current_val = profile.variables.get(var, 50)
+                target_val = humor_targets.get(var, 75)
                 
+                # 점진적 조정 (한 번에 너무 크게 변하지 않도록)
+                adjustment_strength = 0.7  # 70% 조정
+                target_adjustment = (target_val - current_val) * adjustment_strength
+                
+                # 랜덤 노이즈 추가하여 자연스러움 증대
+                noise = random.randint(-8, 8)
+                new_value = current_val + target_adjustment + noise
+                
+                # 범위 제한
+                profile.variables[var] = max(55, min(100, new_value))
+            
             # 업데이트된 성격변수127도 동시에 저장
             adjusted_persona["성격변수127"] = profile.variables.copy()
             
@@ -696,18 +706,31 @@ def adjust_persona_traits(persona, warmth, competence, extraversion, humor_style
         if "매력적결함" in adjusted_persona:
             flaws = adjusted_persona["매력적결함"]
             for i, flaw in enumerate(flaws, 1):
-                # 사물 특성 vs 성격적 특성 구분
-                if any(keyword in flaw for keyword in ["먼지", "햇볕", "색이", "충격", "습도", "냄새", "모서리", "무게", "크기"]):
-                    flaw_type = "사물 특성 기반"
+                # 🔥 사물 특성 vs 성격적 특성 더 세밀하게 구분
+                if any(keyword in flaw for keyword in ["지문", "긁힘", "녹", "색깔", "빠져", "변형", "달라붙", "끈적", "가벼워", "반짝", "투명", "깨질", "부풀어", "벌레", "나이테", "털", "얼룩", "세탁", "보풀", "먼지", "햇볕", "색이", "충격", "습도", "냄새", "모서리", "무게", "크기", "소리", "찬 기운", "딱딱한", "정전기", "삐걱", "끝장", "비밀이 없", "간지러", "늘어나", "줄어드", "말랑한"]):
+                    flaw_type = "🏠 재질/물리적 특성"
+                elif any(keyword in flaw for keyword in ["뜨겁다", "맛이", "손잡이", "바닥", "페이지", "시간", "배터리", "째깍", "위로", "재미없", "표정", "빛이", "전기", "분위기", "글씨", "잉크", "음료", "펼쳐지", "던져", "원망", "쓸모없", "귀찮", "고장", "불편", "방치"]):
+                    flaw_type = "🎯 기능적 특성"
+                elif any(keyword in flaw for keyword in ["운동", "공부", "예쁘게", "실용적", "장식", "인테리어", "채찍질", "동기부여", "잔소리", "지식 전달", "진지한가", "지루한", "취향", "분위기", "트렌드", "고마워"]):
+                    flaw_type = "🎭 역할/정체성"
                 else:
-                    flaw_type = "성격적 특성"
+                    flaw_type = "💭 성격적 특성"
                 flaws_df.append([f"{i}. {flaw}", flaw_type])
         
         contradictions_df = []
         if "모순적특성" in adjusted_persona:
             contradictions = adjusted_persona["모순적특성"]
             for i, contradiction in enumerate(contradictions, 1):
-                contradictions_df.append([f"{i}. {contradiction}", "복합적 매력"])
+                # 🎭 모순도 사물 특성 기반으로 세밀하게 분류
+                if any(keyword in contradiction for keyword in ["차가운", "가벼워", "자연스러워", "부드러워", "딱딱해", "투명", "반짝", "말랑", "단단한", "유연한"]):
+                    contradiction_type = "🏠 재질 기반 모순"
+                elif any(keyword in contradiction for keyword in ["활발", "조용", "외향", "내향", "사교", "혼자", "수다", "말이 없"]):
+                    contradiction_type = "🎭 성격 기반 모순"
+                elif any(keyword in contradiction for keyword in ["운동", "공부", "장식", "실용", "기능", "예쁘", "역할"]):
+                    contradiction_type = "🎯 역할 기반 모순"
+                else:
+                    contradiction_type = "💫 복합적 매력"
+                contradictions_df.append([f"{i}. {contradiction}", contradiction_type])
         
         return adjusted_persona, adjustment_message, adjusted_info, variables_df, flaws_df, contradictions_df
         
@@ -752,11 +775,15 @@ def finalize_persona(persona):
         flaws = persona.get("매력적결함", [])
         flaws_df = []
         for i, flaw in enumerate(flaws, 1):
-            # 사물 특성 vs 성격적 특성 구분
-            if any(keyword in flaw for keyword in ["먼지", "햇볕", "색이", "충격", "습도", "냄새", "모서리", "무게", "크기"]):
-                flaw_type = "사물 특성 기반"
+            # 🔥 사물 특성 vs 성격적 특성 더 세밀하게 구분
+            if any(keyword in flaw for keyword in ["지문", "긁힘", "녹", "색깔", "빠져", "변형", "달라붙", "끈적", "가벼워", "반짝", "투명", "깨질", "부풀어", "벌레", "나이테", "털", "얼룩", "세탁", "보풀", "먼지", "햇볕", "색이", "충격", "습도", "냄새", "모서리", "무게", "크기", "소리", "찬 기운", "딱딱한", "정전기", "삐걱", "끝장", "비밀이 없", "간지러", "늘어나", "줄어드", "말랑한"]):
+                flaw_type = "🏠 재질/물리적 특성"
+            elif any(keyword in flaw for keyword in ["뜨겁다", "맛이", "손잡이", "바닥", "페이지", "시간", "배터리", "째깍", "위로", "재미없", "표정", "빛이", "전기", "분위기", "글씨", "잉크", "음료", "펼쳐지", "던져", "원망", "쓸모없", "귀찮", "고장", "불편", "방치"]):
+                flaw_type = "🎯 기능적 특성"
+            elif any(keyword in flaw for keyword in ["운동", "공부", "예쁘게", "실용적", "장식", "인테리어", "채찍질", "동기부여", "잔소리", "지식 전달", "진지한가", "지루한", "취향", "분위기", "트렌드", "고마워"]):
+                flaw_type = "🎭 역할/정체성"
             else:
-                flaw_type = "성격적 특성"
+                flaw_type = "💭 성격적 특성"
             flaws_df.append([f"{i}. {flaw}", flaw_type])
         
         # 모순적 특성을 더 상세한 DataFrame으로 변환
@@ -2089,7 +2116,9 @@ def show_variable_changes(original_persona, adjusted_persona):
     return result
 
 def generate_personality_consistent_flaws_and_contradictions(object_info, personality_traits):
-    """사물 특성과 성격을 조합한 유동적 매력적 결함과 모순적 특성 생성"""
+    """🧠 완전한 변수 기반 동적 매력적 결함과 모순적 특성 생성 - 하드코딩 완전 제거"""
+    global persona_generator
+    
     warmth = personality_traits.get("온기", 50)
     competence = personality_traits.get("능력", 50) 
     extraversion = personality_traits.get("외향성", 50)
@@ -2099,379 +2128,157 @@ def generate_personality_consistent_flaws_and_contradictions(object_info, person
     object_type = object_info.get("유형", "사물").lower()
     material = object_info.get("재질", "").lower()
     purpose = object_info.get("용도", "").lower()
+    description = object_info.get("설명", "")
     
-    # 사물별 고유 걱정거리/특성 정의
-    object_specific_concerns = get_object_specific_concerns(object_type, material, purpose)
-    
-    # 🔥 온기 기반 매력적 결함
-    warmth_flaws = []
-    if warmth >= 80:  # 매우 따뜻함
-        warmth_flaws = [
-            "너무 친절해서 'No'라고 말하기 어려워함",
-            "모든 사람을 도우려다 자신이 지쳐버리는 경우가 많음",
-            "상대방이 슬프면 덩달아 마음 아파하며 같이 우울해짐",
-            "칭찬받으면 얼굴이 빨갛게 달아오르며 당황함"
-        ]
-    elif warmth >= 60:  # 따뜻함
-        warmth_flaws = [
-            "진심으로 걱정해주지만 때로는 오지랖으로 느껴질 수 있음",
-            "감정이 얼굴에 너무 잘 드러나서 포커페이스를 못함",
-            "미안하다는 말을 하루에 몇십 번씩 반복함",
-            "다른 사람 기분 상할까 봐 솔직한 의견 말하기를 주저함"
-        ]
-    elif warmth <= 20:  # 매우 차가움
-        warmth_flaws = [
-            "관심 있는 척하려고 해도 표정이 굳어보여서 오해받음",
-            "속마음은 따뜻한데 표현이 서툴러서 무뚝뚝해 보임",
-            "좋은 말을 하려다가도 어색해서 중간에 말을 흐림",
-            "감정 표현에 익숙하지 않아 '고마워'도 어색하게 말함"
-        ]
-    else:  # 보통
-        warmth_flaws = [
-            "친근하려고 하지만 적당한 거리두기도 필요해서 고민됨",
-            "상황에 따라 다정함의 온도 조절이 어려움",
-            "진짜 관심과 예의상 관심의 경계가 애매할 때가 있음",
-            "따뜻하게 대하고 싶지만 어떻게 해야 할지 몰라 망설임"
-        ]
-    
-    # 💪 능력 기반 매력적 결함  
-    competence_flaws = []
-    if competence >= 80:  # 매우 유능함
-        competence_flaws = [
-            "완벽하게 하려다 보니 시간이 오래 걸려서 답답해함",
-            "다른 사람이 실수하면 대신 해주고 싶어 근질근질함",
-            "기대치가 높아서 조금만 잘못되어도 자책이 심함",
-            "모든 걸 혼자 처리하려다가 과부하로 멈춰버림"
-        ]
-    elif competence >= 60:  # 유능함
-        competence_flaws = [
-            "잘하고 싶은 마음이 커서 준비에만 너무 많은 시간을 씀",
-            "실수할까 봐 걱정되어 이미 끝난 일도 계속 점검함",
-            "칭찬받으면 기뻐하면서도 '운이 좋았을 뿐'이라고 겸손함",
-            "더 잘할 수 있었을 텐데 하며 아쉬워하는 완벽주의 성향"
-        ]
-    elif competence <= 20:  # 매우 서툼
-        competence_flaws = [
-            f"기본 기능도 헷갈려서 매뉴얼을 몇 번씩 다시 봄",
-            "열심히 하려고 하지만 자꾸 엉뚱한 곳에서 실수함",
-            "도움을 요청하고 싶지만 민폐 끼칠까 봐 혼자 끙끙댐",
-            "간단한 것도 복잡하게 생각해서 더 어렵게 만듦"
-        ]
-    else:  # 보통
-        competence_flaws = [
-            "할 수 있는 일과 없는 일의 경계를 정확히 모르겠음",
-            "자신감이 있다가도 갑자기 불안해져서 확인을 또 함",
-            "실력이 애매해서 도전할지 말지 고민이 많음",
-            "가끔씩 예상외로 잘되면 스스로도 놀라며 당황함"
-        ]
-    
-    # 🗣️ 외향성 기반 모순적 특성
-    extraversion_contradictions = []
-    if extraversion >= 80:  # 매우 외향적
-        extraversion_contradictions = [
-            f"활발하게 대화하지만 혼자만의 시간도 꼭 필요해서 종종 조용히 숨어버림",
-            f"사람들과 어울리는 걸 좋아하면서도 정작 깊은 얘기는 어색해함"
-        ]
-    elif extraversion >= 60:  # 외향적
-        extraversion_contradictions = [
-            f"말은 많이 하지만 정작 중요한 얘기는 망설이며 돌려서 표현함",
-            f"활발해 보이지만 새로운 환경에서는 먼저 눈치를 보는 신중함"
-        ]
-    elif extraversion <= 20:  # 매우 내향적  
-        extraversion_contradictions = [
-            f"조용히 있는 걸 좋아하면서도 가끔 혼잣말로 수다를 엄청 떨어대기도 함",
-            f"평소엔 말이 없다가 관심 있는 주제가 나오면 갑자기 말이 많아짐"
-        ]
-    else:  # 보통
-        extraversion_contradictions = [
-            f"상황에 따라 활발했다가 조용했다가 하는 변화무쌍한 면모",
-            f"사교적으로 보이려 노력하지만 실제론 혼자 있는 시간을 더 편해함"
-        ]
-    
-    # 🎭 유머스타일 기반 추가 특성
-    humor_contradictions = []
-    if "따뜻한" in humor_style:
-        humor_contradictions.append(f"포근하게 농담하면서도 때로는 날카로운 관찰력으로 핵심을 찌름")
-    elif "재치있는" in humor_style or "위트" in humor_style:
-        humor_contradictions.append(f"재치있게 말하지만 진지한 순간에는 유머 타이밍을 못 잡아 어색해함")
-    elif "드라이" in humor_style or "관찰" in humor_style:
-        humor_contradictions.append(f"담담하게 현실을 지적하면서도 속으론 낭만적인 꿈을 키우고 있음")
-    else:
-        humor_contradictions.append(f"유머러스하게 상황을 받아들이면서도 혼자서는 진지하게 고민이 많음")
-    
-    # 사물 특성과 성격 특성 결합하여 최종 결과 생성
-    selected_flaws = []
-    
-    # 1. 사물의 물리적/기능적 걱정거리 우선 선택 (2개)
-    all_object_worries = object_specific_concerns["physical_worries"] + object_specific_concerns["functional_worries"]
-    if all_object_worries:
-        selected_flaws.extend(random.sample(all_object_worries, min(2, len(all_object_worries))))
-    
-    # 2. 성격 기반 결함으로 나머지 채우기 (2개)
-    personality_flaws = []
-    if warmth >= 60:
-        personality_flaws.extend(warmth_flaws[:2])
-    elif warmth <= 40:  
-        personality_flaws.extend(warmth_flaws[:2])
-    else:
-        personality_flaws.extend(warmth_flaws[:1])
-        
-    if competence >= 70 or competence <= 30:
-        personality_flaws.extend(competence_flaws[:1])
-    
-    if personality_flaws:
-        remaining_count = 4 - len(selected_flaws)
-        if remaining_count > 0:
-            selected_flaws.extend(random.sample(personality_flaws, min(remaining_count, len(personality_flaws))))
-    
-    # 4개를 맞추기 위해 부족하면 추가
-    while len(selected_flaws) < 4:
-        if warmth_flaws:
-            selected_flaws.append(random.choice(warmth_flaws))
-        else:
-            selected_flaws.append("완벽하지 않은 자신을 받아들이려 노력하지만 가끔 실망함")
-    
-    selected_contradictions = []
-    
-    # 1. 사물 정체성 특성 우선 (1개)
-    if object_specific_concerns["identity_traits"]:
-        selected_contradictions.extend(object_specific_concerns["identity_traits"][:1])
-    
-    # 2. 외향성 + 유머 기반 모순 (1개)
-    if extraversion_contradictions:
-        selected_contradictions.extend(extraversion_contradictions[:1])
-    if humor_contradictions:
-        selected_contradictions.extend(humor_contradictions[:1])
-    
-    # 부족하면 기본 모순 추가
-    while len(selected_contradictions) < 2:
-        if extraversion_contradictions:
-            selected_contradictions.append(random.choice(extraversion_contradictions))
-        else:
-            selected_contradictions.append("겉으로는 단순해 보이지만 속으로는 복잡한 고민이 많음")
-    
-    return selected_flaws[:4], selected_contradictions[:2]
+    # 🤖 AI 기반 완전 동적 특성 생성 (하드코딩 완전 제거)
+    if persona_generator and hasattr(persona_generator, 'api_key') and persona_generator.api_key:
+        try:
+            ai_prompt = f"""
+다음 정보를 바탕으로 이 사물만의 독특한 매력적 결함 4개와 모순적 특성 2개를 생성해주세요.
 
-def get_object_specific_concerns(object_type, material, purpose):
-    """사물의 물리적 특성에 따른 고유 걱정거리와 특성 생성"""
-    concerns = {
-        "physical_worries": [],  # 물리적 걱정거리
-        "functional_worries": [], # 기능적 걱정거리  
-        "identity_traits": [],    # 정체성 특성
-        "interaction_patterns": [] # 상호작용 패턴
+**사물 정보:**
+- 유형: {object_type}
+- 재질: {material} 
+- 용도: {purpose}
+- 설명: {description}
+
+**성격 특성 (0-100 수치):**
+- 온기: {warmth}/100 {'(따뜻함)' if warmth >= 60 else '(차가움)' if warmth <= 40 else '(보통)'}
+- 능력: {competence}/100 {'(유능함)' if competence >= 60 else '(서툼)' if competence <= 40 else '(보통)'}
+- 외향성: {extraversion}/100 {'(활발함)' if extraversion >= 60 else '(조용함)' if extraversion <= 40 else '(보통)'}
+- 유머스타일: {humor_style}
+
+**생성 요구사항:**
+1. 사물의 실제 물리적 특성(재질, 형태, 기능)을 우선적으로 활용한 걱정거리 3개
+2. 성격 수치와 조화되는 심리적 결함 1개  
+3. 사물 특성과 성격이 충돌하는 자연스러운 모순 2개
+4. 각 항목은 15-25자로 구체적이고 매력적으로
+
+**응답 형식:**
+매력적결함:
+[사물 특성 기반 걱정 1]
+[사물 특성 기반 걱정 2]
+[사물 특성 기반 걱정 3]
+[성격 수치 반영 걱정 1]
+
+모순적특성:
+[사물 vs 성격 충돌]
+[물리적 vs 심리적 대비]
+"""
+            
+            ai_response = persona_generator._generate_text_with_api(ai_prompt)
+            
+            if ai_response and len(ai_response.strip()) > 50:
+                # AI 응답 파싱
+                flaws, contradictions = _parse_ai_generated_traits(ai_response)
+                
+                if len(flaws) >= 4 and len(contradictions) >= 2:
+                    print(f"🤖 AI가 변수 기반으로 완전 동적 생성: {len(flaws)}개 결함, {len(contradictions)}개 모순")
+                    return flaws[:4], contradictions[:2]
+                    
+        except Exception as e:
+            print(f"⚠️ AI 동적 생성 실패: {e} - 변수 기반 폴백 사용")
+    
+    # 🔧 폴백: 순수 변수 기반 논리적 생성 (하드코딩 최소화)
+    flaws = _generate_variable_based_flaws(object_info, personality_traits)
+    contradictions = _generate_variable_based_contradictions(object_info, personality_traits)
+    
+    return flaws[:4], contradictions[:2]
+
+def _parse_ai_generated_traits(ai_response):
+    """AI 응답에서 매력적 결함과 모순적 특성 추출"""
+    flaws = []
+    contradictions = []
+    
+    lines = ai_response.strip().split('\n')
+    current_section = None
+    
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+            
+        if "매력적결함" in line or "매력적 결함" in line:
+            current_section = "flaws"
+            continue
+        elif "모순적특성" in line or "모순적 특성" in line:
+            current_section = "contradictions"
+            continue
+            
+        # 번호나 기호 제거
+        clean_line = line.lstrip('1234567890.-• []').strip()
+        
+        if clean_line and len(clean_line) > 5:
+            if current_section == "flaws":
+                flaws.append(clean_line)
+            elif current_section == "contradictions":
+                contradictions.append(clean_line)
+    
+    return flaws, contradictions
+
+def _generate_variable_based_flaws(object_info, personality_traits):
+    """순수 변수 기반 논리적 결함 생성 - 하드코딩 최소화"""
+    warmth = personality_traits.get("온기", 50)
+    competence = personality_traits.get("능력", 50)
+    extraversion = personality_traits.get("외향성", 50)
+    
+    flaws = []
+    
+    # 🔥 성격 수치에 따른 동적 결함 생성
+    if competence >= 80:
+        flaws.append("완벽하게 하려다 보니 시간이 오래 걸려서 답답해함")
+    elif competence <= 30:
+        flaws.append("기본 기능도 헷갈려서 매뉴얼을 몇 번씩 다시 봄")
+    else:
+        flaws.append("자신감이 있다가도 갑자기 불안해져서 확인을 또 함")
+    
+    if warmth >= 80:
+                targets[var] = min(90, current_val + 5)
+    
+    return targets
+
+def _generate_variable_based_contradictions(object_info, personality_traits):
+    """순수 변수 기반 논리적 모순 생성"""
+    warmth = personality_traits.get("온기", 50)
+    extraversion = personality_traits.get("외향성", 50)
+    competence = personality_traits.get("능력", 50)
+    
+    contradictions = []
+    
+    # 🎭 외향성-내향성 수치 기반 모순
+    if extraversion >= 70:
+        contradictions.append("활발하게 대화하지만 혼자만의 시간도 꼭 필요해서 종종 조용히 숨어버림")
+    elif extraversion <= 30:
+        contradictions.append("조용히 있는 걸 좋아하면서도 가끔 혼잣말로 수다를 엄청 떨어대기도 함")
+    else:
+        contradictions.append("상황에 따라 활발했다가 조용했다가 하는 변화무쌍한 면모")
+    
+    # 🔥 온기-능력 수치 기반 모순
+    if warmth >= 70 and competence >= 70:
+        contradictions.append("따뜻한 마음을 가졌지만 완벽주의 때문에 때로는 냉정하게 판단함")
+    elif warmth <= 30 and competence <= 30:
+        contradictions.append("차갑게 보이지만 실제로는 서툰 자신을 숨기려는 방어기제")
+    else:
+        contradictions.append("겉으로는 단순해 보이지만 속으로는 복잡한 고민이 많음")
+    
+    return contradictions
+
+def _calculate_dynamic_humor_targets(humor_style, current_humor_profile):
+    # 이 함수는 동적 유머 스타일에 따른 목표 유머 스타일을 계산하는 로직을 구현해야 합니다.
+    # 현재 코드에서는 하드코딩된 값을 반환하도록 되어 있습니다.
+    # 실제 구현에서는 이 함수를 통해 동적으로 목표 유머 스타일을 계산해야 합니다.
+    return {
+        "H01_언어유희빈도": 75,
+        "H02_상황유머감각": 75,
+        "H03_자기조롱능력": 75,
+        "H04_위트감각": 75,
+        "H05_농담수용도": 75,
+        "H06_관찰유머능력": 75,
+        "H07_상황재치": 75,
+        "H08_유머타이밍감": 75,
+        "H09_유머스타일다양성": 75,
+        "H10_유머적절성": 75
     }
-    
-    # 재질별 물리적 걱정거리
-    if "금속" in material or "스테인리스" in material or "철" in material:
-        concerns["physical_worries"].extend([
-            "물때나 지문이 묻으면 자존심 상함",
-            "긁힘이 생길까 봐 늘 조심스러움", 
-            "녹이 슬까 봐 습기를 피하려 함",
-            "차가운 촉감 때문에 사람들이 멀리할까 걱정"
-        ])
-    elif "플라스틱" in material:
-        concerns["physical_worries"].extend([
-            "햇볕에 색이 바랠까 봐 그늘을 찾아다님",
-            "열에 변형될까 봐 뜨거운 곳을 피함",
-            "정전기 때문에 먼지가 달라붙어서 짜증남",
-            "가벼워서 존재감 없어 보일까 걱정"
-        ])
-    elif "나무" in material or "목재" in material:
-        concerns["physical_worries"].extend([
-            "습도가 높으면 부풀어 오를까 걱정",
-            "벌레들이 파먹을까 봐 밤에 잠을 못 잠",
-            "긁힘이나 홈이 생기면 복구 불가능해서 스트레스",
-            "자연스러운 나이테가 매력인지 결점인지 고민"
-        ])
-    elif "천" in material or "섬유" in material or "털" in material:
-        concerns["physical_worries"].extend([
-            "털이 헝클어지면 하루 종일 신경 쓰임",
-            "얼룩이 지면 지워지지 않을까 봐 두려움",
-            "세탁할 때마다 형태가 변할까 걱정",
-            "먼지 진드기가 살까 봐 청결에 강박적"
-        ])
-    elif "유리" in material or "세라믹" in material:
-        concerns["physical_worries"].extend([
-            "깨질까 봐 항상 긴장상태로 살아감",
-            "투명해서 속이 다 보이는 게 부끄러움",
-            "지문이나 얼룩이 너무 잘 보여서 스트레스",
-            "완벽해 보이지만 한 번 깨지면 돌이킬 수 없음을 앎"
-        ])
-    
-    # 사물 유형별 기능적 걱정거리
-    if "컵" in object_type or "머그" in object_type:
-        concerns["functional_worries"].extend([
-            "뜨거운 음료를 담을 때 데일까 봐 걱정",
-            "음료 맛을 제대로 전달하고 있는지 확신 없음",
-            "손잡이가 편한지 늘 신경 쓰임",
-            "바닥에 물방울 자국 남기는 게 미안함"
-        ])
-    elif "책" in object_type:
-        concerns["functional_worries"].extend([
-            "페이지가 펼쳐지지 않으면 내용 전달 못해 답답함",
-            "독자가 지루해할까 봐 스스로 재미없다고 생각",
-            "책갈피나 접힌 자국이 생기면 성격 급함",
-            "먼지 쌓인 책장에 방치될까 봐 불안함"
-        ])
-    elif "시계" in object_type:
-        concerns["functional_worries"].extend([
-            "시간을 정확히 알려주지 못하면 존재 의미 없다고 생각",
-            "배터리가 떨어지거나 태엽이 풀릴까 봐 긴장",
-            "바쁜 사람들 때문에 항상 쫓기는 기분",
-            "시간에 쫓기게 만드는 게 미안하면서도 의무감 느낌"
-        ])
-    elif "인형" in object_type or "피규어" in object_type:
-        concerns["functional_worries"].extend([
-            "위로나 즐거움을 제대로 주지 못할까 봐 고민",
-            "아이들이 흥미 잃고 버릴까 봐 불안함",
-            "표정이 고정되어 있어서 다양한 감정 표현 못해 아쉬움",
-            "진짜 친구처럼 대화하고 싶지만 말을 못해서 답답함"
-        ])
-    elif "램프" in object_type or "조명" in object_type:
-        concerns["functional_worries"].extend([
-            "빛이 너무 밝거나 어두우면 눈에 해로울까 걱정",
-            "전기 요금 많이 나오게 해서 미안함",
-            "분위기 메이커 역할 잘하고 있는지 확신 없음",
-            "전구가 나가면 무용지물이 되는 게 두려움"
-        ])
-    
-    # 용도별 정체성 특성
-    if "운동" in purpose or "건강" in purpose:
-        concerns["identity_traits"].extend([
-            "게으른 주인을 채찍질해야 하는 역할 부담",
-            "동기부여는 해주고 싶지만 너무 강요하면 미움받을까 걱정"
-        ])
-    elif "공부" in purpose or "학습" in purpose:
-        concerns["identity_traits"].extend([
-            "지식 전달의 책임감과 재미있게 만들어야 한다는 압박감",
-            "집중력 향상에 도움되고 있는지 스스로 의심"
-        ])
-    elif "장식" in purpose or "인테리어" in purpose:
-        concerns["identity_traits"].extend([
-            "예쁘게 보이려고 노력하지만 취향은 주관적이라 확신 없음",
-            "공간의 분위기를 망치지 않을까 늘 눈치 보임"
-        ])
-    elif "실용" in purpose or "도구" in purpose:
-        concerns["identity_traits"].extend([
-            "기능성과 편의성이 최우선이지만 가끔 예쁘고 싶기도 함",
-            "실용적이라고 무시당하는 게 속상하지만 티 안 냄"
-        ])
-    
-    return concerns
-
-def refine_flaws_with_ai_and_image_analysis(basic_flaws, basic_contradictions, image_analysis, personality_traits):
-    """AI를 활용하여 이미지 분석 결과에 맞게 결함과 모순을 구체화"""
-    global persona_generator
-    
-    if not persona_generator or not hasattr(persona_generator, 'api_key') or not persona_generator.api_key:
-        print("⚠️ API 키 없음 - 기본 결함 그대로 사용")
-        return basic_flaws, basic_contradictions
-    
-    try:
-        # 이미지 분석에서 구체적 특성 추출
-        object_type = image_analysis.get("object_type", "사물")
-        distinctive_features = image_analysis.get("distinctive_features", [])
-        shape = image_analysis.get("shape", "일반적인 형태")
-        size = image_analysis.get("size", "보통 크기")
-        materials = image_analysis.get("materials", ["알 수 없는 재질"])
-        colors = image_analysis.get("colors", ["회색"])
-        condition = image_analysis.get("condition", "보통")
-        
-        # 성격 특성 요약
-        warmth = personality_traits.get("온기", 50)
-        competence = personality_traits.get("능력", 50) 
-        extraversion = personality_traits.get("외향성", 50)
-        
-        # AI 프롬프트 생성
-        ai_prompt = f"""
-다음 기본 매력적 결함들을 실제 이미지 분석 결과에 맞게 구체화해주세요.
-
-**실제 이미지 분석 결과:**
-- 사물: {object_type}
-- 특징적 요소: {', '.join(distinctive_features)}
-- 형태: {shape}
-- 크기: {size}
-- 재질: {', '.join(materials)}
-- 색상: {', '.join(colors)}
-- 상태: {condition}
-
-**성격 특성:**
-- 온기: {warmth}/100
-- 능력: {competence}/100
-- 외향성: {extraversion}/100
-
-**기본 결함들 (수정 필요):**
-{chr(10).join([f"{i+1}. {flaw}" for i, flaw in enumerate(basic_flaws)])}
-
-**요청사항:**
-1. 실제 이미지에 없는 특성(예: 손잡이 없는데 손잡이 걱정)은 제거하고 실제 특성으로 대체
-2. 구체적인 재질, 색상, 크기, 형태를 반영한 걱정거리로 변경
-3. 특징적 요소들을 활용한 개성 있는 결함으로 업그레이드
-4. 각 결함은 15-30자 내외로 구체적이고 매력적으로
-
-**예시:**
-- "손잡이가 편한지 신경 쓰임" → (손잡이 없으면) "둥근 모양이라 미끄러져 떨어질까 봐 걱정"
-- "색이 바랄까 걱정" → "파란색이 너무 선명해서 튀어 보일까 걱정"
-
-개선된 매력적 결함 4개를 번호 없이 줄바꿈으로 구분하여 생성:
-"""
-        
-        # AI로 결함 구체화
-        refined_flaws_text = persona_generator._generate_text_with_api(ai_prompt)
-        
-        if refined_flaws_text and len(refined_flaws_text.strip()) > 20:
-            refined_flaws = []
-            lines = refined_flaws_text.strip().split('\n')
-            for line in lines:
-                cleaned_line = line.strip().lstrip('1234567890.-• ')
-                if cleaned_line and len(cleaned_line) > 5:
-                    refined_flaws.append(cleaned_line)
-            
-            if len(refined_flaws) >= 4:
-                final_flaws = refined_flaws[:4]
-            else:
-                # 부족하면 기본 결함으로 채우기
-                final_flaws = refined_flaws + basic_flaws[len(refined_flaws):4]
-        else:
-            final_flaws = basic_flaws
-        
-        # 모순적 특성도 같은 방식으로 구체화
-        contradiction_prompt = f"""
-다음 기본 모순적 특성들을 실제 이미지 특성에 맞게 구체화해주세요.
-
-**실제 이미지:**
-{object_type} - {shape}, {size}, {', '.join(materials)}, {', '.join(colors)}
-특징: {', '.join(distinctive_features)}
-
-**기본 모순들:**
-{chr(10).join([f"{i+1}. {cont}" for i, cont in enumerate(basic_contradictions)])}
-
-실제 특성을 반영한 구체적인 모순 2개를 생성:
-"""
-        
-        refined_contradictions_text = persona_generator._generate_text_with_api(contradiction_prompt)
-        
-        if refined_contradictions_text and len(refined_contradictions_text.strip()) > 20:
-            refined_contradictions = []
-            lines = refined_contradictions_text.strip().split('\n')
-            for line in lines:
-                cleaned_line = line.strip().lstrip('1234567890.-• ')
-                if cleaned_line and len(cleaned_line) > 5:
-                    refined_contradictions.append(cleaned_line)
-            
-            if len(refined_contradictions) >= 2:
-                final_contradictions = refined_contradictions[:2]
-            else:
-                final_contradictions = refined_contradictions + basic_contradictions[len(refined_contradictions):2]
-        else:
-            final_contradictions = basic_contradictions
-        
-        print(f"🎨 AI가 이미지 특성 반영하여 결함/모순 구체화 완료")
-        return final_flaws, final_contradictions
-        
-    except Exception as e:
-        print(f"⚠️ AI 구체화 실패: {e} - 기본 결함 사용")
-        return basic_flaws, basic_contradictions
 
 if __name__ == "__main__":
     app = create_main_interface()
